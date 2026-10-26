@@ -1,0 +1,22 @@
+# Optional database-only setup for early development.
+# If the Grit-generated Compose file already starts PostgreSQL, use that instead.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: campvote_dev
+      POSTGRES_USER: campvote_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - campvote_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campvote_dev -d campvote_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  campvote_postgres_data:

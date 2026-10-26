@@ -1,0 +1,39 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+secrets/
+
+# Local databases, data, logs
+*.sqlite
+*.sqlite3
+*.db
+*.log
+logs/
+data/
+
+# Build and dependency outputs
+node_modules/
+dist/
+build/
+out/
+coverage/
+.next/
+.turbo/
+.tmp/
+tmp/
+
+# Go outputs
+*.test
+coverage.out
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.kilo/
+

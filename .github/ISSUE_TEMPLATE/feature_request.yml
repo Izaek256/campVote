@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose a scoped feature linked to the requirements.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / user need
+      description: Who needs this and why?
+    validations:
+      required: true
+  - type: textarea
+    id: requirement
+    attributes:
+      label: Requirement / acceptance criteria
+      description: Link the SRS section and write observable acceptance criteria.
+      placeholder: "Given ... when ... then ..."
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security / privacy considerations
+      description: Consider eligibility, authorization, ballot secrecy, and result visibility.
+    validations:
+      required: true
