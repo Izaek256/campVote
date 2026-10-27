@@ -41,3 +41,53 @@ Chronological record of completed work, verified test results, architecture deci
 3. Create task branch `feature/01-grit-triple-monorepo` from `develop`.
 4. Integrate the verified Grit Triple monorepo architecture (`apps/api`, `apps/web`, `apps/admin`, `packages/shared`) preserving our custom kickstart documentation and configuration.
 5. Configure database provider with dual-mode support (SQLite for instant local testing, PostgreSQL for Compose/production).
+
+---
+
+## [2026-10-27] Phase 2: Monorepo Scaffold, Toolchain Pinning, and Clean Compilation
+
+### Activities Completed
+1. **Git Workflow Execution:**
+   - Committed initial kickstart baseline to `main`: commit `608453b`.
+   - Created `develop` branch from `main`.
+   - Created task branch `feature/01-grit-triple-monorepo` from `develop`.
+2. **Grit Monorepo Integration:**
+   - Merged standard Grit triple-app structure (`apps/api`, `apps/web`, `apps/admin`, `packages/shared`, `packages/upload`, `tests/`, `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `biome.jsonc`).
+   - Renamed Go module across all Go source files to `campvote/apps/api`.
+   - Pinned `go 1.26.4` in `apps/api/go.mod` matching the local Windows host compiler.
+   - Removed optional CGo vips files (`internal/media/image_vips.go`, `internal/media/transform_vips.go`) to allow pure-Go compilation without external headers.
+   - Resolved `undefined: table` in `apps/api/internal/access/` by creating `registry.go`.
+   - Verified that `apps/api/cmd/server` and `apps/api/cmd/migrate` compile with zero errors.
+
+---
+
+## [2026-10-27] Phase 3: Campus Voting Domain Models, Seeder, and Automated Tests
+
+### Activities Completed
+1. **Implemented Campus Voting Domain Models (`apps/api/internal/models/`):**
+   - `Election`: Multi-category support (Guild, Faculty, Department, Referendum), server-enforced schedule (UTC stored, displayed in EAT), lifecycle states, and result visibility policy.
+   - `Position`: Single/multi-choice, referendum, seats, blank choice rules.
+   - `Candidate`: Manifestos, bios, approval states.
+   - `ElectionRoster`: Verified institutional eligibility list with composite unique constraints on `(election_id, email)` and `(election_id, student_number)`.
+   - `VoterParticipation`: Isolated record of participation with random `ConfirmationToken` receipt; unique constraint `(election_id, user_id)` guarantees strictly one vote per voter.
+   - `AnonymousBallot` & `BallotSelection`: Strictly decoupled ballot container with zero foreign keys or user references.
+   - `ElectionTally`: Results snapshot with named denominators (`ValidVotesTotal`, `TurnoutPercentage`).
+   - `ElectionAuditLog`: Tamper-evident administrative audit log.
+   - Registered all 9 models in `user.go` `Models()` registry.
+2. **Automated Test Battery (`apps/api/internal/models/voting_test.go`):**
+   - `TestBallotPrivacyDecoupling`: Enforces FR-PRIV-01/02/03 via Go reflection; asserts that `AnonymousBallot` and `BallotSelection` have zero voter identification fields, and `VoterParticipation` has zero choice fields.
+   - `TestElectionLifecycle`: Tests schedule checks and state transitions.
+   - `TestDuplicateVotingConstraint`: Tests that database-level unique constraints reject duplicate participation attempts.
+   - Ran `go test -v ./internal/models` — ALL 7 TESTS PASSED.
+3. **Database Seeder (`apps/api/internal/database/elections_seeder.go`):**
+   - Seeded MMU sample accounts: `commissioner@must.ac.ug`, `ivan.mugisha@std.must.ac.ug`, `doreen.kemigisa@std.must.ac.ug`.
+   - Seeded Guild Representative Council election (OPEN) with Guild President (3 candidates with full manifestos), Vice Guild President (2 candidates), and Constitutional Amendment Referendum (YES/NO).
+   - Seeded Faculty of Science & Technology election (SCHEDULED).
+   - Seeded sample student roster records.
+   - Added `elections_seeder_test.go` verifying idempotent execution — PASSED.
+4. **TypeScript & Zod Synchronization (`grit sync`):**
+   - Synced 51 models to TypeScript interfaces and Zod schemas in `packages/shared/types/` and `packages/shared/schemas/`.
+5. **Documentation:**
+   - Created `docs/features/campus-voting-domain.md`.
+   - Updated `docs/progress/requirements-tracker.md`.
+
