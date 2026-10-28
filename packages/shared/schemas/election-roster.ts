@@ -12,6 +12,11 @@ export const ElectionRosterSchema = z.object({
   programme: z.string(),
   study_year: z.number().int(),
   status: z.string(),
+  source: z.string(),
+  import_batch_id: z.string(),
+  imported_by_id: z.string(),
+  status_reason: z.string(),
+  status_changed_at: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -27,6 +32,11 @@ export const CreateElectionRosterSchema = z.object({
   programme: z.string(),
   study_year: z.number().int(),
   status: z.string(),
+  source: z.string(),
+  import_batch_id: z.string(),
+  imported_by_id: z.string(),
+  status_reason: z.string(),
+  status_changed_at: z.string().nullable(),
 });
 
 export const UpdateElectionRosterSchema = z.object({
@@ -40,6 +50,11 @@ export const UpdateElectionRosterSchema = z.object({
   programme: z.string().optional(),
   study_year: z.number().int().optional(),
   status: z.string().optional(),
+  source: z.string().optional(),
+  import_batch_id: z.string().optional(),
+  imported_by_id: z.string().optional(),
+  status_reason: z.string().optional(),
+  status_changed_at: z.string().nullable(),
 });
 
 export type ElectionRoster = z.infer<typeof ElectionRosterSchema>;

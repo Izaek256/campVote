@@ -3,8 +3,8 @@ package models
 import (
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/ids"
+	"gorm.io/gorm"
 )
 
 // Election category constants (FR-CMS-03)
@@ -22,16 +22,16 @@ const (
 
 // Election lifecycle status constants (FR-CMS-05)
 const (
-	ElectionStatusDraft         = "DRAFT"
-	ElectionStatusRegistration  = "REGISTRATION"
-	ElectionStatusPending       = "PENDING_APPROVAL"
-	ElectionStatusScheduled     = "SCHEDULED"
-	ElectionStatusOpen          = "OPEN"
-	ElectionStatusClosed        = "CLOSED"
-	ElectionStatusReview        = "RESULTS_UNDER_REVIEW"
-	ElectionStatusFinalized     = "FINALIZED"
-	ElectionStatusArchived      = "ARCHIVED"
-	ElectionStatusCancelled     = "CANCELLED"
+	ElectionStatusDraft        = "DRAFT"
+	ElectionStatusRegistration = "REGISTRATION"
+	ElectionStatusPending      = "PENDING_APPROVAL"
+	ElectionStatusScheduled    = "SCHEDULED"
+	ElectionStatusOpen         = "OPEN"
+	ElectionStatusClosed       = "CLOSED"
+	ElectionStatusReview       = "RESULTS_UNDER_REVIEW"
+	ElectionStatusFinalized    = "FINALIZED"
+	ElectionStatusArchived     = "ARCHIVED"
+	ElectionStatusCancelled    = "CANCELLED"
 )
 
 // Result visibility policy constants (FR-DASH-06, FR-DASH-07)
@@ -43,31 +43,41 @@ const (
 
 // Election represents a campus voting event with schedule, rules, and status.
 type Election struct {
-	ID             string         `gorm:"primarykey;size:36" json:"id"`
-	Title          string         `gorm:"size:255;not null" json:"title" binding:"required"`
-	Description    string         `gorm:"type:text" json:"description"`
-	Category       string         `gorm:"size:50;not null;default:'GUILD'" json:"category"`
-	OrganizingUnit string         `gorm:"size:255;not null;default:'MMU Electoral Commission'" json:"organizing_unit"`
-	Status         string         `gorm:"size:50;not null;default:'DRAFT';index" json:"status"`
-	
+	ID             string `gorm:"primarykey;size:36" json:"id"`
+	Title          string `gorm:"size:255;not null" json:"title" binding:"required"`
+	Description    string `gorm:"type:text" json:"description"`
+	Category       string `gorm:"size:50;not null;default:'GUILD'" json:"category"`
+	OrganizingUnit string `gorm:"size:255;not null;default:'MMU Electoral Commission'" json:"organizing_unit"`
+	Status         string `gorm:"size:50;not null;default:'DRAFT';index" json:"status"`
+
 	// Server-enforced schedule (UTC stored; displayed in EAT UTC+3)
-	StartsAt       time.Time      `gorm:"not null;index" json:"starts_at"`
-	EndsAt         time.Time      `gorm:"not null;index" json:"ends_at"`
-	
+	StartsAt time.Time `gorm:"not null;index" json:"starts_at"`
+	EndsAt   time.Time `gorm:"not null;index" json:"ends_at"`
+
 	// Policies and access rules
-	ResultPolicy   string         `gorm:"size:50;not null;default:'AFTER_CLOSE'" json:"result_policy"`
-	AllowedDomains string         `gorm:"size:255;default:'@std.must.ac.ug,@must.ac.ug'" json:"allowed_domains"`
-	RequireRoster  bool           `gorm:"default:false" json:"require_roster"`
-	
+	ResultPolicy   string `gorm:"size:50;not null;default:'AFTER_CLOSE'" json:"result_policy"`
+	AllowedDomains string `gorm:"size:255;default:'@std.must.ac.ug,@must.ac.ug'" json:"allowed_domains"`
+	// Deprecated: eligibility always requires a roster entry (ISSUE-04). The
+	// column is kept so existing rows and clients do not need a destructive
+	// migration; it no longer grants access on its own.
+	RequireRoster bool `gorm:"default:false" json:"require_roster"`
+
+	// EligibilityFrozenAt is set when voting opens. The roster is the evidence
+	// of who may vote; after this point new entries are refused and only
+	// revocations (with audit) are accepted. FrozenCount is the eligible count
+	// at that moment, for the officer report.
+	EligibilityFrozenAt    *time.Time `gorm:"index" json:"eligibility_frozen_at,omitempty"`
+	EligibilityFrozenCount int        `gorm:"not null;default:0" json:"eligibility_frozen_count"`
+
 	// Metadata
-	CreatedByID    string         `gorm:"size:36;index" json:"created_by_id"`
-	Version        int            `gorm:"not null;default:1" json:"version"`
-	CreatedAt      time.Time      `gorm:"index" json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedByID string         `gorm:"size:36;index" json:"created_by_id"`
+	Version     int            `gorm:"not null;default:1" json:"version"`
+	CreatedAt   time.Time      `gorm:"index" json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Associations
-	Positions      []Position     `gorm:"foreignKey:ElectionID;constraint:OnDelete:CASCADE" json:"positions,omitempty"`
+	Positions []Position `gorm:"foreignKey:ElectionID;constraint:OnDelete:CASCADE" json:"positions,omitempty"`
 }
 
 // BeforeCreate assigns a new UUID and initial version.

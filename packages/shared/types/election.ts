@@ -10,6 +10,8 @@ export interface Election {
   result_policy: string;
   allowed_domains: string;
   require_roster: boolean;
+  eligibility_frozen_at: string | null;
+  eligibility_frozen_count: number;
   created_by_id: string;
   version: number;
   created_at: string;
