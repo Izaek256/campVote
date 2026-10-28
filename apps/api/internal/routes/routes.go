@@ -904,6 +904,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	backupHandler := &handlers.BackupHandler{DB: db, Storage: svc.Storage}
 	roleHandler := handlers.NewRoleHandler(db)
 	electionRBACHandler := handlers.NewElectionRBACHandler(db)
+	electionLifecycleHandler := handlers.NewElectionLifecycleHandler(db)
 	eligibilityHandler := handlers.NewEligibilityHandler(db)
 	ballotHandler := handlers.NewBallotHandler(db)
 	// Which scaling stage this deployment is at, measured rather than guessed.
@@ -1331,6 +1332,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		// server-side eligibility gate on every one of these calls; the route
 		// policy only says the caller is signed in.
 		protected.GET("/elections/:id/eligibility", eligibilityHandler.Mine)
+		protected.GET("/elections/:id/lifecycle", electionLifecycleHandler.Phase)
 		protected.GET("/elections/:id/ballot", ballotHandler.View)
 		protected.POST("/elections/:id/ballot/start", ballotHandler.Start)
 		protected.POST("/elections/:id/ballot/submit", ballotHandler.Submit)
@@ -1470,6 +1472,13 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.GET("/backups/:id/download", middleware.RequireRole("ADMIN", "perm:backups.view"), backupHandler.Download)
 		staff.GET("/backup-settings", middleware.RequireRole("ADMIN", "perm:backups.view"), backupHandler.GetSettings)
 		staff.PUT("/backup-settings", middleware.RequireRole("ADMIN", "perm:backups.edit"), backupHandler.UpdateSettings)
+
+		// Election configuration and lifecycle. Opening and closing by clock
+		// is done by internal/lifecycle, not by these routes.
+		staff.POST("/elections", electionLifecycleHandler.Create)
+		staff.GET("/elections/:id", electionLifecycleHandler.Get)
+		staff.PUT("/elections/:id", electionLifecycleHandler.Update)
+		staff.POST("/elections/:id/transitions", electionLifecycleHandler.Transition)
 
 		// Per-election roles and the operations whose visibility depends on
 		// the election itself. policy.Guard has already checked the permission

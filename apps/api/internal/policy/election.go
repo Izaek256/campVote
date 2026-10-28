@@ -17,6 +17,7 @@ import (
 const (
 	PermElectionView    = "elections.view"
 	PermElectionEdit    = "elections.edit"
+	PermElectionPublish = "elections.publish"
 	PermElectionRoles   = "elections.roles"
 	PermElectionCertify = "elections.certify"
 	PermCandidateReview = "candidates.review"

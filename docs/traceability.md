@@ -7,6 +7,8 @@
 > **ISSUE-02 update (branch `feat/issue-02-auth-session-hardening`):** the FR-AUTH and NFR-SEC rows marked below were re-verified against the hardening work and its new HTTP-level tests. See [`auth.md`](auth.md) for thresholds, cookie flags, bootstrap steps and exact results. These rows describe the task branch until it is merged into `develop`.
 >
 > **ISSUE-03 update (branch `feat/issue-03-server-side-rbac`):** route policies, SRS roles, per-election scoping, separation of duties, results visibility and certification are implemented. See [`rbac.md`](rbac.md) for the role matrix, 401/403/404 semantics, the 181-route inventory and exact test results.
+>
+> **ISSUE-05 update (branch `feat/issue-05-election-lifecycle`):** election creation/editing, the full state machine, schedule validation, server-clock opening/closing, scheduler recovery, configuration freeze and audited exceptions are implemented. See [`election-lifecycle.md`](election-lifecycle.md) for the matrix, boundary semantics and exact test results.
 
 ---
 
@@ -40,15 +42,15 @@
 
 | Req ID | Requirement | Status | Code Location | Test Location | Evidence | Owning Issue |
 |---|---|---|---|---|---|---|
-| FR-CMS-01 | Create/edit/schedule/publish/close/cancel/archive elections | 🔶 Partial | `models/election.go` (all statuses defined); no election handler yet | — | Model constants verified; no HTTP CRUD handler | ISSUE-02 |
+| FR-CMS-01 | Create/edit/schedule/publish/close/cancel/archive elections | ✅ Implemented | `handlers/election_lifecycle.go`; `internal/lifecycle/lifecycle.go` | `handlers/election_lifecycle_test.go::TestElectionLifecycleAPIValidatesSchedulesFreezesAndAudits` | Create/edit, schedule, open/close by server clock, cancel and archive; scoped permissions; audited | ISSUE-05 |
 | FR-CMS-02 | Full election configuration (title, dates, category, eligibility, ballot, visibility) | ✅ Implemented | `models/election.go` L44–71 | `models/voting_test.go::TestElectionLifecycle` | All config fields on Election model; lifecycle tested | ISSUE-02 |
 | FR-CMS-03 | Multi-category elections (Guild, Faculty, Department, Programme, Class, Club, etc.) | ✅ Implemented | `models/election.go` L11–21 | `database/elections_seeder_test.go::TestSeedElections` | 9 category constants; Guild + Faculty seeded and tested | ISSUE-02 |
 | FR-CMS-04 | Multiple simultaneous elections, isolated data | ✅ Implemented | `models/election.go`; `models/participation.go` (election-scoped unique index) | `database/elections_seeder_test.go` | Multi-election seeder creates 2 isolated elections; participation scoped by `election_id` | ISSUE-02 |
-| FR-CMS-05 | Lifecycle states: Draft, Registration, Pending, Scheduled, Open, Closed, Review, Finalized, Archived, Cancelled | ✅ Implemented | `models/election.go` L24–35 | `models/voting_test.go::TestElectionLifecycle` | All 10 lifecycle constants defined; Open/Draft/schedule transitions tested | ISSUE-02 |
-| FR-CMS-06 | Validate configuration before opening | 🔶 Partial | `models/election.go::CanAcceptVotes()` (basic) | — | Schedule check only; no full pre-open ballot/candidate validation | ISSUE-02 |
+| FR-CMS-05 | Lifecycle states: Draft, Registration, Pending, Scheduled, Open, Closed, Review, Finalized, Archived, Cancelled | ✅ Implemented | `models/election.go` L24–35; `internal/lifecycle/lifecycle.go` | `internal/lifecycle/lifecycle_test.go::TestTransitionMatrix` | All 10 states and every allowed/forbidden pair are enforced by the backend | ISSUE-05 |
+| FR-CMS-06 | Validate configuration before opening | ✅ Implemented | `internal/lifecycle/lifecycle.go::ValidateConfiguration`; `handlers/election_lifecycle.go` | `internal/lifecycle/lifecycle_test.go::TestValidateConfiguration`, `::TestValidateConfigurationRequiresPositionsAndCandidates`, `::TestEnsureDoesNotOpenInvalidConfiguration` | Schedule, duration, policy, domains, positions, selection limits and approved candidates are checked before scheduling/opening; invalid config fails closed | ISSUE-05 |
 | FR-CMS-07 | Reusable election templates | ❌ Missing | — | — | Not yet modelled | ISSUE-02 |
-| FR-CMS-08 | Audit config changes; freeze ballot after opening | 🔶 Partial | `models/election.go::BeforeUpdate` (version increment); `models/election_audit.go` | — | Optimistic locking + audit log model; freeze enforcement not implemented in handler | ISSUE-02 |
-| FR-CMS-09 | Server-enforced schedule (open/close by time) | ✅ Implemented | `models/election.go::IsOpen()`, `CanAcceptVotes()` | `models/voting_test.go::TestElectionLifecycle` | Time-based schedule verified with before/after boundary tests | ISSUE-02 |
+| FR-CMS-08 | Audit config changes; freeze ballot after opening | ✅ Implemented | `handlers/election_lifecycle.go`; `internal/lifecycle/lifecycle.go::IsFrozen`; `models/election_audit.go` | `handlers/election_lifecycle_test.go::TestElectionLifecycleAPIValidatesSchedulesFreezesAndAudits`, `::TestOfficialCanEditButCannotCancelOrExtend` | Edits before open audited as `ELECTION_UPDATED`; after open blocked except a reasoned, publisher-authorised `ends_at` extension audited as `ELECTION_EXTENDED`; optimistic version check | ISSUE-05 |
+| FR-CMS-09 | Server-enforced schedule (open/close by time) | ✅ Implemented | `models/election.go::IsOpen()`; `internal/lifecycle/lifecycle.go::Ensure`, `SyncAll`; `internal/jobs/workers.go` | `internal/lifecycle/lifecycle_test.go::TestOpenAndCloseBoundaries`, `::TestMissedSchedulerTickCannotExtendVoting`, `::TestSchedulerRestartReconcilesMissedTransitions`; `handlers/election_lifecycle_test.go::TestSpoofedDateHeaderCannotExtendVoting` | Server clock only; lazy check on every ballot path plus a one-minute scheduler; end-exclusive boundary; spoofed `Date` header has no effect | ISSUE-05 |
 | FR-CMS-10 | Publish notices, schedules, instructions | ❌ Missing | — | — | No election public page / notification handler yet | ISSUE-07 |
 
 ---
@@ -185,10 +187,10 @@
 | FR-AUDIT-02 | Tamper-evident audit records | 🔶 Partial | `models/election_audit.go`; `internal/appendonly/` (generic append-only log) | `appendonly/appendonly_test.go` | Generic append-only infrastructure exists; election audit not wired to it | ISSUE-09 |
 | FR-AUDIT-03 | Audit logs contain no ballot choices | ✅ Implemented | `models/election_audit.go` L26 (no choice fields on model) | — | Schema verified; no ballot fields on ElectionAuditLog | ISSUE-09 |
 | FR-AUDIT-04 | Restrict detailed audit to authorized reviewers | 🔶 Partial | `internal/authz/permissions.go` (`audit.view`); `models/role.go` (`CHIEF_ELECTION_ADMIN`, `ELECTION_AUDITOR`) | `authz/grants_test.go::TestSeedRoles` | `audit.view` is granted only to chiefs/admins/auditors, but the election audit read endpoint is not built yet | ISSUE-03 |
-| FR-CERT-01 | Stop accepting votes at server-enforced closing time | ✅ Implemented | `models/election.go::CanAcceptVotes()` | `models/voting_test.go::TestElectionLifecycle` | Time-based gate tested | ISSUE-08 |
+| FR-CERT-01 | Stop accepting votes at server-enforced closing time | ✅ Implemented | `models/election.go::CanAcceptVotes()`; `internal/lifecycle/lifecycle.go::Ensure` | `internal/lifecycle/lifecycle_test.go::TestOpenAndCloseBoundaries`, `::TestMissedSchedulerTickCannotExtendVoting` | End-exclusive gate; a missed scheduler tick cannot extend voting | ISSUE-05 |
 | FR-CERT-02 | Formal certification only by authorized roles after review | ✅ Implemented | `handlers/election_rbac.go::Certify`; `internal/policy/election.go::CertifyDecision` | `policy/election_test.go::TestCertifyRequiresTwoOfficialsAndADifferentActor`; `handlers/election_rbac_test.go` | Requires `elections.certify`, `CLOSED`/`REVIEW`, two assigned officials, and an actor other than the creator; writes `FINALIZED` + audit row in one transaction | ISSUE-03 |
 | FR-CERT-03 | Certified results protected against silent changes | ❌ Missing | — | — | No certification service | ISSUE-08 |
-| FR-CERT-04 | Reopening/post-opening changes require authorization + audit | ❌ Missing | — | — | No election mutation handler | ISSUE-08 |
+| FR-CERT-04 | Reopening/post-opening changes require authorization + audit | ✅ Implemented | `handlers/election_lifecycle.go::updateFrozen`; `internal/lifecycle/lifecycle.go` | `handlers/election_lifecycle_test.go::TestElectionLifecycleAPIValidatesSchedulesFreezesAndAudits`, `::TestOfficialCanEditButCannotCancelOrExtend` | Post-open changes are blocked; the only exception is a publisher-authorised, reasoned end-time extension, audited with old/new times. Reopening a closed election is refused | ISSUE-05 |
 
 ---
 

@@ -29,14 +29,14 @@
 
 | Req ID | Description | SRS Reference | Status | Verification / Notes |
 |---|---|---|---|---|
-| FR-CMS-01 | Create, edit, schedule, publish, close, cancel, and archive elections | SRS §3.2 | `IN PROGRESS` | Election lifecycle service |
-| FR-CMS-02 | Configurable election metadata (title, category, dates, rules, visibility) | SRS §3.2 | `VERIFIED` | `models.Election` + `TestElectionLifecycle` |
+| FR-CMS-01 | Create, edit, schedule, publish, close, cancel, and archive elections | SRS §3.2 | `VERIFIED` | `handlers/election_lifecycle.go`; `TestElectionLifecycleAPIValidatesSchedulesFreezesAndAudits` |
+| FR-CMS-02 | Configurable election metadata (title, category, dates, rules, visibility) | SRS §3.2 | `VERIFIED` | `models.Election` + `TestElectionLifecycle`; create/edit API |
 | FR-CMS-03 | Support multi-category campus elections (guild, faculty, department, etc.) | SRS §3.2 | `VERIFIED` | Category constants & DB seeder |
 | FR-CMS-04 | Support multiple simultaneous elections with isolated data | SRS §3.2 | `VERIFIED` | Verified multi-election seeding in `TestSeedElections` |
-| FR-CMS-05 | Enforce valid lifecycle state transitions (Draft -> Open -> Closed -> Certified) | SRS §3.2 | `VERIFIED` | Verified state transitions in `TestElectionLifecycle` |
-| FR-CMS-06 | Mandatory configuration validation before opening voting | SRS §3.2 | `IN PROGRESS` | Pre-opening integrity checks |
-| FR-CMS-08 | Audit configuration changes; freeze election parameters once voting opens | SRS §3.2 | `IMPLEMENTED` | `models.ElectionAuditLog` + optimistic locking version |
-| FR-CMS-09 | Server-enforced opening and closing times (EAT / UTC+3) | SRS §3.2 | `VERIFIED` | `Election.IsOpen()` & `CanAcceptVotes()` schedule checks |
+| FR-CMS-05 | Enforce valid lifecycle state transitions (Draft -> Open -> Closed -> Certified) | SRS §3.2 | `VERIFIED` | `internal/lifecycle`; `TestTransitionMatrix` checks every pair |
+| FR-CMS-06 | Mandatory configuration validation before opening voting | SRS §3.2 | `VERIFIED` | `ValidateConfiguration`; `TestValidateConfiguration*`; `TestEnsureDoesNotOpenInvalidConfiguration` |
+| FR-CMS-08 | Audit configuration changes; freeze election parameters once voting opens | SRS §3.2 | `VERIFIED` | Freeze/exception path and `ELECTION_UPDATED`/`ELECTION_EXTENDED` audits; HTTP lifecycle tests |
+| FR-CMS-09 | Server-enforced opening and closing times (EAT / UTC+3) | SRS §3.2 | `VERIFIED` | `internal/lifecycle.Ensure`/`SyncAll`; `TestOpenAndCloseBoundaries`; `TestSpoofedDateHeaderCannotExtendVoting` |
 
 ---
 

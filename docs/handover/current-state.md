@@ -3,9 +3,9 @@
 ## 1. Project Context
 - **Project Name:** campVote (Mountains of the Moon University - MMU Campus E-Voting System)
 - **Repository:** `https://github.com/Izaek256/campVote.git`
-- **Current Branch:** `feat/issue-04-eligibility-verification` (from `feat/issue-03-server-side-rbac`), not yet committed or merged; ISSUE-03 PR [#7](https://github.com/Izaek256/campVote/pull/7) into `develop` is still awaiting review.
-- **Current Status:** Monorepo established; backend compiles; campus voting domain models and privacy air-gapping in place; ISSUE-02 authentication hardening is merged into `develop`; ISSUE-03 server-side RBAC is implemented, tested and awaiting review; ISSUE-04 per-election eligibility, roster import, freeze/revocation, audit and the minimal voter ballot gate are implemented and tested. TypeScript types are synced for ISSUE-03; re-run `grit sync` after the ISSUE-04 model changes.
-- **Not yet built:** election/candidate CRUD endpoints, ballot versioning and tallying (ISSUE-06/08), results publication UI, and the voter/admin UI flows.
+- **Current Branch:** `feat/issue-05-election-lifecycle` (from the ISSUE-04 head, which is merged into `develop` via PR [#8](https://github.com/Izaek256/campVote/pull/8)); not yet merged.
+- **Current Status:** Monorepo established; backend compiles; campus voting domain models and privacy air-gapping in place; ISSUE-02 authentication hardening, ISSUE-03 server-side RBAC and ISSUE-04 per-election eligibility are merged into `develop`; ISSUE-05 election lifecycle, schedule validation, server-clock opening/closing, scheduler recovery and configuration freeze are implemented and tested on the task branch. TypeScript types are synced for ISSUE-03; re-run `grit sync` after the model changes.
+- **Not yet built:** candidate/position/ballot CRUD endpoints, ballot versioning and tallying (ISSUE-06/08), results publication UI, and the voter/admin UI flows.
 
 ## 2. Architecture & Tech Stack
 - **Framework:** Grit Framework v3.411.17 (`grit`)
@@ -33,21 +33,22 @@
 - Authentication record: [`docs/auth.md`](../auth.md)
 - RBAC record: [`docs/rbac.md`](../rbac.md)
 - Eligibility record: [`docs/eligibility.md`](../eligibility.md)
+- Lifecycle record: [`docs/election-lifecycle.md`](../election-lifecycle.md)
 - Progress Log: [`docs/progress/development-log.md`](../progress/development-log.md)
 
 ## 5. Verified Checks & Results
-1. `go build ./...` — **PASS** (ISSUE-03 and ISSUE-04).
-2. `go test ./internal/routes ./internal/policy ./internal/models ./internal/database ./internal/authz ./internal/handlers ./internal/eligibility -count=1` — **PASS** (7 packages, ISSUE-04).
-3. `go test ./internal/eligibility ./internal/handlers -run 'TestEligibility|TestDomain|TestClock|TestFreeze|TestImport|TestReport|TestVoterCannot|TestRosterImport|TestUnverified|TestMultiChoice' -count=1` — **PASS** (ISSUE-04).
-4. `go test -v ./internal/models` — **PASS** (`TestBallotPrivacyDecoupling`, `TestElectionLifecycle`, `TestDuplicateVotingConstraint`, flag persistence).
-5. `go test -v ./internal/database` — **PASS** (`TestSeedElections`, demo MMU data and idempotency).
-6. `go test ./...` — **FAIL only in `internal/saga` and `internal/services`**, all with the pre-existing `CGO_ENABLED=0` go-sqlite3 stub. No failure is related to ISSUE-02, ISSUE-03 or ISSUE-04.
-7. `grit sync` — **PASS** before ISSUE-03 (51 models); re-run after the ISSUE-04 model changes.
+1. `go build ./...` — **PASS** (ISSUE-03, ISSUE-04 and ISSUE-05).
+2. `go test ./internal/routes ./internal/policy ./internal/models ./internal/database ./internal/authz ./internal/handlers ./internal/eligibility ./internal/lifecycle ./internal/jobs -count=1` — **PASS** (9 packages, ISSUE-05).
+3. `go test ./internal/handlers -count=1` — **PASS** (ISSUE-05; includes ISSUE-03/04 handler tests).
+4. `go test ./internal/lifecycle -count=1` — **PASS** (transition matrix, boundary clock, scheduler recovery, validation, DST/timezone preparation).
+5. `go test -v ./internal/models` — **PASS** (`TestBallotPrivacyDecoupling`, `TestElectionLifecycle`, `TestDuplicateVotingConstraint`, flag persistence).
+6. `go test -v ./internal/database` — **PASS** (`TestSeedElections`, demo MMU data and idempotency).
+7. `go test ./...` — **FAIL only in `internal/saga` and `internal/services`**, all with the pre-existing `CGO_ENABLED=0` go-sqlite3 stub. No failure is related to ISSUE-02, ISSUE-03, ISSUE-04 or ISSUE-05.
+8. `grit sync` — **PASS** before ISSUE-03 (51 models); re-run after the ISSUE-04/05 model changes.
 
 ## 6. Immediate Next Steps
-1. Review and merge PR [#7](https://github.com/Izaek256/campVote/pull/7) into `develop` (owner approval required; do not self-merge). ISSUE-04 branches from ISSUE-03, so merge ISSUE-03 first.
-2. Commit ISSUE-04 and open a PR into `develop`; do not self-merge.
-3. Run the suite against PostgreSQL (`GRIT_TEST_DATABASE_URL`) before release, especially concurrent duplicate submissions and freeze/import races.
-4. Build the remaining election/candidate endpoints. Each new route must add a row to `apps/api/internal/policy/routes.go`; `TestEveryRouteHasAPolicy` fails otherwise.
-5. ISSUE-06/08: ballot versioning, confirmation receipts, tallying, results publication, then the voter/admin UI flows.
-6. Run `grit sync` after the ISSUE-04 model changes.
+1. Commit ISSUE-05 and open a PR into `develop` (owner approval required; do not self-merge).
+2. Run the suite against PostgreSQL (`GRIT_TEST_DATABASE_URL`) before release, especially concurrent duplicate submissions, freeze/import races and lifecycle conditional updates.
+3. Build the remaining candidate/position endpoints. Each new route must add a row to `apps/api/internal/policy/routes.go`; `TestEveryRouteHasAPolicy` fails otherwise. Candidate/position writes must call the lifecycle freeze rule.
+4. ISSUE-06/08: ballot versioning, confirmation receipts, tallying, results publication, then the voter/admin UI flows.
+5. Run `grit sync` after the model changes.

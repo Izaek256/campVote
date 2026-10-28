@@ -12,6 +12,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"campvote/apps/api/internal/lifecycle"
 	"campvote/apps/api/internal/models"
 )
 
@@ -46,6 +47,12 @@ func Check(db *gorm.DB, electionID string, user *models.User, at time.Time) (Dec
 func CheckElection(db *gorm.DB, election *models.Election, user *models.User, at time.Time) (Decision, error) {
 	if election == nil {
 		return Decision{Reason: "Election not found"}, nil
+	}
+	// A missed scheduler tick must not keep a stale status: reconcile the
+	// schedule before deciding anything. This is a no-op while the window is
+	// unchanged and is safe to run inside the submission transaction.
+	if err := lifecycle.Ensure(db, election, at); err != nil {
+		return Decision{}, err
 	}
 	if !election.IsOpen(at) {
 		return Decision{Reason: "Voting is not open for this election"}, nil
@@ -114,6 +121,9 @@ func Freeze(db *gorm.DB, electionID, actorID string, at time.Time) (*models.Elec
 	if err := db.Where("id = ?", electionID).First(&election).Error; err != nil {
 		return nil, err
 	}
+	if err := lifecycle.Ensure(db, &election, at); err != nil {
+		return nil, err
+	}
 	if election.Status != models.ElectionStatusOpen || !election.IsOpen(at) {
 		return nil, fmt.Errorf("eligibility can only be frozen while the election is open")
 	}
@@ -171,13 +181,17 @@ func SetStatus(db *gorm.DB, electionID, rosterID, actorID, status, reason string
 	if err := db.Where("id = ?", electionID).First(&election).Error; err != nil {
 		return nil, err
 	}
+	now := time.Now().UTC()
+	if err := lifecycle.Ensure(db, &election, now); err != nil {
+		return nil, err
+	}
 	switch election.Status {
 	case models.ElectionStatusClosed, models.ElectionStatusReview,
 		models.ElectionStatusFinalized, models.ElectionStatusArchived,
 		models.ElectionStatusCancelled:
 		return nil, ErrElectionClosed
 	}
-	if !time.Now().UTC().Before(election.EndsAt) {
+	if !now.Before(election.EndsAt) {
 		return nil, ErrElectionClosed
 	}
 
@@ -190,7 +204,6 @@ func SetStatus(db *gorm.DB, electionID, rosterID, actorID, status, reason string
 	if status == models.RosterStatusEligible {
 		action = models.AuditActionEligibilityOverride
 	}
-	now := time.Now().UTC()
 	err := db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&models.ElectionRoster{}).Where("id = ?", entry.ID).
 			Updates(map[string]interface{}{

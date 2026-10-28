@@ -22,9 +22,21 @@ import (
 // Richer ballot versioning/tallying remains ISSUE-06 and ISSUE-08.
 type BallotHandler struct {
 	DB *gorm.DB
+	// Now is injectable so boundary tests can move the server clock. It is
+	// never read from a request header or the client.
+	Now func() time.Time
 }
 
-func NewBallotHandler(db *gorm.DB) *BallotHandler { return &BallotHandler{DB: db} }
+func NewBallotHandler(db *gorm.DB) *BallotHandler {
+	return &BallotHandler{DB: db, Now: time.Now}
+}
+
+func (h *BallotHandler) now() time.Time {
+	if h.Now == nil {
+		return time.Now().UTC()
+	}
+	return h.Now().UTC()
+}
 
 // requestUser reads the account the auth middleware loaded. Both Auth and
 // APIKeyOrAuth set it; a route that reaches here without it is treated as
@@ -170,7 +182,7 @@ func (h *BallotHandler) Submit(c *gin.Context) {
 		if err := tx.Where("id = ?", election.ID).First(&current).Error; err != nil {
 			return err
 		}
-		decision, err := eligibility.CheckElection(tx, &current, user, time.Now().UTC())
+		decision, err := eligibility.CheckElection(tx, &current, user, h.now())
 		if err != nil {
 			return err
 		}
@@ -214,7 +226,7 @@ func (h *BallotHandler) gate(c *gin.Context) (*models.Election, bool) {
 		respond.NotFound(c, "Election not found")
 		return nil, false
 	}
-	decision, err := eligibility.CheckElection(h.DB, &election, requestUser(c), time.Now().UTC())
+	decision, err := eligibility.CheckElection(h.DB, &election, requestUser(c), h.now())
 	if err != nil {
 		respond.Internal(c, err)
 		return nil, false
