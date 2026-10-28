@@ -176,9 +176,10 @@ func authRouteLimits(dev bool) map[string]sentinel.Limit {
 		v + "/register":        {Requests: 10, Window: 15 * time.Minute},
 		v + "/forgot-password": {Requests: 10, Window: 15 * time.Minute},
 		v + "/reset-password":  {Requests: 10, Window: 15 * time.Minute},
-		// A verification token is unguessable, so this is flood control rather
-		// than brute-force defence. The send endpoint mints tokens and mail, and
-		// is authenticated precisely so it cannot be used to spam a stranger.
+		// A six-digit code is guessable in principle, so this limit is the
+		// brute-force defence: 20 tries per 15 minutes against a one-in-a-
+		// million code. The send endpoint mints codes and mail, and is
+		// authenticated precisely so it cannot be used to spam a stranger.
 		v + "/verify-email":      {Requests: 20, Window: 15 * time.Minute},
 		v + "/verify-email/send": {Requests: 5, Window: 15 * time.Minute},
 		v + "/totp/verify":       {Requests: 20, Window: 5 * time.Minute},
@@ -903,6 +904,8 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	backupHandler := &handlers.BackupHandler{DB: db, Storage: svc.Storage}
 	roleHandler := handlers.NewRoleHandler(db)
 	electionRBACHandler := handlers.NewElectionRBACHandler(db)
+	eligibilityHandler := handlers.NewEligibilityHandler(db)
+	ballotHandler := handlers.NewBallotHandler(db)
 	// Which scaling stage this deployment is at, measured rather than guessed.
 	// Reads the live request percentiles, the connection count against the
 	// ceiling, and what Postgres says about its own slowest queries.
@@ -1324,6 +1327,14 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		// v3.31.68 — poll a background CSV import's progress/result.
 		protected.GET("/imports/:id", importJobHandler.GetByID)
 
+		// Eligibility and the voter ballot. The handler applies the
+		// server-side eligibility gate on every one of these calls; the route
+		// policy only says the caller is signed in.
+		protected.GET("/elections/:id/eligibility", eligibilityHandler.Mine)
+		protected.GET("/elections/:id/ballot", ballotHandler.View)
+		protected.POST("/elections/:id/ballot/start", ballotHandler.Start)
+		protected.POST("/elections/:id/ballot/submit", ballotHandler.Submit)
+
 		// grit:routes:protected
 	}
 
@@ -1469,6 +1480,15 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.DELETE("/elections/:id/roles/:userId/:role", electionRBACHandler.RemoveRole)
 		staff.GET("/elections/:id/results", electionRBACHandler.Results)
 		staff.POST("/elections/:id/certify", electionRBACHandler.Certify)
+
+		// Eligibility evidence. Preview and import are separate calls so an
+		// officer sees every bad row before anything is written; commit is
+		// all-or-nothing.
+		staff.POST("/elections/:id/roster/preview", eligibilityHandler.Preview)
+		staff.POST("/elections/:id/roster/import", eligibilityHandler.Import)
+		staff.POST("/elections/:id/roster/:rosterId/status", eligibilityHandler.SetStatus)
+		staff.POST("/elections/:id/eligibility/freeze", eligibilityHandler.Freeze)
+		staff.GET("/elections/:id/eligibility/report", eligibilityHandler.Report)
 	}
 
 	// Admin routes: the ADMIN role and nothing less. Anything that should be

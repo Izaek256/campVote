@@ -59,6 +59,8 @@ func SeedElections(db *gorm.DB) error {
 		var userCount int64
 		db.Model(&models.User{}).Where("email = ?", acc.Email).Count(&userCount)
 		if userCount == 0 {
+			// The roster trusts this address, so the demo account owns it.
+			acc.EmailVerifiedAt = &now
 			if err := db.Create(&acc).Error; err != nil {
 				log.Printf("Warning: failed to seed demo account %s: %v", acc.Email, err)
 			} else {
@@ -78,7 +80,7 @@ func SeedElections(db *gorm.DB) error {
 		EndsAt:         now.Add(48 * time.Hour),
 		ResultPolicy:   models.ResultPolicyAfterClose,
 		AllowedDomains: "@std.must.ac.ug,@must.ac.ug",
-		RequireRoster:  false,
+		RequireRoster:  true,
 	}
 
 	if err := db.Create(&guildElection).Error; err != nil {

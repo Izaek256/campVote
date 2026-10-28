@@ -68,6 +68,29 @@ func (c *Client) Put(path string, body any) *Response { return c.Do(http.MethodP
 // Patch performs a PATCH with body encoded as JSON.
 func (c *Client) Patch(path string, body any) *Response { return c.Do(http.MethodPatch, path, body) }
 
+// DoRaw performs a request with an already-encoded body, for the endpoints
+// that take CSV or multipart rather than JSON.
+func (c *Client) DoRaw(method, path, contentType string, body []byte) *Response {
+	c.tb.Helper()
+
+	reader := io.Reader(nil)
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req := httptest.NewRequest(method, path, reader)
+	for key, values := range c.header {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	rec := httptest.NewRecorder()
+	c.engine.ServeHTTP(rec, req)
+	return &Response{tb: c.tb, rec: rec, method: method, path: path}
+}
+
 // Do performs any request. The other methods are this one with a verb filled
 // in; use it directly for HEAD, OPTIONS or a method the API adds later.
 func (c *Client) Do(method, path string, body any) *Response {

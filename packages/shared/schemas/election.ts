@@ -12,6 +12,8 @@ export const ElectionSchema = z.object({
   result_policy: z.string(),
   allowed_domains: z.string(),
   require_roster: z.boolean(),
+  eligibility_frozen_at: z.string().nullable(),
+  eligibility_frozen_count: z.number().int(),
   created_by_id: z.string(),
   version: z.number().int(),
   created_at: z.string(),
@@ -30,6 +32,8 @@ export const CreateElectionSchema = z.object({
   result_policy: z.string(),
   allowed_domains: z.string(),
   require_roster: z.boolean(),
+  eligibility_frozen_at: z.string().nullable(),
+  eligibility_frozen_count: z.number().int(),
   created_by_id: z.string(),
   version: z.number().int(),
 });
@@ -45,6 +49,8 @@ export const UpdateElectionSchema = z.object({
   result_policy: z.string().optional(),
   allowed_domains: z.string().optional(),
   require_roster: z.boolean().optional(),
+  eligibility_frozen_at: z.string().nullable(),
+  eligibility_frozen_count: z.number().int().optional(),
   created_by_id: z.string().optional(),
   version: z.number().int().optional(),
 });

@@ -3,23 +3,26 @@ package models
 import (
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/ids"
+	"gorm.io/gorm"
 )
 
 // Significant administrative audit actions (FR-AUDIT-01)
 const (
-	AuditActionElectionCreated   = "ELECTION_CREATED"
-	AuditActionElectionUpdated   = "ELECTION_UPDATED"
-	AuditActionElectionScheduled = "ELECTION_SCHEDULED"
-	AuditActionElectionOpened    = "ELECTION_OPENED"
-	AuditActionElectionClosed    = "ELECTION_CLOSED"
-	AuditActionElectionCancelled = "ELECTION_CANCELLED"
-	AuditActionRosterImported    = "ROSTER_IMPORTED"
-	AuditActionCandidateApproved = "CANDIDATE_APPROVED"
-	AuditActionCandidateRejected = "CANDIDATE_REJECTED"
-	AuditActionRecountTriggered  = "RECOUNT_TRIGGERED"
-	AuditActionResultsCertified  = "RESULTS_CERTIFIED"
+	AuditActionElectionCreated     = "ELECTION_CREATED"
+	AuditActionElectionUpdated     = "ELECTION_UPDATED"
+	AuditActionElectionScheduled   = "ELECTION_SCHEDULED"
+	AuditActionElectionOpened      = "ELECTION_OPENED"
+	AuditActionElectionClosed      = "ELECTION_CLOSED"
+	AuditActionElectionCancelled   = "ELECTION_CANCELLED"
+	AuditActionRosterImported      = "ROSTER_IMPORTED"
+	AuditActionRosterRevoked       = "ROSTER_REVOKED"
+	AuditActionEligibilityFrozen   = "ELIGIBILITY_FROZEN"
+	AuditActionEligibilityOverride = "ELIGIBILITY_OVERRIDE"
+	AuditActionCandidateApproved   = "CANDIDATE_APPROVED"
+	AuditActionCandidateRejected   = "CANDIDATE_REJECTED"
+	AuditActionRecountTriggered    = "RECOUNT_TRIGGERED"
+	AuditActionResultsCertified    = "RESULTS_CERTIFIED"
 )
 
 // ElectionAuditLog tracks tamper-evident administrative events for an election.

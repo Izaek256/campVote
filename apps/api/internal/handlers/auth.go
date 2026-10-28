@@ -653,10 +653,10 @@ func (h *AuthHandler) Me(c *gin.Context) {
 
 // ForgotPassword initiates a password reset.
 
-// The token from a verification link.
+// The six-digit code from a verification email.
 type VerifyEmailRequest struct {
-	Token string `json:"token" binding:"required"`
+	Code string `json:"code" binding:"required,len=6"`
 }
 
-// VerifyEmail consumes a verification token. Public — the user clicks this
+// VerifyEmail consumes a verification code. Public — the user types the code
 // from their mail client, where they are usually not signed in.

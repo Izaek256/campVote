@@ -77,8 +77,10 @@ const passwordResetTemplate = `<div style="{{.H1}}">Reset your password</div>
 
 const emailVerificationTemplate = `<div style="{{.H1}}">{{.Title}}</div>
 <div style="{{.P}}">{{.Message}}</div>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;"><tr><td align="center" style="{{.BtnCell}}"><a href="{{.VerifyURL}}" style="{{.BtnLink}}">Confirm this address</a></td></tr></table>
-<div style="{{.PLast}}">If the button does not work, paste this into your browser:<br /><span style="word-break:break-all;color:{{.Accent}};">{{.VerifyURL}}</span></div>`
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px;">
+<tr><td align="center" style="background-color:{{.Canvas}};border:1px solid {{.Border}};border-radius:12px;padding:20px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:10px;color:{{.Ink}};">{{.Code}}</td></tr>
+</table>
+<div style="{{.PLast}}">The code expires in {{.Minutes}} minutes and works once. If you did not ask to verify this address, ignore this message.</div>`
 
 const notificationTemplate = `<div style="{{.H1}}">{{.Title}}</div>
 <div style="{{.P}}">{{.Message}}</div>

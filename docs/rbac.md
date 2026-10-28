@@ -136,6 +136,8 @@ Candidates and auditors hold `results.view`, so they can read a published tally.
 
 ## Live role changes
 
+The overall system administrator (`ADMIN`) can give and take back any role on any account through `PUT /api/v1/users/:id/roles`, including the `ADMIN` role itself; an empty `role_ids` list removes every role and clears the legacy `users.role` string. Everyone else is bounded by the grant ceiling: only an `ADMIN` changes an `ADMIN` account or hands out `ADMIN`, and nobody else hands out a role that grants more than they hold. `TestRoleAPI_AdminCanGrantAndRevokeAnyRole` covers the grant and the removal.
+
 Roles are not baked into the session token. `AuthorityFor` reads `election_roles` on every request, and the auth middleware resolves global grants per request (with the existing cache, invalidated on assignment changes). A user who signs in before being assigned sees the new authority on their next request; removing the role takes effect on the next request with the same token. `TestRoleChangeAppliesToExistingSessionAndCrossElection` proves both directions.
 
 ## Audit events

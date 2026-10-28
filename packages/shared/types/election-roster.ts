@@ -10,6 +10,11 @@ export interface ElectionRoster {
   programme: string;
   study_year: number;
   status: string;
+  source: string;
+  import_batch_id: string;
+  imported_by_id: string;
+  status_reason: string;
+  status_changed_at: string | null;
   created_at: string;
   updated_at: string;
 }

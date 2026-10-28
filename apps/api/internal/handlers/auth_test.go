@@ -145,9 +145,9 @@ func TestAuthHandler_ForgotPassword_EmailsTheResetLink(t *testing.T) {
 	fake.AssertNothingSent(t)
 }
 
-func TestAuthHandler_SendVerificationEmail_EmailsTheLink(t *testing.T) {
+func TestAuthHandler_SendVerificationEmail_EmailsTheCode(t *testing.T) {
 	cfg := testCfg()
-	cfg.OAuthFrontendURL = "http://localhost:3001"
+	cfg.AppEnv = "development"
 	db := newTestDB(t)
 	require.NoError(t, db.AutoMigrate(&models.EmailVerificationToken{}))
 	user := seedMailUser(t, db)
@@ -162,8 +162,14 @@ func TestAuthHandler_SendVerificationEmail_EmailsTheLink(t *testing.T) {
 
 	w := postJSON(t, r, "/api/auth/send-verification", map[string]string{})
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	code := body["verify_code"]
+	require.Len(t, code, 6, "development must expose the six-digit code")
+
 	msg := fake.AssertSentWithin(t, 5*time.Second, "jane@example.com", "Confirm your email")
-	assert.Contains(t, msg.HTML, "http://localhost:3001/verify-email?token=")
+	assert.Contains(t, msg.HTML, code)
 }
 
 func TestAuthHandler_Register_Success(t *testing.T) {

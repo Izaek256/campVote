@@ -178,6 +178,7 @@ func Models() []interface{} {
 		&Position{},
 		&Candidate{},
 		&ElectionRoster{},
+		&EligibilityImportBatch{},
 		&ElectionRole{},
 		&VoterParticipation{},
 		&AnonymousBallot{},

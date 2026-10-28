@@ -222,13 +222,15 @@ func Auth(cfg *config.Config, db *gorm.DB) *services.AuthService {
 func User(tb testing.TB, db *gorm.DB, email, role string) *models.User {
 	tb.Helper()
 
+	now := time.Now().UTC()
 	user := &models.User{
-		FirstName: "Test",
-		LastName:  "User",
-		Email:     email,
-		Password:  Password,
-		Role:      role,
-		Active:    true,
+		FirstName:       "Test",
+		LastName:        "User",
+		Email:           email,
+		Password:        Password,
+		Role:            role,
+		Active:          true,
+		EmailVerifiedAt: &now,
 	}
 	if err := db.Create(user).Error; err != nil {
 		tb.Fatalf("creating %s: %v", email, err)

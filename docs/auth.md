@@ -30,11 +30,11 @@ This document records what the code actually does today and which test proves it
 
 ## Registration and email verification
 
-- `POST /api/auth/verify-email` consumes a token in one transaction: marks the token used, then sets `email_verified_at` only if the address still matches the address the token was issued for.
-- Tokens: 256-bit random hex, stored as SHA-256 hash, 48-hour TTL. Issuing a new token marks every earlier unused token for that user as used.
+- `POST /api/auth/verify-email` consumes a six-digit code in one transaction: marks the code used, then sets `email_verified_at` only if the address still matches the address the code was issued for.
+- Codes: six digits from `crypto/rand`, stored as an HMAC-SHA256 hash keyed with the application `JWT_SECRET`, 10-minute TTL. The keyed hash matters because the six-digit space is small enough to brute-force from a plain hash. Issuing a new code marks every earlier unused code for that user as used.
 - Replay, expiry, unknown and email-changed all return `400 INVALID_LINK` with one message.
 - `REQUIRE_EMAIL_VERIFICATION` (default `false`) gates sign-in. It is opt-in so existing local accounts are not locked out; **production deployments should set it to `true`**. Social/SSO sign-ins are unaffected because the IdP already proved the address.
-- `POST /api/auth/send-verification` is authenticated (prevents using it as a spam relay) and rate-limited in the router.
+- `POST /api/auth/send-verification` is authenticated (prevents using it as a spam relay) and rate-limited in the router. In development the response also carries `verify_code`, guarded on `APP_ENV=development`.
 
 ## Login, rate limiting and lockout
 

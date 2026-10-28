@@ -25,6 +25,7 @@ const (
 	PermAuditView       = "audit.view"
 	PermRosterView      = "rosters.view"
 	PermRosterEdit      = "rosters.edit"
+	PermRosterImport    = "rosters.import"
 	PermBallotView      = "ballots.view"
 	PermBallotEdit      = "ballots.edit"
 )

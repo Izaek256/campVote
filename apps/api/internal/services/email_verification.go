@@ -2,9 +2,9 @@ package services
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"gorm.io/gorm"
@@ -12,32 +12,34 @@ import (
 	"campvote/apps/api/internal/models"
 )
 
-// EmailVerificationTTL is generous on purpose: unlike a password reset, a
-// verification link is often opened on a different device hours later.
-var EmailVerificationTTL = 48 * time.Hour
+// EmailVerificationTTL is deliberately short: a six-digit code is easy to
+// type and easy to guess, so it must not stay live for long.
+var EmailVerificationTTL = 10 * time.Minute
 
 var (
 	ErrVerificationTokenInvalid = errors.New("email verification token is not valid")
 	ErrEmailAlreadyVerified     = errors.New("email is already verified")
 )
 
-// GenerateVerificationToken returns a 256-bit URL-safe token.
-func GenerateVerificationToken() (string, error) {
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("generating verification token: %w", err)
+// GenerateVerificationCode returns a zero-padded six-digit code from the
+// cryptographic source. The leading zeros matter: the code is a string, not a
+// number to be trimmed.
+func GenerateVerificationCode() (string, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	if err != nil {
+		return "", fmt.Errorf("generating verification code: %w", err)
 	}
-	return hex.EncodeToString(buf), nil
+	return fmt.Sprintf("%06d", n.Int64()), nil
 }
 
-// CreateEmailVerificationToken issues a token for a user, invalidating any
-// earlier unused ones. Storing only the hash means this function is the single
-// place the raw token exists — the caller must mail it and then forget it.
-func CreateEmailVerificationToken(db *gorm.DB, userID, email, token string) (*models.EmailVerificationToken, error) {
+// CreateEmailVerificationToken issues a code for a user, invalidating any
+// earlier unused ones. Storing only the keyed hash means this function is the
+// single place the raw code exists — the caller must mail it and then forget it.
+func CreateEmailVerificationToken(db *gorm.DB, userID, email, code, secret string) (*models.EmailVerificationToken, error) {
 	row := &models.EmailVerificationToken{
 		UserID:    userID,
 		Email:     email,
-		TokenHash: models.HashVerificationToken(token),
+		TokenHash: models.HashVerificationToken(code, secret),
 		ExpiresAt: time.Now().Add(EmailVerificationTTL),
 	}
 
@@ -62,12 +64,12 @@ func CreateEmailVerificationToken(db *gorm.DB, userID, email, token string) (*mo
 // ConsumeEmailVerificationToken marks the user's email verified and returns
 // their id. Single-use is enforced with a conditional UPDATE, so two
 // concurrent requests cannot both succeed.
-func ConsumeEmailVerificationToken(db *gorm.DB, token string) (string, error) {
+func ConsumeEmailVerificationToken(db *gorm.DB, code, secret string) (string, error) {
 	var userID string
 
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var row models.EmailVerificationToken
-		if err := tx.Where("token_hash = ?", models.HashVerificationToken(token)).
+		if err := tx.Where("token_hash = ?", models.HashVerificationToken(code, secret)).
 			First(&row).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrVerificationTokenInvalid

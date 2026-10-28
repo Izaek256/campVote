@@ -263,8 +263,8 @@ func TestLogin_LocksAfterRepeatedFailuresAndRecoversAfterWindow(t *testing.T) {
 }
 
 // When the verification gate is on, an unverified account cannot sign in; the
-// link works once, verifies the address, and replaying it fails.
-func TestLogin_RequiresVerifiedEmailAndVerifyLinkIsSingleUse(t *testing.T) {
+// code works once, verifies the address, and replaying it fails.
+func TestLogin_RequiresVerifiedEmailAndVerifyCodeIsSingleUse(t *testing.T) {
 	db := newTestDB(t)
 	cfg := testCfg()
 	cfg.RequireEmailVerification = true
@@ -282,24 +282,24 @@ func TestLogin_RequiresVerifiedEmailAndVerifyLinkIsSingleUse(t *testing.T) {
 
 	var user models.User
 	require.NoError(t, db.Where("email = ?", "unverified@example.com").First(&user).Error)
-	token, err := services.GenerateVerificationToken()
+	code, err := services.GenerateVerificationCode()
 	require.NoError(t, err)
-	_, err = services.CreateEmailVerificationToken(db, user.ID, user.Email, token)
+	_, err = services.CreateEmailVerificationToken(db, user.ID, user.Email, code, cfg.JWTSecret)
 	require.NoError(t, err)
 
-	verified := secRequest(t, r, http.MethodPost, "/api/auth/verify-email", map[string]string{"token": token}, nil)
+	verified := secRequest(t, r, http.MethodPost, "/api/auth/verify-email", map[string]string{"code": code}, nil)
 	require.Equal(t, http.StatusOK, verified.Code, verified.Body.String())
 
-	replay := secRequest(t, r, http.MethodPost, "/api/auth/verify-email", map[string]string{"token": token}, nil)
+	replay := secRequest(t, r, http.MethodPost, "/api/auth/verify-email", map[string]string{"code": code}, nil)
 	assert.Equal(t, http.StatusBadRequest, replay.Code)
 	assert.Equal(t, string(respond.CodeInvalidLink), errorCode(t, replay))
 
 	loginTokens(t, r, "unverified@example.com", "harbour-lamp-97")
 }
 
-// Verification links expire. Moving the clock past the stored expiry must be
-// refused exactly like a spent or unknown token.
-func TestVerifyEmail_ExpiredTokenIsRefused(t *testing.T) {
+// Verification codes expire. Moving the clock past the stored expiry must be
+// refused exactly like a spent or unknown code.
+func TestVerifyEmail_ExpiredCodeIsRefused(t *testing.T) {
 	db := newTestDB(t)
 	cfg := testCfg()
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
@@ -308,15 +308,15 @@ func TestVerifyEmail_ExpiredTokenIsRefused(t *testing.T) {
 	require.NoError(t, db.Model(&models.User{}).Where("id = ?", user.ID).
 		Update("email_verified_at", nil).Error)
 
-	token, err := services.GenerateVerificationToken()
+	token, err := services.GenerateVerificationCode()
 	require.NoError(t, err)
-	_, err = services.CreateEmailVerificationToken(db, user.ID, user.Email, token)
+	_, err = services.CreateEmailVerificationToken(db, user.ID, user.Email, token, cfg.JWTSecret)
 	require.NoError(t, err)
 	require.NoError(t, db.Model(&models.EmailVerificationToken{}).
 		Where("user_id = ?", user.ID).
 		Update("expires_at", time.Now().Add(-time.Minute)).Error)
 
-	w := secRequest(t, r, http.MethodPost, "/api/auth/verify-email", map[string]string{"token": token}, nil)
+	w := secRequest(t, r, http.MethodPost, "/api/auth/verify-email", map[string]string{"code": token}, nil)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Equal(t, string(respond.CodeInvalidLink), errorCode(t, w))
 

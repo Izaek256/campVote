@@ -126,6 +126,19 @@ func init() {
 	permitted("results.view", "GET", "/api/v1/elections/:id/results")
 	permitted("elections.certify", "POST", "/api/v1/elections/:id/certify")
 
+	// The voter's own eligibility and ballot. Any signed-in caller may ask;
+	// the handler returns the ballot only when the server-side eligibility
+	// check passes for this election.
+	authenticated("GET", "/api/v1/elections/:id/eligibility", "/api/v1/elections/:id/ballot")
+	authenticated("POST", "/api/v1/elections/:id/ballot/start", "/api/v1/elections/:id/ballot/submit")
+
+	// Roster evidence is officer-only and election-scoped in the handler.
+	permitted("rosters.import", "POST", "/api/v1/elections/:id/roster/preview",
+		"/api/v1/elections/:id/roster/import")
+	permitted("rosters.edit", "POST", "/api/v1/elections/:id/roster/:rosterId/status",
+		"/api/v1/elections/:id/eligibility/freeze")
+	permitted("rosters.view", "GET", "/api/v1/elections/:id/eligibility/report")
+
 	// ── ADMIN only ────────────────────────────────────────────────────────
 	adminOnly("POST", "/api/v1/admin/activity/reseal", "/api/v1/admin/webhooks/:id/replay",
 		"/api/v1/admin/flags", "/api/v1/sso/connections",

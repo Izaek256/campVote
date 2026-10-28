@@ -130,3 +130,58 @@ Chronological record of completed work, verified test results, architecture deci
 3. Remaining election/candidate/roster/ballot endpoints must add a route policy; the inventory test enforces it.
 
 
+
+---
+
+## [2026-10-28] ISSUE-04: Per-Election Eligibility Verification
+
+**Branch:** `feat/issue-04-eligibility-verification` (from `feat/issue-03-server-side-rbac`, because PR #7 is not yet merged into `develop`), not yet committed or merged.
+**Goal:** eligibility decided server-side from authoritative roster evidence; CSV import with provenance; freeze/revocation; audit; no domain-only access; no self-service eligibility.
+
+### Activities Completed
+1. **Eligibility service (`apps/api/internal/eligibility/`):**
+   - `service.go` — single `CheckElection` gate (open schedule, verified email, allowed domain, roster row, status, post-freeze evidence); `Freeze`, `SetStatus`, `BuildReport`.
+   - `import.go` — CSV parse/validate/preview, duplicate-identity detection, atomic commit, import-batch provenance, freeze rules, audit.
+2. **Models:** roster provenance/status fields, `EligibilityImportBatch`, election freeze fields, new audit action constants; all registered in `models.Models()`.
+3. **Handlers/routes:**
+   - `handlers/eligibility.go` — own decision, roster preview/import/status, freeze, officer report.
+   - `handlers/ballot.go` — minimal voter view/start/submit with the eligibility gate on all three and transactional participation + anonymous ballot.
+   - Routes and policies wired; `PermRosterImport` added.
+4. **Identity protection:** eligibility now requires `users.email_verified_at`, so changing the profile email (which clears verification) cannot borrow an unregistered student's roster entry. Demo seeder and `testkit.User` mark their fixture accounts verified.
+5. **Ballot validation fix:** multi-choice positions accept several distinct choices and reject the same choice twice; only multi-choice may take more than one answer; an abstention must be the only choice for its position.
+6. **Seeder:** guild election keeps `RequireRoster: true`; the field is deprecated and no longer grants access by itself.
+
+### Checks Run
+- `go build ./...` — PASS.
+- `go test ./internal/eligibility ./internal/handlers -run 'TestEligibility|TestDomain|TestClock|TestFreeze|TestImport|TestReport|TestVoterCannot|TestRosterImport|TestUnverified|TestMultiChoice' -count=1` — PASS.
+- `go test ./internal/routes ./internal/policy ./internal/models ./internal/database ./internal/authz ./internal/handlers ./internal/eligibility -count=1` — PASS (7 packages).
+- `go test ./... -count=1` — FAIL only in `internal/saga` and `internal/services`, all with the pre-existing `CGO_ENABLED=0` go-sqlite3 stub. No ISSUE-04 failure.
+
+### Documentation
+- Created `docs/eligibility.md` (evidence model, verified-email identity, CSV schema, provenance, freeze/revocation, audit, report, policy questions, limitations).
+- Updated `docs/README.md`, `docs/traceability.md` (FR-ELIG-01..08, FR-VOTE-01/06/07/08/09) and `docs/handover/current-state.md`.
+
+### Next Steps
+1. Commit the branch and open a PR into `develop` (do not merge without owner approval).
+2. Run the suite against PostgreSQL (`GRIT_TEST_DATABASE_URL`) before release, especially concurrent duplicate submissions.
+3. ISSUE-06/08: ballot versioning, confirmation receipts, tallying and results publication; frontend eligibility/import screens.
+
+---
+
+## [2026-10-28] ISSUE-04 follow-up: six-digit codes, standing ballots, admin role control
+
+**Branch:** `feat/issue-04-eligibility-verification`.
+**Goal:** apply the maintainer's confirmed decisions to the ISSUE-04 work.
+
+### Changes
+1. **Email verification is now a six-digit code:** `GenerateVerificationCode` uses `crypto/rand`; the code is stored as an HMAC-SHA256 hash keyed with `JWT_SECRET` (a plain hash of a one-million-code space is reversible from a dump); TTL is 10 minutes; `POST /api/auth/verify-email` takes `{"code":"123456"}`; the mail template and preview show the code and expiry; development still returns `verify_code`, guarded on `APP_ENV=development`.
+2. **Ballots stand after post-vote revocation:** confirmed as policy. `TestRevocationAfterVotingLeavesTheBallotStanding` proves revocation blocks further ballots but leaves the anonymous ballot, participation record and tally untouched.
+3. **The system administrator can give and remove any role:** confirmed with `TestRoleAPI_AdminCanGrantAndRevokeAnyRole`, including granting `ADMIN` and clearing all roles with an empty `role_ids`.
+
+### Checks Run
+- `go build ./...` — PASS.
+- `go test ./internal/routes ./internal/policy ./internal/models ./internal/database ./internal/authz ./internal/handlers ./internal/eligibility ./internal/mail -count=1` — PASS.
+- `go test ./... -count=1` — FAIL only in `internal/saga` and `internal/services`, all with the pre-existing `CGO_ENABLED=0` go-sqlite3 stub. No failure in the changed packages.
+
+### Documentation
+- Updated `docs/auth.md`, `docs/rbac.md`, `docs/eligibility.md` and `docs/implementation/OPEN_QUESTIONS.md`.
