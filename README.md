@@ -54,6 +54,39 @@ docker compose -f compose.dev.yaml down -v
 
 Copy `.env.example` to `.env` only after checking which variables the pinned scaffold actually expects. `.env` must remain untracked. Never use real voter rosters, live election data, or production secrets for local development.
 
+## Quick start (local development)
+
+`ash
+# 1. Install dependencies
+pnpm install
+
+# 2. Start local PostgreSQL
+docker compose -f compose.dev.yaml up -d
+
+# 3. Copy env template and fill local values
+cp .env.example .env
+
+# 4. Run migrations (from apps/api)
+cd apps/api && go run ./cmd/migrate 2>/dev/null; cd ../..
+
+# 5. Start all apps
+pnpm dev
+`
+
+- Web: http://localhost:3000
+- API: http://localhost:8080
+- Admin: http://localhost:3001
+
+### Common commands
+
+`ash
+pnpm build          # build all packages
+pnpm lint           # lint all packages
+pnpm type-check     # type check all packages
+pnpm test           # run all tests
+pnpm test:api       # Go tests
+pnpm format         # format with biome
+`
 ## Testing and delivery
 
 The generated scaffold determines exact commands. Before merging, run the applicable formatters, linters, type checks, unit tests, database migration/integration tests, frontend build, and critical end-to-end tests. Add CI workflows only after confirming real workspace paths and commands; do not add a green-but-empty pipeline or pretend checks ran when they did not.

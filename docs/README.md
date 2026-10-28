@@ -21,7 +21,12 @@
 - [`implementation/SETUP_LOG.md`](implementation/SETUP_LOG.md) — Verified toolchain versions and scaffold facts.
 - [`maintenance/repository-cleanup.md`](maintenance/repository-cleanup.md) — Repository audit and file hygiene log.
 
-## 4. Templates & Quality
+## 4. Audit & Traceability
+
+- [`traceability.md`](traceability.md) — SRS v1.1 → implementation traceability matrix (per-requirement status, code & test locations).
+- [`audit/issue-00-audit.md`](audit/issue-00-audit.md) — ISSUE-00 full implementation audit: source of truth, stack, tables, seeds, routes, tests, re-scoped plan.
+
+## 5. Templates & Quality
 
 - [`debugging/BUG_REPORT_TEMPLATE.md`](debugging/BUG_REPORT_TEMPLATE.md) — Systematic defect investigation template.
 - [`reviews/REVIEW_TEMPLATE.md`](reviews/REVIEW_TEMPLATE.md) — Structured code review checklist.
