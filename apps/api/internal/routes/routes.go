@@ -175,7 +175,12 @@ func authRouteLimits(dev bool) map[string]sentinel.Limit {
 		v + "/register":        {Requests: 10, Window: 15 * time.Minute},
 		v + "/forgot-password": {Requests: 10, Window: 15 * time.Minute},
 		v + "/reset-password":  {Requests: 10, Window: 15 * time.Minute},
-		v + "/totp/verify":     {Requests: 20, Window: 5 * time.Minute},
+		// A verification token is unguessable, so this is flood control rather
+		// than brute-force defence. The send endpoint mints tokens and mail, and
+		// is authenticated precisely so it cannot be used to spam a stranger.
+		v + "/verify-email":      {Requests: 20, Window: 15 * time.Minute},
+		v + "/verify-email/send": {Requests: 5, Window: 15 * time.Minute},
+		v + "/totp/verify":       {Requests: 20, Window: 5 * time.Minute},
 	}
 }
 

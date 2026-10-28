@@ -231,6 +231,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 	if req.Bio != "" {
 		updates["bio"] = crypto.EncryptedString(req.Bio)
 	}
+	wasActive := user.Active
 	if req.Active != nil {
 		updates["active"] = *req.Active
 	}
@@ -269,6 +270,20 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
+	// Deactivating/suspending an account blocks login and kills active sessions immediately.
+	if wasActive && !user.Active {
+		if err := services.RevokeAllUserSessions(h.DB, user.ID, ""); err != nil {
+			log.Printf("failed to revoke sessions after account deactivation for user %s: %v", user.ID, err)
+		}
+		services.LogActivity(h.DB, c, services.ActivityArgs{
+			Action:       "user.deactivated",
+			Severity:     "warn",
+			Summary:      "Account deactivated by administrator",
+			ResourceType: "user",
+			ResourceID:   user.ID,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"data":    user,
 		"message": "User updated successfully",
@@ -295,6 +310,20 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		respond.Fail(c, respond.CodeInternalError, "Failed to delete user")
 		return
 	}
+
+	// A deleted account must not keep a live session. The middleware refuses the
+	// next request because the row is gone, but the session row and any open
+	// socket would otherwise outlive it.
+	if err := services.RevokeAllUserSessions(h.DB, user.ID, ""); err != nil {
+		log.Printf("failed to revoke sessions after deleting user %s: %v", user.ID, err)
+	}
+	services.LogActivity(h.DB, c, services.ActivityArgs{
+		Action:       "user.deleted",
+		Severity:     "warn",
+		Summary:      "Account deleted by an administrator",
+		ResourceType: "user",
+		ResourceID:   user.ID,
+	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "User deleted successfully",
@@ -596,6 +625,19 @@ func (h *UserHandler) DeleteProfile(c *gin.Context) {
 		respond.Fail(c, respond.CodeInternalError, "Failed to delete account")
 		return
 	}
+
+	// Closing the account ends every session it holds, not just this browser's.
+	if err := services.RevokeAllUserSessions(h.DB, user.ID, ""); err != nil {
+		log.Printf("failed to revoke sessions after closing account %s: %v", user.ID, err)
+	}
+	services.LogActivity(h.DB, c, services.ActivityArgs{
+		UserID:       user.ID,
+		Action:       "user.self_deleted",
+		Severity:     "warn",
+		Summary:      "Account closed by its owner",
+		ResourceType: "user",
+		ResourceID:   user.ID,
+	})
 
 	// Soft-delete leaves the JWT valid in theory; the auth middleware
 	// would still 401 on the next request because the user row is

@@ -69,6 +69,7 @@ func Auth(db *gorm.DB, authService *services.AuthService) gin.HandlerFunc {
 		c.Set("user_id", user.ID)
 		c.Set("user_email", user.Email)
 		c.Set("user_role", user.Role)
+		c.Set("session_id", claims.SessionID)
 
 		// Resolve the caller's permission grants once per request so route
 		// guards and handlers don't each hit the database. authz.GrantsFor is
@@ -139,6 +140,7 @@ func Identify(db *gorm.DB, authService *services.AuthService) gin.HandlerFunc {
 		c.Set("user_id", user.ID)
 		c.Set("user_email", user.Email)
 		c.Set("user_role", user.Role)
+		c.Set("session_id", claims.SessionID)
 		if grants, err := authz.GrantsFor(db, user.ID); err == nil {
 			c.Set("user_grants", grants)
 		}

@@ -333,7 +333,7 @@ func (h *AuthHandler) checkCredentials(c *gin.Context, user *models.User, passwo
 		// an unknown email, because Sentinel's brute-force heuristics weight
 		// these higher. Not distinct in the response.
 		services.LogLoginFailed(h.DB, c, user.Email)
-		h.registerFailedLogin(user)
+		h.registerFailedLogin(c, user)
 		invalidCredentials(c)
 		return false
 	}
@@ -614,6 +614,17 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	if rt, err := c.Cookie("grit_refresh"); err == nil && rt != "" {
 		if err := services.RevokeSessionByToken(h.DB, rt); err != nil {
 			log.Printf("auth: failed to revoke session on logout: %v", err)
+		}
+	}
+	// Native clients send the access token in Authorization and never carry the
+	// refresh cookie, so the cookie above finds nothing. The auth middleware put
+	// the session id on the context; revoking it here covers them, and also the
+	// case where a stale refresh cookie names a different session.
+	if actorID != "" {
+		if sessionID := c.GetString("session_id"); sessionID != "" {
+			if err := services.RevokeSession(h.DB, actorID, sessionID); err != nil && !errors.Is(err, services.ErrSessionInvalid) {
+				log.Printf("auth: failed to revoke session %s on logout: %v", sessionID, err)
+			}
 		}
 	}
 

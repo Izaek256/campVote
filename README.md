@@ -77,6 +77,21 @@ pnpm dev
 - API: http://localhost:8080
 - Admin: http://localhost:3001
 
+### Authentication and the first administrator
+
+No administrator is seeded and there is no default admin password. On a fresh database, run migrations first, then create the first administrator once:
+
+```bash
+cd apps/api
+BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
+BOOTSTRAP_ADMIN_PASSWORD='a-long-unique-password' \
+go run ./cmd/bootstrap
+```
+
+The command refuses to run once any administrator exists and requires a 12+ character password. Remove the `BOOTSTRAP_ADMIN_*` variables afterwards. Details, cookie flags, lockout thresholds and test evidence are in [`docs/auth.md`](docs/auth.md).
+
+Demo student accounts (`admin123`) and demo elections are created only when `APP_ENV=development`. They are synthetic local fixtures — never reuse them, or any demo data, in production.
+
 ### Common commands
 
 `ash

@@ -60,7 +60,7 @@ func (h *UserHandler) Unlock(c *gin.Context) {
 // is here; the counting and the locking are AuthService's, which is also what the
 // second factor calls. There were two copies of those writes before, one per
 // factor.
-func (h *AuthHandler) registerFailedLogin(user *models.User) {
+func (h *AuthHandler) registerFailedLogin(c *gin.Context, user *models.User) {
 	max := h.Config.LoginMaxAttempts
 	if max <= 0 {
 		return // lockout disabled
@@ -82,6 +82,15 @@ func (h *AuthHandler) registerFailedLogin(user *models.User) {
 		return
 	}
 	log.Printf("lockout: %s locked until %s after %d failed attempts", user.Email, until.Format(time.RFC3339), max)
+
+	services.LogActivity(h.DB, c, services.ActivityArgs{
+		UserID:       user.ID,
+		Action:       "auth.account_locked",
+		Severity:     "warn",
+		Summary:      "Account locked after too many failed sign-in attempts",
+		ResourceType: "user",
+		ResourceID:   user.ID,
+	})
 
 	// Tell the owner, and give them the way out.
 	//

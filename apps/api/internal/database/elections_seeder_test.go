@@ -1,7 +1,6 @@
 package database_test
 
 import (
-	"os"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -11,8 +10,52 @@ import (
 	"campvote/apps/api/internal/models"
 )
 
+func TestSeedElectionsSkipsOutsideDevelopment(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+
+	db, err := gorm.Open(sqlite.Open("file:memdb_elections_seeder_prod_test?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open in-memory database: %v", err)
+	}
+	if err := db.AutoMigrate(models.Models()...); err != nil {
+		t.Fatalf("failed to run automigration: %v", err)
+	}
+
+	if err := database.SeedElections(db); err != nil {
+		t.Fatalf("SeedElections should skip cleanly outside development: %v", err)
+	}
+
+	var elections, users int64
+	db.Model(&models.Election{}).Count(&elections)
+	db.Model(&models.User{}).Count(&users)
+	if elections != 0 || users != 0 {
+		t.Errorf("expected no demo data outside development, got %d elections and %d users", elections, users)
+	}
+}
+
+func TestSeedElectionsSeedsNoAdministrator(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+
+	db, err := gorm.Open(sqlite.Open("file:memdb_elections_seeder_admin_test?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open in-memory database: %v", err)
+	}
+	if err := db.AutoMigrate(models.Models()...); err != nil {
+		t.Fatalf("failed to run automigration: %v", err)
+	}
+	if err := database.SeedElections(db); err != nil {
+		t.Fatalf("SeedElections failed: %v", err)
+	}
+
+	var admins int64
+	db.Model(&models.User{}).Where("role = ?", models.RoleAdmin).Count(&admins)
+	if admins != 0 {
+		t.Errorf("demo seeding must not create a known administrator, found %d", admins)
+	}
+}
+
 func TestSeedElections(t *testing.T) {
-	_ = os.Setenv("APP_ENV", "development")
+	t.Setenv("APP_ENV", "development")
 
 	db, err := gorm.Open(sqlite.Open("file:memdb_elections_seeder_test?mode=memory&cache=shared"), &gorm.Config{})
 	if err != nil {

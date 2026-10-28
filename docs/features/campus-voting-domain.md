@@ -76,11 +76,13 @@ Go structs in `apps/api/internal/models/` are synchronized directly to TypeScrip
 
 ## 5. Seed Data for Local Development
 
-`apps/api/internal/database/elections_seeder.go` creates realistic demo scenarios for MMU:
-1. **Accounts:**
-   - `commissioner@must.ac.ug` (Chief Election Administrator, password `admin123`)
+`apps/api/internal/database/elections_seeder.go` creates realistic demo scenarios for MMU. Demo data is created **only when `APP_ENV=development`**; with any other value the seeder logs a skip and writes nothing.
+
+1. **Accounts (synthetic demo users only):**
    - `ivan.mugisha@std.must.ac.ug` (Student Voter, password `admin123`)
    - `doreen.kemigisa@std.must.ac.ug` (Student Voter, password `admin123`)
+
+   No administrator is seeded and there is no default admin password. Create the first administrator once with `go run ./cmd/bootstrap` and `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`. See [`../auth.md`](../auth.md).
 2. **Guild Representative Council Election 2026/2027:**
    - Status: `OPEN`
    - Positions: Guild President, Vice Guild President, Referendum on Article 42

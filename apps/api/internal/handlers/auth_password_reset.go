@@ -5,16 +5,17 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"campvote/apps/api/internal/mail"
-	"campvote/apps/api/internal/models"
-	"campvote/apps/api/internal/password"
-	"campvote/apps/api/internal/respond"
-	"campvote/apps/api/internal/services"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
+
+	"campvote/apps/api/internal/mail"
+	"campvote/apps/api/internal/models"
+	"campvote/apps/api/internal/password"
+	"campvote/apps/api/internal/respond"
+	"campvote/apps/api/internal/services"
 )
 
 // Password reset: request a link, and redeem it.
@@ -50,7 +51,12 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	// handler has returned. detach caps how many of these can be in flight at
 	// once; it used to be one unbounded goroutine per request.
 	clientIP := c.ClientIP()
-	detach(func(ctx context.Context) { h.deliverPasswordReset(ctx, *user, clientIP) })
+	// Carry the request's audit context (address, user agent) into the detached
+	// work. The gin context is gone by the time it runs.
+	meta := services.MetaOf(c)
+	detach(func(ctx context.Context) {
+		h.deliverPasswordReset(services.WithRequestMeta(ctx, meta), *user, clientIP)
+	})
 
 	c.JSON(http.StatusOK, gin.H{"message": genericResponse})
 }
@@ -73,6 +79,15 @@ func (h *AuthHandler) deliverPasswordReset(ctx context.Context, user models.User
 		log.Printf("password reset: storing token for %s: %v", user.Email, err)
 		return
 	}
+
+	services.LogActivityCtx(ctx, h.DB, services.ActivityArgs{
+		UserID:       user.ID,
+		Action:       "auth.password_reset_requested",
+		Severity:     "info",
+		Summary:      "Password reset link requested",
+		ResourceType: "user",
+		ResourceID:   user.ID,
+	})
 
 	resetURL := strings.TrimSuffix(h.Config.OAuthFrontendURL, "/") + "/reset-password?token=" + url.QueryEscape(token)
 
@@ -180,6 +195,15 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	if _, err := h.users().ClearLockout(c.Request.Context(), userID); err != nil {
 		log.Printf("password reset: clearing the lockout for %s: %v", userID, err)
 	}
+
+	services.LogActivity(h.DB, c, services.ActivityArgs{
+		UserID:       userID,
+		Action:       "auth.password_reset",
+		Severity:     "warn",
+		Summary:      "Password reset with a one-time link",
+		ResourceType: "user",
+		ResourceID:   userID,
+	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Password reset successfully. Please sign in with your new password.",
