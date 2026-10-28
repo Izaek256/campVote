@@ -16,10 +16,22 @@ import (
 )
 
 // Role constants
+//
+// ADMIN, EDITOR and USER are the scaffold's legacy names. The campus roles are
+// the user classes in SRS §2.1; a user holds one global role, and election
+// officials, candidates and auditors may also hold a role scoped to one
+// election through ElectionRole.
 const (
 	RoleAdmin  = "ADMIN"
 	RoleEditor = "EDITOR"
 	RoleUser   = "USER"
+
+	RoleChiefElectionAdmin = "CHIEF_ELECTION_ADMIN"
+	RoleElectionOfficial   = "ELECTION_OFFICIAL"
+	RoleStudentVoter       = "STUDENT_VOTER"
+	RoleStaffVoter         = "STAFF_VOTER"
+	RoleCandidate          = "CANDIDATE"
+	RoleElectionAuditor    = "ELECTION_AUDITOR"
 	// grit:roles
 )
 
@@ -166,6 +178,7 @@ func Models() []interface{} {
 		&Position{},
 		&Candidate{},
 		&ElectionRoster{},
+		&ElectionRole{},
 		&VoterParticipation{},
 		&AnonymousBallot{},
 		&BallotSelection{},

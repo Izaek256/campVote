@@ -34,8 +34,8 @@ func TestSeedRoles(t *testing.T) {
 
 	var roles []models.Role
 	db.Find(&roles)
-	if len(roles) != 3 {
-		t.Fatalf("seeded %d roles, want 3", len(roles))
+	if len(roles) != len(models.DefaultRoles()) {
+		t.Fatalf("seeded %d roles, want %d", len(roles), len(models.DefaultRoles()))
 	}
 
 	var admin models.Role

@@ -13,6 +13,15 @@ const (
 	ActionView   Action = "view"
 	ActionEdit   Action = "edit"
 	ActionDelete Action = "delete"
+
+	// Campus-election verbs. They are ordinary keys to the matcher; the names
+	// exist so the role matrix and the permission tree agree.
+	ActionPublish  Action = "publish"
+	ActionCertify  Action = "certify"
+	ActionReview   Action = "review"
+	ActionRoles    Action = "roles"
+	ActionImport   Action = "import"
+	ActionViewLive Action = "view_live"
 )
 
 // Action sets, so a catalog entry can declare which verbs are meaningful.
@@ -89,6 +98,29 @@ func coreModules() []Module {
 					Name: "Media",
 					Features: []Feature{
 						{Key: "uploads", Name: "Uploads", Actions: []Action{ActionCreate, ActionView, ActionDelete}},
+					},
+				},
+			},
+		},
+		{
+			Key:  "elections",
+			Name: "Campus elections",
+			Groups: []Group{
+				{
+					Key:  "management",
+					Name: "Election management",
+					Features: []Feature{
+						{Key: "elections", Name: "Elections", Actions: []Action{ActionCreate, ActionView, ActionEdit, ActionDelete, ActionPublish, ActionCertify, ActionRoles}},
+						{Key: "candidates", Name: "Candidates", Actions: []Action{ActionCreate, ActionView, ActionEdit, ActionDelete, ActionReview}},
+						{Key: "rosters", Name: "Eligibility rosters", Actions: []Action{ActionView, ActionEdit, ActionImport}},
+						{Key: "ballots", Name: "Ballots", Actions: ViewEdit},
+					},
+				},
+				{
+					Key:  "results",
+					Name: "Results",
+					Features: []Feature{
+						{Key: "results", Name: "Results and turnout", Actions: []Action{ActionView, ActionViewLive}},
 					},
 				},
 			},

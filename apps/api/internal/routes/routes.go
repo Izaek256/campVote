@@ -30,6 +30,7 @@ import (
 	"campvote/apps/api/internal/middleware"
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/paginate"
+	"campvote/apps/api/internal/policy"
 	"campvote/apps/api/internal/realtime"
 	"campvote/apps/api/internal/respond"
 	"campvote/apps/api/internal/saga"
@@ -689,6 +690,11 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 
 	r := gin.New()
 
+	// Every matched route must have an explicit policy. This runs first so a
+	// route somebody mounted without one is refused before any handler or
+	// guard sees it.
+	r.Use(policy.Declared())
+
 	// X-Forwarded-For, X-Real-IP and X-Forwarded-Proto are believed only from the
 	// proxies TRUSTED_PROXIES names. First, so every middleware after it keys rate
 	// limits, sessions and audit rows on the real client address.
@@ -896,6 +902,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	// v3.31.77 — full-database backups (weekly cron + manual + download)
 	backupHandler := &handlers.BackupHandler{DB: db, Storage: svc.Storage}
 	roleHandler := handlers.NewRoleHandler(db)
+	electionRBACHandler := handlers.NewElectionRBACHandler(db)
 	// Which scaling stage this deployment is at, measured rather than guessed.
 	// Reads the live request percentiles, the connection count against the
 	// ceiling, and what Postgres says about its own slowest queries.
@@ -1184,6 +1191,9 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	// exactly as before; with one, it sets the same context values so every
 	// downstream handler and RequireRole check works unchanged.
 	protected.Use(middleware.APIKeyOrAuth(db, middleware.Auth(db, authService)))
+	// Route policy: default-deny for this group, and the permissions the table
+	// in internal/policy declares.
+	protected.Use(policy.Guard(db))
 	// Activity logger writes one row per successful authenticated mutation.
 	// Records who/what/when/where for audit. Read-only — see admin/activity.
 	protected.Use(middleware.ActivityLogger(db))
@@ -1332,6 +1342,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	// permission, a plugin's included, fails closed there.
 	staff := v1.Group("")
 	staff.Use(middleware.APIKeyOrAuth(db, middleware.Auth(db, authService)))
+	staff.Use(policy.Guard(db))
 	// Plugin middleware for the staff group, between authentication and the gate.
 	//
 	// This group carries every DELETE and every bulk route, so a plugin that
@@ -1448,6 +1459,16 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.GET("/backups/:id/download", middleware.RequireRole("ADMIN", "perm:backups.view"), backupHandler.Download)
 		staff.GET("/backup-settings", middleware.RequireRole("ADMIN", "perm:backups.view"), backupHandler.GetSettings)
 		staff.PUT("/backup-settings", middleware.RequireRole("ADMIN", "perm:backups.edit"), backupHandler.UpdateSettings)
+
+		// Per-election roles and the operations whose visibility depends on
+		// the election itself. policy.Guard has already checked the permission
+		// key; the handler then checks the actor's relationship to this one
+		// election, which is what stops a cross-election IDOR.
+		staff.GET("/elections/:id/roles", electionRBACHandler.ListRoles)
+		staff.PUT("/elections/:id/roles/:userId", electionRBACHandler.AssignRole)
+		staff.DELETE("/elections/:id/roles/:userId/:role", electionRBACHandler.RemoveRole)
+		staff.GET("/elections/:id/results", electionRBACHandler.Results)
+		staff.POST("/elections/:id/certify", electionRBACHandler.Certify)
 	}
 
 	// Admin routes: the ADMIN role and nothing less. Anything that should be
@@ -1455,6 +1476,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	// permission.
 	admin := v1.Group("")
 	admin.Use(middleware.APIKeyOrAuth(db, middleware.Auth(db, authService)))
+	admin.Use(policy.Guard(db))
 	// Plugin middleware for the admin group, for the same reasons and in the same
 	// order as the staff one.
 	// grit:middleware:admin

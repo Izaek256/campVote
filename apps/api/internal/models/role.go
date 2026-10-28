@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/ids"
+	"gorm.io/gorm"
 )
 
 // Role is a named bag of permission grants.
@@ -127,6 +127,45 @@ func DefaultRoles() []Role {
 			Description: "Standard account. No administrative permissions.",
 			IsSystem:    true,
 			Grants:      `[]`,
+		},
+		// SRS §2.1 user classes. The grant lists are the global half of the
+		// matrix in docs/rbac.md; an ElectionRole row narrows the authority to
+		// one election for officials, candidates and auditors.
+		{
+			Name:        RoleChiefElectionAdmin,
+			Description: "Configures and oversees elections, candidates, rosters, ballots and certification.",
+			IsSystem:    true,
+			Grants:      `["elections.*","candidates.*","rosters.*","ballots.*","results.*","audit.view"]`,
+		},
+		{
+			Name:        RoleElectionOfficial,
+			Description: "Per-election official. May work on assigned elections only.",
+			IsSystem:    true,
+			Grants:      `["elections.view","elections.edit","candidates.*","rosters.view","ballots.view","results.view","results.view_live"]`,
+		},
+		{
+			Name:        RoleStudentVoter,
+			Description: "Student voter. Votes in elections they are eligible for.",
+			IsSystem:    true,
+			Grants:      `[]`,
+		},
+		{
+			Name:        RoleStaffVoter,
+			Description: "Staff or official voter. Votes in elections that admit staff.",
+			IsSystem:    true,
+			Grants:      `[]`,
+		},
+		{
+			Name:        RoleCandidate,
+			Description: "Candidate. Maintains a permitted profile and sees published results only.",
+			IsSystem:    true,
+			Grants:      `["elections.view","candidates.view","results.view"]`,
+		},
+		{
+			Name:        RoleElectionAuditor,
+			Description: "Election observer. Reads authorised evidence and audit records, never ballot choices.",
+			IsSystem:    true,
+			Grants:      `["elections.view","candidates.view","results.view","audit.view"]`,
 		},
 	}
 }

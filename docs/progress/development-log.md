@@ -91,3 +91,42 @@ Chronological record of completed work, verified test results, architecture deci
    - Created `docs/features/campus-voting-domain.md`.
    - Updated `docs/progress/requirements-tracker.md`.
 
+---
+
+## [2026-10-28] ISSUE-03: Server-Side RBAC for Campus Elections
+
+**Branch:** `feat/issue-03-server-side-rbac` (from `origin/develop` at `5f0680f`), not yet committed or merged.
+**Goal:** every API route has an explicit policy; SRS roles, per-election scoping, separation of duties, results visibility and certification are enforced server-side.
+
+### Activities Completed
+1. **Route policy table (`apps/api/internal/policy/`):**
+   - `policy.go` — global `Declared()` default-deny and `Guard(db)` enforcement for public/authenticated/permission/role requirements.
+   - `routes.go` — explicit method + full-path table for all 181 non-library routes (30 public).
+   - `election.go` — per-election authority, results visibility, separation of duties and certification rules.
+2. **Roles and permissions:**
+   - Added SRS constants (`CHIEF_ELECTION_ADMIN`, `ELECTION_OFFICIAL`, `STUDENT_VOTER`, `STAFF_VOTER`, `CANDIDATE`, `ELECTION_AUDITOR`) and `models.ElectionRole` with a unique `(election_id, user_id, role)` index.
+   - Expanded `DefaultRoles` from 3 to 9 seeded roles; added `elections.*`, `candidates.*`, `rosters.*`, `ballots.*`, `results.view`, `results.view_live` to the permission catalog.
+3. **Election endpoints (`handlers/election_rbac.go`):**
+   - `GET /api/v1/elections/:id/roles`
+   - `PUT /api/v1/elections/:id/roles/:userId`
+   - `DELETE /api/v1/elections/:id/roles/:userId/:role`
+   - `GET /api/v1/elections/:id/results`
+   - `POST /api/v1/elections/:id/certify`
+   - Each resolves the election through `policy.AuthorityFor`; cross-election and unknown ids both return 404.
+4. **Audit:** route and object denials write `authz.denied`; role changes write `election.role_assigned` / `election.role_removed`; certification writes `RESULTS_CERTIFIED` in the same transaction.
+
+### Checks Run
+- `go build ./...` — PASS.
+- `go test ./internal/policy ./internal/routes ./internal/handlers ./internal/authz ./internal/models -count=1` — PASS (5 packages).
+- `go test ./...` — only `internal/saga` and `internal/services` fail, with the pre-existing `CGO_ENABLED=0` SQLite stub. No ISSUE-03 test fails.
+
+### Documentation
+- Created `docs/rbac.md` (role matrix, route inventory, 401/403/404 semantics, results policy, separation of duties, audit, limitations).
+- Updated `docs/traceability.md` (FR-AUTH-06, FR-ELIG-05, FR-PRIV-06, FR-DASH-06/09/10, FR-AUDIT-04, FR-CERT-02, NFR-SEC-02/04).
+
+### Next Steps
+1. Commit the branch and open a PR into `develop` (do not merge without owner approval).
+2. ISSUE-04 eligibility: enforce rosters per election; the role grants and scoping already exist.
+3. Remaining election/candidate/roster/ballot endpoints must add a route policy; the inventory test enforces it.
+
+

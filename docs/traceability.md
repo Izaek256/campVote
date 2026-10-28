@@ -5,6 +5,8 @@
 **Authoritative source:** `develop` branch, commit `22c6255` (Grit Triple monorepo scaffold + campus voting domain)
 
 > **ISSUE-02 update (branch `feat/issue-02-auth-session-hardening`):** the FR-AUTH and NFR-SEC rows marked below were re-verified against the hardening work and its new HTTP-level tests. See [`auth.md`](auth.md) for thresholds, cookie flags, bootstrap steps and exact results. These rows describe the task branch until it is merged into `develop`.
+>
+> **ISSUE-03 update (branch `feat/issue-03-server-side-rbac`):** route policies, SRS roles, per-election scoping, separation of duties, results visibility and certification are implemented. See [`rbac.md`](rbac.md) for the role matrix, 401/403/404 semantics, the 181-route inventory and exact test results.
 
 ---
 
@@ -27,7 +29,7 @@
 | FR-AUTH-03 | Validate email/identity claims server-side | 🔶 Partial | `middleware/auth.go`; `services/auth.go` | `handlers/auth_test.go`; `handlers/auth_security_test.go` | Token type, signature, expiry, session liveness and active status validated; institutional domain not enforced | ISSUE-02 |
 | FR-AUTH-04 | Prefer university SSO/OIDC | 🔶 Partial | `handlers/auth_oauth.go`; `handlers/sso.go`; `services/sso.go` | `handlers/sso_test.go` | Generic OIDC/SAML scaffolded; MMU-specific IdP not configured | ISSUE-01 |
 | FR-AUTH-05 | Verify current institutional status from authoritative directory | ❌ Missing | — | — | No directory/roster integration at auth layer | ISSUE-05 |
-| FR-AUTH-06 | RBAC with least privilege on every protected backend operation | 🔶 Partial | `internal/authz/`; `middleware/auth.go`; `routes/routes.go` (RequireRole/RequireStaff) | `authz/*_test.go` | Grit RBAC wired; election-specific roles (Election Official, Candidate) not yet defined | ISSUE-01 |
+| FR-AUTH-06 | RBAC with least privilege on every protected backend operation | ✅ Implemented | `internal/policy/` (route table + object policy); `internal/authz/`; `middleware/auth.go`; `models/role.go`, `models/election_role.go` | `routes/policy_inventory_test.go::TestEveryRouteHasAPolicy`; `policy/election_test.go`; `handlers/election_rbac_test.go` | All 181 non-library routes have an explicit policy and unlisted routes are denied; SRS roles, per-election scoping and separation of duties enforced. New election endpoints add policies; the inventory test fails otherwise | ISSUE-03 |
 | FR-AUTH-07 | Session expiry, logout, suspension, security-event logging | ✅ Implemented | `services/session.go` (7-day idle, 30-day absolute, rotation/replay); `handlers/auth.go::Logout`; `handlers/user.go`; `services/activity.go` | `services/session_test.go`; `handlers/auth_security_test.go::TestPasswordReset_RevokesSessionsAndCannotBeReplayed`, `::TestLogout_RevokesBearerSession`, `::TestDeactivation_RevokesSessionsAndBlocksNextRequest` | Logout, password reset and deactivation revoke sessions; login/lockout/reset/deactivation audited | ISSUE-02 |
 | FR-AUTH-08 | MFA/TOTP for privileged accounts | ✅ Implemented | `handlers/totp.go`; `services/two_factor.go` | `services/two_factor_test.go` | TOTP + backup codes + passkeys scaffolded and tested | ISSUE-01 |
 | FR-AUTH-09 | Never log passwords, tokens, ballot contents | 🔶 Partial | `middleware/security_log.go`; `middleware/logger.go`; `models/user.go` (`json:"-"`); `services/activity.go` | `handlers/auth_security_test.go::TestRegister_StoresHashAndDoesNotLeakPassword` | Passwords are hash-only and absent from API responses/audit rows; explicit ballot-content logging still untested because no voting route exists | ISSUE-02 |
@@ -87,7 +89,7 @@
 | FR-ELIG-02 | Restrict by faculty, department, programme, year, class, or roster | ✅ Implemented | `models/roster.go` L19–35 (Faculty, Department, Programme, StudyYear) | `database/elections_seeder_test.go` | Roster table has all classification fields; 2 entries seeded | ISSUE-05 |
 | FR-ELIG-03 | CSV roster import with validation, duplicate detection, preview | ❌ Missing | — | — | Roster model exists; import endpoint not built | ISSUE-05 |
 | FR-ELIG-04 | Backend eligibility check at ballot access and submission | ❌ Missing | — | — | No voting handler yet to enforce this | ISSUE-05 |
-| FR-ELIG-05 | Restrict access to confidential eligibility lists | ❌ Missing | — | — | No RBAC on roster endpoints yet | ISSUE-05 |
+| FR-ELIG-05 | Restrict access to confidential eligibility lists | 🔶 Partial | `internal/authz/permissions.go` (`rosters.view`/`rosters.edit`/`rosters.import`); `internal/policy/election.go::AuthorityFor` | `policy/election_test.go::TestAuthorityScopesOfficialToAssignedElection` | Roster permissions and per-election scoping exist; no roster endpoint yet, so the check is not exercised on real data | ISSUE-03 |
 | FR-ELIG-06 | Log eligibility changes, especially post-open | ❌ Missing | — | — | Audit model exists; roster change events not hooked | ISSUE-05 |
 | FR-ELIG-07 | Handle suspended/graduated/ineligible accounts | 🔶 Partial | `models/roster.go` L11–16 (SUSPENDED, GRADUATED status constants) | — | Statuses defined; not enforced in submission path | ISSUE-05 |
 | FR-ELIG-08 | Multi-election eligibility isolation | ✅ Implemented | `models/roster.go` (unique index `idx_roster_election_email` scoped by `election_id`) | `database/elections_seeder_test.go` | Composite unique index verifies election-scoped eligibility | ISSUE-05 |
@@ -122,7 +124,7 @@
 | FR-PRIV-03 | Schema/API/logs must not expose voter-to-ballot mapping | ✅ Implemented | `models/ballot.go` (AnonymousBallot: no user_id, email, session_id, IP) | `models/voting_test.go::TestBallotPrivacyDecoupling` | 7 forbidden fields checked by reflection | ISSUE-06 |
 | FR-PRIV-04 | No ballot selections in profiles, logs, notifications | 🔶 Partial | Architecture modelled; `election_audit.go` comment L26 | — | Audit model excludes choices; log filter not tested | ISSUE-06 |
 | FR-PRIV-05 | Generic non-transferable confirmation | ✅ Implemented | `models/participation.go` (random `ConfirmationToken`) | `models/voting_test.go` | Token is random hex; does not encode any choice | ISSUE-06 |
-| FR-PRIV-06 | Limit access to identity/eligibility records | ❌ Missing | — | — | No RBAC on roster/participation endpoints yet | ISSUE-05 |
+| FR-PRIV-06 | Limit access to identity/eligibility records | 🔶 Partial | `internal/policy/election.go::AuthorityFor`; `internal/authz/permissions.go` (`rosters.*`) | `policy/election_test.go`; `handlers/election_rbac_test.go::TestRoutePolicyMatrixForElectionEndpoints` | Election-scoped authority returns 404 outside the actor's elections; roster/participation endpoints still pending | ISSUE-03 |
 | FR-PRIV-07 | Privacy threat assessment (DB access, logs, backups, timing) | ❌ Missing | — | — | Documented as required; not yet performed | ISSUE-09 |
 | FR-PRIV-08 | Document actual anonymity guarantee and residual risks | ❌ Missing | — | — | `ballot.go` comment acknowledges timing risk; formal doc absent | ISSUE-09 |
 | FR-PRIV-09 | Evaluate cryptographic anonymous credentials if required | ❌ Missing | — | — | ADR-006 defers this pending threat model | ISSUE-09 |
@@ -161,11 +163,11 @@
 | FR-DASH-03 | Eligible voter count, participation count, turnout | ❌ Missing | — | — | No results endpoint | ISSUE-07 |
 | FR-DASH-04 | Live results when enabled (candidate totals, percentages, leader) | ❌ Missing | — | — | `realtime` hub present; no election channel | ISSUE-07 |
 | FR-DASH-05 | Automatic result refresh | ❌ Missing | — | — | Realtime hub present; no election channel | ISSUE-07 |
-| FR-DASH-06 | Label results as Live/Provisional/Closed/Certified | 🔶 Partial | `models/election.go` (`Status` + `ResultPolicy` constants) | — | Constants defined; no API response labels | ISSUE-07 |
+| FR-DASH-06 | Label results as Live/Provisional/Closed/Certified | 🔶 Partial | `handlers/election_rbac.go::Results`; `models/election.go` (`Status` + `ResultPolicy`) | `policy/election_test.go::TestResultsVisibilityFollowsElectionPolicy` | API labels `FINALIZED`/`ARCHIVED` as `CERTIFIED` and everything else `PROVISIONAL`; no Live/Closed UI label split yet | ISSUE-03 |
 | FR-DASH-07 | Per-election results policy (live, after-close, after-cert) | ✅ Implemented | `models/election.go` L38–42 (`ResultPolicy` constants) | — | Three constants defined and seeded | ISSUE-07 |
 | FR-DASH-08 | Show denominator for each percentage; distinguish turnout from vote share | 🔶 Partial | `models/tally.go` (fields defined) | — | Fields defined; no results API | ISSUE-07 |
-| FR-DASH-09 | Never label provisional leader as winner | ❌ Missing | — | — | No results API yet | ISSUE-07 |
-| FR-DASH-10 | Expose only aggregate results; no voter identities or ballots | 🔶 Partial | Privacy architecture modelled (separate tables) | — | Architecture prevents linkage; no results API yet | ISSUE-07 |
+| FR-DASH-09 | Never label provisional leader as winner | 🔶 Partial | `handlers/election_rbac.go::Results` | `handlers/election_rbac_test.go::TestRoutePolicyMatrixForElectionEndpoints` | Response carries `PROVISIONAL`/`CERTIFIED`, never "winner"; no leader field exists yet | ISSUE-03 |
+| FR-DASH-10 | Expose only aggregate results; no voter identities or ballots | ✅ Implemented | `handlers/election_rbac.go::Results`; `models/tally.go` (no identity columns) | `handlers/election_rbac_test.go::TestRoutePolicyMatrixForElectionEndpoints`; `models/voting_test.go::TestBallotPrivacyDecoupling` | Results endpoint returns `ElectionTally` aggregates only; the table has no voter linkage | ISSUE-03 |
 | FR-DASH-11 | Historical certified results | ❌ Missing | — | — | No certification or history endpoint | ISSUE-07 |
 
 ---
@@ -182,9 +184,9 @@
 | FR-AUDIT-01 | Administrative event audit (config, candidate decisions, opening, closing, certification) | 🔶 Partial | `models/election_audit.go` (model + constants) | — | Model and action constants defined; no service emitting events | ISSUE-09 |
 | FR-AUDIT-02 | Tamper-evident audit records | 🔶 Partial | `models/election_audit.go`; `internal/appendonly/` (generic append-only log) | `appendonly/appendonly_test.go` | Generic append-only infrastructure exists; election audit not wired to it | ISSUE-09 |
 | FR-AUDIT-03 | Audit logs contain no ballot choices | ✅ Implemented | `models/election_audit.go` L26 (no choice fields on model) | — | Schema verified; no ballot fields on ElectionAuditLog | ISSUE-09 |
-| FR-AUDIT-04 | Restrict detailed audit to authorized reviewers | ❌ Missing | — | — | No election audit endpoint; generic activity endpoint exists | ISSUE-09 |
+| FR-AUDIT-04 | Restrict detailed audit to authorized reviewers | 🔶 Partial | `internal/authz/permissions.go` (`audit.view`); `models/role.go` (`CHIEF_ELECTION_ADMIN`, `ELECTION_AUDITOR`) | `authz/grants_test.go::TestSeedRoles` | `audit.view` is granted only to chiefs/admins/auditors, but the election audit read endpoint is not built yet | ISSUE-03 |
 | FR-CERT-01 | Stop accepting votes at server-enforced closing time | ✅ Implemented | `models/election.go::CanAcceptVotes()` | `models/voting_test.go::TestElectionLifecycle` | Time-based gate tested | ISSUE-08 |
-| FR-CERT-02 | Formal certification only by authorized roles after review | ❌ Missing | — | — | No certification handler | ISSUE-08 |
+| FR-CERT-02 | Formal certification only by authorized roles after review | ✅ Implemented | `handlers/election_rbac.go::Certify`; `internal/policy/election.go::CertifyDecision` | `policy/election_test.go::TestCertifyRequiresTwoOfficialsAndADifferentActor`; `handlers/election_rbac_test.go` | Requires `elections.certify`, `CLOSED`/`REVIEW`, two assigned officials, and an actor other than the creator; writes `FINALIZED` + audit row in one transaction | ISSUE-03 |
 | FR-CERT-03 | Certified results protected against silent changes | ❌ Missing | — | — | No certification service | ISSUE-08 |
 | FR-CERT-04 | Reopening/post-opening changes require authorization + audit | ❌ Missing | — | — | No election mutation handler | ISSUE-08 |
 
@@ -195,9 +197,9 @@
 | Req ID | Requirement | Status | Code Location | Test Location | Evidence | Owning Issue |
 |---|---|---|---|---|---|---|
 | NFR-SEC-01 | HTTPS for all production traffic | N/A | `compose.dev.yaml` (no TLS); ADR-012 | — | TLS is deployment concern; reverse proxy to be configured with MMU IT | ISSUE-12 |
-| NFR-SEC-02 | Server-side authorization on every protected operation | 🔶 Partial | `middleware/auth.go`; `routes/routes.go` (RequireRole) | `handlers/auth_test.go` | Generic RBAC wired; election-specific authorization not implemented | ISSUE-01 |
+| NFR-SEC-02 | Server-side authorization on every protected operation | ✅ Implemented | `internal/policy/policy.go` (global default-deny + guard); `internal/policy/routes.go`; `internal/policy/election.go`; `middleware/auth.go` | `routes/policy_inventory_test.go`; `policy/election_test.go`; `handlers/election_rbac_test.go` | Every registered route has an explicit policy; unlisted routes denied; per-election object scoping tested; admin routes refuse voter tokens | ISSUE-03 |
 | NFR-SEC-03 | Secure cookies/sessions, rate limiting, MFA | 🔶 Partial | `services/auth.go::SetAuthCookies`; `middleware/csrf.go`; `sentinel/`; `handlers/totp.go`, `handlers/auth_lockout.go` | `middleware/csrf_test.go`; `handlers/auth_security_test.go`; `services/two_factor_test.go` | HttpOnly/Secure/SameSite cookies, CSRF double-submit, per-account lockout and TOTP tested; election-specific MFA policy not configured | ISSUE-02 |
-| NFR-SEC-04 | Injection, XSS, CSRF, brute-force, IDOR protection | 🔶 Partial | `middleware/csrf.go`; `sanitize/html.go`; Sentinel WAF; `handlers/auth_lockout.go` | `sanitize/html_test.go`; `middleware/csrf_test.go`; `handlers/auth_security_test.go::TestLogin_LocksAfterRepeatedFailuresAndRecoversAfterWindow` | WAF + CSRF + sanitiser + tested brute-force lockout; IDOR not specifically tested | ISSUE-02 |
+| NFR-SEC-04 | Injection, XSS, CSRF, brute-force, IDOR protection | 🔶 Partial | `internal/policy/election.go` (IDOR); `middleware/csrf.go`; `sanitize/html.go`; Sentinel WAF; `handlers/auth_lockout.go` | `handlers/election_rbac_test.go::TestRoutePolicyMatrixForElectionEndpoints`; `sanitize/html_test.go`; `middleware/csrf_test.go`; `handlers/auth_security_test.go` | Cross-election IDOR returns 404 and is audited; WAF, CSRF, sanitiser and brute-force lockout tested; SQL-injection coverage still comes from GORM parameterisation only | ISSUE-03 |
 | NFR-SEC-05 | Secrets outside source control | ✅ Implemented | `.env.example` (placeholders only); `.gitignore` | — | No real secrets committed; scan clean | ISSUE-00 |
 | NFR-SEC-06 | Least-privilege DB accounts | N/A | `compose.dev.yaml` | — | Deployment concern; documented in ADR-003 | ISSUE-12 |
 | NFR-SEC-07 | Dependency, config, security testing pre-election | ❌ Missing | — | — | No security test suite; no CI pipeline | ISSUE-12 |
