@@ -19,6 +19,7 @@ import (
 	"campvote/apps/api/internal/backup"
 	"campvote/apps/api/internal/cache"
 	"campvote/apps/api/internal/files"
+	"campvote/apps/api/internal/lifecycle"
 	"campvote/apps/api/internal/mail"
 	"campvote/apps/api/internal/models"
 	// The retention sweep builds a TrashService over the registry the API
@@ -88,6 +89,7 @@ func StartWorker(redisURL string, deps WorkerDeps) (func(), error) {
 	mux.HandleFunc(TypeTrashPurgeExpired, handleTrashPurgeExpired(deps))
 	mux.HandleFunc(TypeBackupWeekly, handleBackupWeekly(deps))
 	mux.HandleFunc(TypeBackupScheduled, handleBackupScheduled(deps))
+	mux.HandleFunc(TypeElectionLifecycle, handleElectionLifecycle(deps))
 	// grit:jobs
 
 	go func() {
@@ -183,6 +185,25 @@ func handleImageProcess(deps WorkerDeps) func(ctx context.Context, task *asynq.T
 		}
 
 		log.Printf("Thumbnail created for upload %s", payload.UploadID)
+		return nil
+	}
+}
+
+// handleElectionLifecycle reconciles scheduled and open elections with server
+// time. A missed tick is harmless: every ballot request runs the same lazy
+// check before deciding whether voting is open.
+func handleElectionLifecycle(deps WorkerDeps) func(ctx context.Context, task *asynq.Task) error {
+	return func(ctx context.Context, task *asynq.Task) error {
+		if deps.DB == nil {
+			return fmt.Errorf("database not configured")
+		}
+		changed, err := lifecycle.SyncAll(deps.DB.WithContext(ctx), time.Now().UTC())
+		if err != nil {
+			return fmt.Errorf("reconciling election lifecycle: %w", err)
+		}
+		if changed > 0 {
+			log.Printf("Election lifecycle: %d transition(s)", changed)
+		}
 		return nil
 	}
 }

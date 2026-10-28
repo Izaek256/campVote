@@ -116,6 +116,20 @@ func New(redisURL string) (*Scheduler, error) {
 		Type:     "backup:scheduled",
 	})
 
+	// Election opening and closing, every minute. The lazy check in
+	// internal/lifecycle is the correctness guarantee; this task makes the
+	// audit timestamp timely when the scheduler is healthy.
+	_, err = scheduler.Register("* * * * *", asynq.NewTask("elections:lifecycle", nil),
+		asynq.Unique(50*time.Second), asynq.MaxRetry(2), asynq.Timeout(time.Minute))
+	if err != nil {
+		return nil, fmt.Errorf("registering election lifecycle: %w", err)
+	}
+	RegisteredTasks = append(RegisteredTasks, Task{
+		Name:     "Open and close elections by server time",
+		Schedule: "every minute",
+		Type:     "elections:lifecycle",
+	})
+
 	// grit:cron-tasks
 
 	return &Scheduler{scheduler: scheduler, redisURL: redisURL}, nil

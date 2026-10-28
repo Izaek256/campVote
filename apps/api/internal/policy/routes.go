@@ -120,6 +120,10 @@ func init() {
 	adminOnly("DELETE", "/api/v1/admin/deleted-accounts/:id")
 
 	// ── Campus election access ────────────────────────────────────────────
+	permitted("elections.create", "POST", "/api/v1/elections")
+	permitted("elections.view", "GET", "/api/v1/elections/:id")
+	permitted("elections.edit", "PUT", "/api/v1/elections/:id")
+	permitted("elections.edit", "POST", "/api/v1/elections/:id/transitions")
 	permitted("elections.roles", "GET", "/api/v1/elections/:id/roles")
 	permitted("elections.roles", "PUT", "/api/v1/elections/:id/roles/:userId")
 	permitted("elections.roles", "DELETE", "/api/v1/elections/:id/roles/:userId/:role")
@@ -129,7 +133,8 @@ func init() {
 	// The voter's own eligibility and ballot. Any signed-in caller may ask;
 	// the handler returns the ballot only when the server-side eligibility
 	// check passes for this election.
-	authenticated("GET", "/api/v1/elections/:id/eligibility", "/api/v1/elections/:id/ballot")
+	authenticated("GET", "/api/v1/elections/:id/eligibility", "/api/v1/elections/:id/ballot",
+		"/api/v1/elections/:id/lifecycle")
 	authenticated("POST", "/api/v1/elections/:id/ballot/start", "/api/v1/elections/:id/ballot/submit")
 
 	// Roster evidence is officer-only and election-scoped in the handler.

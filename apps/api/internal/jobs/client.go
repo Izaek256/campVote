@@ -20,6 +20,7 @@ const (
 	TypeBackupWeekly         = "backup:weekly"    // v3.31.77 (legacy)
 	TypeBackupScheduled      = "backup:scheduled" // settings-driven auto backup
 	TypeAuditPrune           = "audit:prune"      // activity-log retention
+	TypeElectionLifecycle    = "elections:lifecycle"
 )
 
 // Default per-task settings used when a caller doesn't override via

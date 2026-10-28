@@ -185,3 +185,39 @@ Chronological record of completed work, verified test results, architecture deci
 
 ### Documentation
 - Updated `docs/auth.md`, `docs/rbac.md`, `docs/eligibility.md` and `docs/implementation/OPEN_QUESTIONS.md`.
+
+---
+
+## [2026-10-28] ISSUE-05: Election Lifecycle, Schedule and Configuration Rules
+
+**Branch:** `feat/issue-05-election-lifecycle` (from the ISSUE-04 head, which is merged into `develop` via PR #8), not yet merged.
+**Goal:** one server-owned state machine for elections; voting open only on server time; no open with incomplete configuration; frozen configuration after opening with one audited exception; `[starts_at, ends_at)` boundaries.
+
+### Activities Completed
+1. **Lifecycle package (`apps/api/internal/lifecycle/`):**
+   - `lifecycle.go` — the full ten-state SRS transition matrix, `ValidateBasics`/`ValidateConfiguration`/`ReadyToOpen`, `Ensure` (lazy reconcile), `SyncAll` (scheduler), `Apply` (validated transition plus audit in one transaction), and the display-only `Phase`.
+   - `lifecycle_test.go` — every ordered state pair, boundary instants, missed scheduler tick, restart reconcile, invalid configuration fail-closed, validation fields, reason requirements.
+2. **Handlers and routes (`apps/api/internal/handlers/election_lifecycle.go`):**
+   - `POST /api/v1/elections`, `GET/PUT /api/v1/elections/:id`, `POST /api/v1/elections/:id/transitions`, `GET /api/v1/elections/:id/lifecycle`.
+   - After `OPEN`, all configuration edits are rejected except a later `ends_at` while `OPEN`, which needs `elections.publish`, a reason, a valid future window, and an `ELECTION_EXTENDED` audit row.
+   - `SCHEDULED -> OPEN` and `-> FINALIZED` are refused by the transition endpoint; they are reached by the server clock and the existing certification endpoint.
+3. **Server clock integration:** `lifecycle.Ensure` runs on ballot view/start/submit and eligibility gate/freeze/status, so a missed scheduler tick cannot extend voting or let an ended election accept a ballot. A spoofed `Date` header is ignored.
+4. **Scheduler:** `elections:lifecycle` every minute calls `SyncAll`; failure to open on invalid configuration is logged and leaves the election `SCHEDULED` (fail-closed).
+5. **Policy and audit:** added `elections.publish`; new audit actions `ELECTION_REVIEW_STARTED`, `ELECTION_ARCHIVED`, `ELECTION_EXTENDED`; automatic transitions record `actor_id = "system"`.
+6. **Timezones:** RFC 3339 with an explicit offset required; timestamps stored UTC; responses carry `display_timezone: "Africa/Kampala"`; a US DST window is tested.
+
+### Checks Run
+- `gofmt -l` on all changed Go files — clean.
+- `go build ./...` — PASS.
+- `go test ./internal/lifecycle ./internal/eligibility ./internal/policy ./internal/routes ./internal/models ./internal/cron ./internal/jobs -count=1` — PASS.
+- `go test ./internal/handlers -count=1` — PASS.
+
+### Documentation
+- Created `docs/election-lifecycle.md` (states, boundary semantics, validation, freeze/exception, API, audit, tests, limitations).
+- Updated `docs/README.md`, `docs/traceability.md`, `docs/progress/requirements-tracker.md` and `docs/handover/current-state.md`.
+
+### Next Steps
+1. Commit this branch and open a PR into `develop` (do not merge without owner approval).
+2. Run the suite against PostgreSQL (`GRIT_TEST_DATABASE_URL`), especially the conditional status update and the optimistic version update.
+3. ISSUE-06/08: position, candidate and roster edit endpoints must call the same freeze rule; ballot versioning, tallies and results publication remain.
+4. No UI consumes the lifecycle endpoints yet.
