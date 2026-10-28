@@ -11,6 +11,8 @@ import (
 	"campvote/apps/api/internal/models"
 )
 
+const testVerifySecret = "test-verification-secret"
+
 func newVerifyDB(tb testing.TB) *gorm.DB {
 	tb.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
@@ -38,14 +40,14 @@ func TestVerificationTokenStoresOnlyTheHash(t *testing.T) {
 	db := newVerifyDB(t)
 	u := seedUnverifiedUser(t, db, "ada@example.com")
 
-	row, err := CreateEmailVerificationToken(db, u.ID, u.Email, "raw-token-value")
+	row, err := CreateEmailVerificationToken(db, u.ID, u.Email, "raw-token-value", testVerifySecret)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if row.TokenHash == "raw-token-value" {
 		t.Fatal("the raw token was stored — a leak of this table would verify addresses")
 	}
-	if row.TokenHash != models.HashVerificationToken("raw-token-value") {
+	if row.TokenHash != models.HashVerificationToken("raw-token-value", testVerifySecret) {
 		t.Fatal("stored value is not the hash of the token")
 	}
 }
@@ -53,11 +55,11 @@ func TestVerificationTokenStoresOnlyTheHash(t *testing.T) {
 func TestConsumeMarksTheUserVerified(t *testing.T) {
 	db := newVerifyDB(t)
 	u := seedUnverifiedUser(t, db, "ada@example.com")
-	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "tok"); err != nil {
+	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "tok", testVerifySecret); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	got, err := ConsumeEmailVerificationToken(db, "tok")
+	got, err := ConsumeEmailVerificationToken(db, "tok", testVerifySecret)
 	if err != nil {
 		t.Fatalf("consume: %v", err)
 	}
@@ -75,13 +77,13 @@ func TestConsumeMarksTheUserVerified(t *testing.T) {
 func TestVerificationTokenIsSingleUse(t *testing.T) {
 	db := newVerifyDB(t)
 	u := seedUnverifiedUser(t, db, "ada@example.com")
-	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "tok"); err != nil {
+	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "tok", testVerifySecret); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := ConsumeEmailVerificationToken(db, "tok"); err != nil {
+	if _, err := ConsumeEmailVerificationToken(db, "tok", testVerifySecret); err != nil {
 		t.Fatalf("first consume: %v", err)
 	}
-	if _, err := ConsumeEmailVerificationToken(db, "tok"); err == nil {
+	if _, err := ConsumeEmailVerificationToken(db, "tok", testVerifySecret); err == nil {
 		t.Fatal("the token verified twice")
 	}
 }
@@ -89,16 +91,16 @@ func TestVerificationTokenIsSingleUse(t *testing.T) {
 func TestIssuingANewVerificationTokenBurnsTheOld(t *testing.T) {
 	db := newVerifyDB(t)
 	u := seedUnverifiedUser(t, db, "ada@example.com")
-	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "first"); err != nil {
+	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "first", testVerifySecret); err != nil {
 		t.Fatalf("create first: %v", err)
 	}
-	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "second"); err != nil {
+	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "second", testVerifySecret); err != nil {
 		t.Fatalf("create second: %v", err)
 	}
-	if _, err := ConsumeEmailVerificationToken(db, "first"); err == nil {
+	if _, err := ConsumeEmailVerificationToken(db, "first", testVerifySecret); err == nil {
 		t.Fatal("the superseded token still worked")
 	}
-	if _, err := ConsumeEmailVerificationToken(db, "second"); err != nil {
+	if _, err := ConsumeEmailVerificationToken(db, "second", testVerifySecret); err != nil {
 		t.Fatalf("the current token failed: %v", err)
 	}
 }
@@ -108,13 +110,13 @@ func TestIssuingANewVerificationTokenBurnsTheOld(t *testing.T) {
 func TestTokenDoesNotVerifyAChangedAddress(t *testing.T) {
 	db := newVerifyDB(t)
 	u := seedUnverifiedUser(t, db, "ada@example.com")
-	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "tok"); err != nil {
+	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "tok", testVerifySecret); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	db.Model(&models.User{}).Where("id = ?", u.ID).Update("email", "someone-else@example.com")
 
-	if _, err := ConsumeEmailVerificationToken(db, "tok"); err == nil {
+	if _, err := ConsumeEmailVerificationToken(db, "tok", testVerifySecret); err == nil {
 		t.Fatal("a stale link verified an address it was never issued for")
 	}
 }
@@ -122,7 +124,7 @@ func TestTokenDoesNotVerifyAChangedAddress(t *testing.T) {
 func TestVerificationTokenExpires(t *testing.T) {
 	db := newVerifyDB(t)
 	u := seedUnverifiedUser(t, db, "ada@example.com")
-	row, err := CreateEmailVerificationToken(db, u.ID, u.Email, "tok")
+	row, err := CreateEmailVerificationToken(db, u.ID, u.Email, "tok", testVerifySecret)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -130,14 +132,27 @@ func TestVerificationTokenExpires(t *testing.T) {
 		Where("id = ?", row.ID).
 		Update("expires_at", time.Now().Add(-time.Minute))
 
-	if _, err := ConsumeEmailVerificationToken(db, "tok"); err == nil {
+	if _, err := ConsumeEmailVerificationToken(db, "tok", testVerifySecret); err == nil {
 		t.Fatal("an expired token was accepted")
 	}
 }
 
 func TestUnknownVerificationTokenIsRejected(t *testing.T) {
 	db := newVerifyDB(t)
-	if _, err := ConsumeEmailVerificationToken(db, "never-issued"); err == nil {
+	if _, err := ConsumeEmailVerificationToken(db, "never-issued", testVerifySecret); err == nil {
 		t.Fatal("an unknown token was accepted")
+	}
+}
+
+// The stored hash is keyed: a database dump plus a six-digit guess is not
+// enough unless the attacker also has the application secret.
+func TestCodeHashedWithAnotherSecretIsRejected(t *testing.T) {
+	db := newVerifyDB(t)
+	u := seedUnverifiedUser(t, db, "ada@example.com")
+	if _, err := CreateEmailVerificationToken(db, u.ID, u.Email, "123456", "secret-a"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := ConsumeEmailVerificationToken(db, "123456", "secret-b"); err == nil {
+		t.Fatal("a code verified under a different application secret")
 	}
 }

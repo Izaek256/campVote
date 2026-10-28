@@ -339,3 +339,45 @@ func TestReportHasCountsOnly(t *testing.T) {
 		}
 	}
 }
+
+// A ballot already accepted stands when the voter is revoked afterwards. The
+// revocation blocks any further ballot; it does not delete the vote, the
+// participation record or the tally.
+func TestRevocationAfterVotingLeavesTheBallotStanding(t *testing.T) {
+	db := testDB(t)
+	now := time.Now().UTC()
+	openElection(t, db, "e-a", now.Add(-time.Hour), now.Add(time.Hour))
+	entry := rosterEntry(t, db, "e-a", "22/U/0001", "voter@std.must.ac.ug")
+
+	if err := db.Create(&models.VoterParticipation{ElectionID: "e-a", UserID: "user-1"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.AnonymousBallot{ElectionID: "e-a"}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := eligibility.SetStatus(db, "e-a", entry.ID, "officer-1",
+		models.RosterStatusSuspended, "left the university"); err != nil {
+		t.Fatal(err)
+	}
+
+	decision, err := eligibility.Check(db, "e-a", account("voter@std.must.ac.ug"), time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Eligible {
+		t.Fatal("a revoked voter must not start another ballot")
+	}
+
+	var ballots int64
+	if err := db.Model(&models.AnonymousBallot{}).Where("election_id = ?", "e-a").Count(&ballots).Error; err != nil {
+		t.Fatal(err)
+	}
+	if ballots != 1 {
+		t.Fatalf("the accepted ballot disappeared: %d remain", ballots)
+	}
+	var participation models.VoterParticipation
+	if err := db.Where("election_id = ? AND user_id = ?", "e-a", "user-1").First(&participation).Error; err != nil {
+		t.Fatalf("the participation record disappeared: %v", err)
+	}
+}

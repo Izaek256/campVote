@@ -5,7 +5,7 @@ Do not silently guess these. Create/link issues and record decisions in `ADR.md`
 - [ ] **Institutional identity:** Does MMU provide approved SSO/OIDC or another identity verification service?
 - [ ] **Eligibility data:** Who is authoritative for current student/staff status, faculty, department, programme, class, year, and role? How often is it updated?
 - [ ] **Eligibility identity:** ISSUE-04 uses verified institutional email as the identity key and `student_number` as the per-election secondary key. Confirm this is acceptable, or require SSO/OIDC to assert student number and status.
-- [ ] **Revocation after a vote:** if a voter is revoked after an accepted ballot, does that ballot stand (current behaviour) or get excluded from the tally?
+- [x] **Revocation after a vote (decided):** a ballot already accepted stands when the voter is later revoked; the revocation only blocks further ballots. See `docs/eligibility.md` §8.
 - [ ] **Eligibility freeze:** should the roster freeze automatically when polls open, or remain a deliberate officer action (current behaviour)?
 - [ ] **Roster import approval:** who may import a roll, and is a second approver required before it becomes authoritative?
 - [ ] **Email domains:** Confirm the proposed `@std.must.ac.ug` and `@must.ac.ug` domains with university IT; domain possession alone does not prove eligibility.

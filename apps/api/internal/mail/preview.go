@@ -118,9 +118,10 @@ func init() {
 	})
 	builtIn("email-verification", "Sent to confirm a user's email address", "Confirm your email address", func() map[string]interface{} {
 		return map[string]interface{}{
-			"Title":     "Confirm your email address",
-			"Message":   "Click the button below to confirm this address. The link expires in 48 hours and can only be used once.",
-			"VerifyURL": "https://example.com/verify-email?token=sample",
+			"Title":   "Confirm your email address",
+			"Message": "Enter this code on the verification page to confirm this address.",
+			"Code":    "418902",
+			"Minutes": 10,
 		}
 	})
 	builtIn("notification", "A general notification with an optional button", "New activity", func() map[string]interface{} {

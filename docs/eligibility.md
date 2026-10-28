@@ -137,9 +137,10 @@ or user ID, and tests assert those strings are absent.
 
 ## 8. Open policy questions for stakeholder sign-off
 
-1. **Revocation after a vote:** should an accepted ballot be discarded when the
-   voter is later found ineligible, or should it stand? Current behaviour:
-   it stands.
+1. **Revocation after a vote (decided):** an accepted ballot stands. Revoking
+   a voter stops any future ballot and is audited, but it never deletes the
+   anonymous ballot, the participation record or the tally entry. Covered by
+   `TestRevocationAfterVotingLeavesTheBallotStanding`.
 2. **Identity proof:** is verified institutional email acceptable, or must the
    university provide SSO/OIDC that asserts student number and status?
 3. **Freeze timing:** should the snapshot happen automatically when the election

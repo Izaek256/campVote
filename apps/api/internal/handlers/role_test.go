@@ -187,6 +187,37 @@ func TestRoleAPI_AssignUserRoles(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+// The overall administrator must be able to hand out and take back any role,
+// including ADMIN and the empty set.
+func TestRoleAPI_AdminCanGrantAndRevokeAnyRole(t *testing.T) {
+	db := roleTestDB(t)
+	r := roleRouter(db)
+
+	u := models.User{ID: "u-admin", Email: "admin@x.com", FirstName: "A", LastName: "D", Role: models.RoleUser}
+	require.NoError(t, db.Create(&u).Error)
+
+	var admin models.Role
+	require.NoError(t, db.Where("name = ?", models.RoleAdmin).First(&admin).Error)
+
+	w := do(t, r, "PUT", "/users/u-admin/roles", map[string]any{"role_ids": []string{admin.ID}})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var got models.User
+	require.NoError(t, db.Where("id = ?", "u-admin").First(&got).Error)
+	assert.Equal(t, models.RoleAdmin, got.Role)
+	var n int64
+	db.Model(&models.UserRole{}).Where("user_id = ?", "u-admin").Count(&n)
+	assert.Equal(t, int64(1), n)
+
+	w = do(t, r, "PUT", "/users/u-admin/roles", map[string]any{"role_ids": []string{}})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	require.NoError(t, db.Where("id = ?", "u-admin").First(&got).Error)
+	assert.Empty(t, got.Role)
+	db.Model(&models.UserRole{}).Where("user_id = ?", "u-admin").Count(&n)
+	assert.Zero(t, n)
+}
+
 func staffRoleRouter(db *gorm.DB, grants []string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	h := NewRoleHandler(db)
