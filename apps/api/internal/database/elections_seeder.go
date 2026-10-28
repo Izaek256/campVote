@@ -3,15 +3,24 @@ package database
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/models"
+	"gorm.io/gorm"
 )
 
 // SeedElections populates synthetic demo elections, positions, candidates, and rosters
 // for local testing and demonstration at Mountains of the Moon University (MMU).
 func SeedElections(db *gorm.DB) error {
+	// Demo elections include demo voter accounts with a shared password. They
+	// are development fixtures, never production data, so they follow the same
+	// APP_ENV=development gate as the demo users.
+	if !seedDevDefaults() {
+		log.Printf("Skipping demo elections: APP_ENV is %q, not development", os.Getenv("APP_ENV"))
+		return nil
+	}
+
 	// Only seed if no elections exist yet
 	var count int64
 	db.Model(&models.Election{}).Count(&count)
@@ -24,16 +33,10 @@ func SeedElections(db *gorm.DB) error {
 
 	now := time.Now().UTC()
 
-	// 1. Seed MMU Staff & Student Demo Accounts
+	// 1. Seed MMU student demo accounts. No administrator is seeded: the first
+	// administrator comes from cmd/bootstrap, so no demo run plants an ADMIN
+	// with a known password.
 	demoAccounts := []models.User{
-		{
-			FirstName: "Electoral",
-			LastName:  "Commissioner",
-			Email:     "commissioner@must.ac.ug",
-			Password:  "admin123",
-			Role:      models.RoleAdmin,
-			Active:    true,
-		},
 		{
 			FirstName: "Ivan",
 			LastName:  "Mugisha",

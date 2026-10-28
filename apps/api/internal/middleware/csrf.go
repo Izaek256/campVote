@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"campvote/apps/api/internal/respond"
+	"github.com/gin-gonic/gin"
 )
 
 // CSRF implements double-submit-cookie protection (OWASP Top 10:2025
@@ -38,7 +38,7 @@ func CSRF() gin.HandlerFunc {
 				token, gerr := newCSRFToken()
 				if gerr == nil {
 					c.SetSameSite(http.SameSiteStrictMode)
-					c.SetCookie(cookieName, token, 86400, "/", "", c.Request.TLS != nil, false)
+					c.SetCookie(cookieName, token, 86400, "/", "", requestIsHTTPS(c), false)
 				}
 			}
 			c.Next()
@@ -55,6 +55,16 @@ func CSRF() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// requestIsHTTPS mirrors the auth-cookie rule: direct TLS, or a trusted proxy
+// that terminated it and said so. Without this the CSRF cookie lost Secure
+// behind the reverse proxy the documented deployment runs.
+func requestIsHTTPS(c *gin.Context) bool {
+	if c.Request.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
 }
 
 func newCSRFToken() (string, error) {
@@ -141,7 +151,7 @@ func AutoCSRF() gin.HandlerFunc {
 				token, gerr := newCSRFToken()
 				if gerr == nil {
 					c.SetSameSite(http.SameSiteLaxMode)
-					c.SetCookie(csrfCookie, token, 86400, "/", "", c.Request.TLS != nil, false)
+					c.SetCookie(csrfCookie, token, 86400, "/", "", requestIsHTTPS(c), false)
 				}
 			}
 			c.Next()

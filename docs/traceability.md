@@ -4,6 +4,8 @@
 **Audited by:** ISSUE-00 implementation audit (chore/issue-00-implementation-audit)  
 **Authoritative source:** `develop` branch, commit `22c6255` (Grit Triple monorepo scaffold + campus voting domain)
 
+> **ISSUE-02 update (branch `feat/issue-02-auth-session-hardening`):** the FR-AUTH and NFR-SEC rows marked below were re-verified against the hardening work and its new HTTP-level tests. See [`auth.md`](auth.md) for thresholds, cookie flags, bootstrap steps and exact results. These rows describe the task branch until it is merged into `develop`.
+
 ---
 
 ## Legend
@@ -20,15 +22,15 @@
 
 | Req ID | Requirement | Status | Code Location | Test Location | Evidence | Owning Issue |
 |---|---|---|---|---|---|---|
-| FR-AUTH-01 | Permit protected access only to authenticated institutional identities | 🔶 Partial | `apps/api/internal/middleware/auth.go`; `routes/routes.go` L1176–1181 (`protected` group with `middleware.Auth`) | — | JWT/cookie auth middleware wired; MMU domain enforcement not yet wired | ISSUE-01 |
+| FR-AUTH-01 | Permit protected access only to authenticated institutional identities | ✅ Implemented | `middleware/auth.go` (token + live session + active user); `routes/routes.go` (`protected` group with `middleware.Auth`) | `handlers/auth_security_test.go::TestLogout_RevokesCookieSession`, `::TestDeactivation_RevokesSessionsAndBlocksNextRequest` | Access tokens require a live server-side session and an active user; revoked/logged-out sessions get 401. Institutional domain check remains FR-AUTH-02. | ISSUE-02 |
 | FR-AUTH-02 | Enforce `@std.must.ac.ug` / `@must.ac.ug` domain policy, server-side | ❌ Missing | `models/election.go` L59 (AllowedDomains field on Election, not enforced at auth) | — | Domain stored per-election but no registration/login domain validator exists | ISSUE-01 |
-| FR-AUTH-03 | Validate email/identity claims server-side | 🔶 Partial | `middleware/auth.go`; `services/auth.go` | `handlers/auth_test.go` | JWT claims validated; institutional domain not enforced | ISSUE-01 |
+| FR-AUTH-03 | Validate email/identity claims server-side | 🔶 Partial | `middleware/auth.go`; `services/auth.go` | `handlers/auth_test.go`; `handlers/auth_security_test.go` | Token type, signature, expiry, session liveness and active status validated; institutional domain not enforced | ISSUE-02 |
 | FR-AUTH-04 | Prefer university SSO/OIDC | 🔶 Partial | `handlers/auth_oauth.go`; `handlers/sso.go`; `services/sso.go` | `handlers/sso_test.go` | Generic OIDC/SAML scaffolded; MMU-specific IdP not configured | ISSUE-01 |
 | FR-AUTH-05 | Verify current institutional status from authoritative directory | ❌ Missing | — | — | No directory/roster integration at auth layer | ISSUE-05 |
 | FR-AUTH-06 | RBAC with least privilege on every protected backend operation | 🔶 Partial | `internal/authz/`; `middleware/auth.go`; `routes/routes.go` (RequireRole/RequireStaff) | `authz/*_test.go` | Grit RBAC wired; election-specific roles (Election Official, Candidate) not yet defined | ISSUE-01 |
-| FR-AUTH-07 | Session expiry, logout, suspension, security-event logging | ✅ Implemented | `handlers/session.go`; `services/session.go`; `middleware/security_log.go` | `services/session_test.go` | Session revocation + security event constants implemented | ISSUE-01 |
+| FR-AUTH-07 | Session expiry, logout, suspension, security-event logging | ✅ Implemented | `services/session.go` (7-day idle, 30-day absolute, rotation/replay); `handlers/auth.go::Logout`; `handlers/user.go`; `services/activity.go` | `services/session_test.go`; `handlers/auth_security_test.go::TestPasswordReset_RevokesSessionsAndCannotBeReplayed`, `::TestLogout_RevokesBearerSession`, `::TestDeactivation_RevokesSessionsAndBlocksNextRequest` | Logout, password reset and deactivation revoke sessions; login/lockout/reset/deactivation audited | ISSUE-02 |
 | FR-AUTH-08 | MFA/TOTP for privileged accounts | ✅ Implemented | `handlers/totp.go`; `services/two_factor.go` | `services/two_factor_test.go` | TOTP + backup codes + passkeys scaffolded and tested | ISSUE-01 |
-| FR-AUTH-09 | Never log passwords, tokens, ballot contents | 🔶 Partial | `middleware/security_log.go`; `middleware/logger.go` | — | Structured logger present; explicit ballot-content filtering not tested | ISSUE-01 |
+| FR-AUTH-09 | Never log passwords, tokens, ballot contents | 🔶 Partial | `middleware/security_log.go`; `middleware/logger.go`; `models/user.go` (`json:"-"`); `services/activity.go` | `handlers/auth_security_test.go::TestRegister_StoresHashAndDoesNotLeakPassword` | Passwords are hash-only and absent from API responses/audit rows; explicit ballot-content logging still untested because no voting route exists | ISSUE-02 |
 
 ---
 
@@ -194,8 +196,8 @@
 |---|---|---|---|---|---|---|
 | NFR-SEC-01 | HTTPS for all production traffic | N/A | `compose.dev.yaml` (no TLS); ADR-012 | — | TLS is deployment concern; reverse proxy to be configured with MMU IT | ISSUE-12 |
 | NFR-SEC-02 | Server-side authorization on every protected operation | 🔶 Partial | `middleware/auth.go`; `routes/routes.go` (RequireRole) | `handlers/auth_test.go` | Generic RBAC wired; election-specific authorization not implemented | ISSUE-01 |
-| NFR-SEC-03 | Secure cookies/sessions, rate limiting, MFA | 🔶 Partial | `middleware/csrf.go`; `sentinel/` (rate limiting); `handlers/totp.go` | `services/two_factor_test.go` | Infrastructure present; election-specific MFA policy not configured | ISSUE-01 |
-| NFR-SEC-04 | Injection, XSS, CSRF, brute-force, IDOR protection | 🔶 Partial | `middleware/csrf.go`; `sanitize/html.go`; Sentinel WAF | `sanitize/html_test.go` | WAF + CSRF + sanitiser wired; IDOR not specifically tested | ISSUE-12 |
+| NFR-SEC-03 | Secure cookies/sessions, rate limiting, MFA | 🔶 Partial | `services/auth.go::SetAuthCookies`; `middleware/csrf.go`; `sentinel/`; `handlers/totp.go`, `handlers/auth_lockout.go` | `middleware/csrf_test.go`; `handlers/auth_security_test.go`; `services/two_factor_test.go` | HttpOnly/Secure/SameSite cookies, CSRF double-submit, per-account lockout and TOTP tested; election-specific MFA policy not configured | ISSUE-02 |
+| NFR-SEC-04 | Injection, XSS, CSRF, brute-force, IDOR protection | 🔶 Partial | `middleware/csrf.go`; `sanitize/html.go`; Sentinel WAF; `handlers/auth_lockout.go` | `sanitize/html_test.go`; `middleware/csrf_test.go`; `handlers/auth_security_test.go::TestLogin_LocksAfterRepeatedFailuresAndRecoversAfterWindow` | WAF + CSRF + sanitiser + tested brute-force lockout; IDOR not specifically tested | ISSUE-02 |
 | NFR-SEC-05 | Secrets outside source control | ✅ Implemented | `.env.example` (placeholders only); `.gitignore` | — | No real secrets committed; scan clean | ISSUE-00 |
 | NFR-SEC-06 | Least-privilege DB accounts | N/A | `compose.dev.yaml` | — | Deployment concern; documented in ADR-003 | ISSUE-12 |
 | NFR-SEC-07 | Dependency, config, security testing pre-election | ❌ Missing | — | — | No security test suite; no CI pipeline | ISSUE-12 |
@@ -206,7 +208,7 @@
 | NFR-PERF-01/02/03 | 95th percentile latency targets; realtime under 5 s | ❌ Missing | `tests/k6/` (load test scripts) | `tests/k6/smoke.js` etc. | k6 scripts scaffolded; not run against live stack | ISSUE-13 |
 | NFR-UX-01/02/03/04 | Accessibility WCAG 2.2 AA; responsive; clear errors | ❌ Missing | `apps/web/`; `apps/admin/` (minimal scaffold) | — | Frontend scaffold minimal; no voter UX pages built | ISSUE-04 |
 | NFR-MAINT-01/02/03 | Modular backend; configurable rules; versioned migrations | 🔶 Partial | `apps/api/internal/` (modular packages); `cmd/migrate/` | — | Migration command exists; election-specific migrations not verified from empty DB | ISSUE-00 |
-| NFR-MAINT-04 | Automated tests for auth, eligibility, concurrency, secrecy, tallying | 🔶 Partial | `models/voting_test.go` (privacy + duplicate) | See test inventory | Core privacy + duplicate tests pass; concurrency/tally tests absent | ISSUE-06 |
+| NFR-MAINT-04 | Automated tests for auth, eligibility, concurrency, secrecy, tallying | 🔶 Partial | `models/voting_test.go` (privacy + duplicate) | See test inventory; `handlers/auth_security_test.go`; `middleware/csrf_test.go`; `database/bootstrap_test.go` | Auth flows, token replay/expiry, lockout, cookies, CSRF and bootstrap now covered over HTTP; concurrency/tally tests absent | ISSUE-06 |
 | NFR-MAINT-05 | Pinned framework/tool versions | ✅ Implemented | `go.mod`; `package.json`; `SETUP_LOG.md` | — | All versions pinned | ISSUE-00 |
 | NFR-DATA-01/02/03/04 | Data minimization, retention, Ugandan law, incident response | ❌ Missing | — | — | Not implemented; pending university policy decisions | ISSUE-09 |
 

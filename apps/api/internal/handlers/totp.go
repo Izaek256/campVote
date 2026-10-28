@@ -387,7 +387,7 @@ func (h *TOTPHandler) Verify(c *gin.Context) {
 	// device, same session at the end.
 	if pending.CodeHash != "" {
 		if !totp.EmailCodeMatches(pending.CodeHash, req.Code) {
-			h.failSecondFactor(pending, user)
+			h.failSecondFactor(c, pending, user)
 			respond.Fail(c, respond.CodeInvalidCode, "That code is wrong or has expired. Check the email, or sign in again for a new code.")
 			return
 		}
@@ -414,7 +414,7 @@ func (h *TOTPHandler) Verify(c *gin.Context) {
 		valid = serr == nil && spent
 	}
 	if err != nil || !valid {
-		h.failSecondFactor(pending, user)
+		h.failSecondFactor(c, pending, user)
 		// Same diagnosis as enrolment: a clock that jumped since the device was
 		// enrolled is the usual reason a correct-looking code stops working,
 		// and "invalid code" sends people to their backup codes for nothing.
@@ -455,7 +455,7 @@ func (h *TOTPHandler) VerifyBackupCode(c *gin.Context) {
 
 	idx := totp.VerifyBackupCode(req.Code, config.BackupCodes)
 	if idx < 0 {
-		h.failSecondFactor(pending, user)
+		h.failSecondFactor(c, pending, user)
 		respond.Fail(c, respond.CodeInvalidBackupCode, "Invalid backup code")
 		return
 	}
@@ -469,7 +469,7 @@ func (h *TOTPHandler) VerifyBackupCode(c *gin.Context) {
 		return
 	}
 	if !spent {
-		h.failSecondFactor(pending, user)
+		h.failSecondFactor(c, pending, user)
 		respond.Fail(c, respond.CodeInvalidBackupCode, "Invalid backup code")
 		return
 	}
@@ -538,7 +538,7 @@ func (h *TOTPHandler) beginSecondFactor(c *gin.Context, pendingToken string) (*m
 // the account. Each count is its own UPDATE, so concurrent guesses cannot share
 // one increment. Before, a pending token took unlimited guesses, and signing in
 // again with the password cleared the account's count.
-func (h *TOTPHandler) failSecondFactor(pending *models.TOTPPendingToken, user *models.User) {
+func (h *TOTPHandler) failSecondFactor(c *gin.Context, pending *models.TOTPPendingToken, user *models.User) {
 	ctx := context.Background()
 	if err := h.twoFactor().CountPendingAttempt(ctx, pending.ID); err != nil {
 		log.Printf("totp: counting an attempt for %s: %v", user.ID, err)
@@ -559,6 +559,14 @@ func (h *TOTPHandler) failSecondFactor(pending *models.TOTPPendingToken, user *m
 		return
 	}
 	log.Printf("lockout: %s locked until %s after %d wrong 2FA codes", user.Email, until.Format(time.RFC3339), totp.MaxFailedAttempts)
+	services.LogActivity(h.DB, c, services.ActivityArgs{
+		UserID:       user.ID,
+		Action:       "auth.account_locked",
+		Severity:     "warn",
+		Summary:      "Account locked after too many failed second-factor attempts",
+		ResourceType: "user",
+		ResourceID:   user.ID,
+	})
 }
 
 // completeSecondFactor spends the pending token, clears the failure count and

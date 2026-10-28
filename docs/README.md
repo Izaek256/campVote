@@ -16,6 +16,7 @@
 
 ## 3. Implementation Records
 
+- [`auth.md`](auth.md) — ISSUE-02 authentication, session, lockout, CSRF and first-admin bootstrap status with test evidence.
 - [`implementation/ROADMAP.md`](implementation/ROADMAP.md) — Phased milestone delivery order.
 - [`implementation/OPEN_QUESTIONS.md`](implementation/OPEN_QUESTIONS.md) — Unresolved domain and institutional questions.
 - [`implementation/SETUP_LOG.md`](implementation/SETUP_LOG.md) — Verified toolchain versions and scaffold facts.
