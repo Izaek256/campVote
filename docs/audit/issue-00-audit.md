@@ -449,3 +449,4 @@ Carried forward from `docs/implementation/OPEN_QUESTIONS.md` — no answers rece
 ---
 
 *Document generated: 2026-10-28. Branch: `chore/issue-00-implementation-audit`. See `docs/traceability.md` for the full per-requirement matrix.*
+

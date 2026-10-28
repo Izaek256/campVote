@@ -225,3 +225,4 @@
 > **Note:** "Implemented" means the requirement has code AND at least one automated test covering it.  
 > "Partial" means the model/scaffold exists but either the handler/service or the test is absent.  
 > "Missing" means there is no relevant code yet.
+
