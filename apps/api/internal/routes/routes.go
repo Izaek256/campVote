@@ -1331,6 +1331,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		// Eligibility and the voter ballot. The handler applies the
 		// server-side eligibility gate on every one of these calls; the route
 		// policy only says the caller is signed in.
+		protected.GET("/elections", electionLifecycleHandler.List)
 		protected.GET("/elections/:id/eligibility", eligibilityHandler.Mine)
 		protected.GET("/elections/:id/lifecycle", electionLifecycleHandler.Phase)
 		protected.GET("/elections/:id/ballot", ballotHandler.View)

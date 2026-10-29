@@ -56,7 +56,7 @@ Copy `.env.example` to `.env` only after checking which variables the pinned sca
 
 ## Quick start (local development)
 
-`ash
+```bash
 # 1. Install dependencies
 pnpm install
 
@@ -69,13 +69,39 @@ cp .env.example .env
 # 4. Run migrations (from apps/api)
 cd apps/api && go run ./cmd/migrate 2>/dev/null; cd ../..
 
-# 5. Start all apps
-pnpm dev
-`
+# 5. Seed demo data (optional, for development)
+cd apps/api && go run ./cmd/seed 2>/dev/null; cd ../..
 
-- Web: http://localhost:3000
+# 6. Start all apps in parallel
+pnpm dev
+```
+
+- Voter portal: http://localhost:3000
+- Admin dashboard: http://localhost:3001
 - API: http://localhost:8080
-- Admin: http://localhost:3001
+
+### Frontend-specific setup
+
+The voter portal (`apps/web`) and admin dashboard (`apps/admin`) are Next.js applications. They require:
+
+- Node.js 18+ (check `package.json` for exact version)
+- pnpm package manager (configured in `pnpm-workspace.yaml`)
+
+To run only the frontend:
+
+```bash
+# Voter portal only
+cd apps/web && pnpm dev
+
+# Admin dashboard only
+cd apps/admin && pnpm dev
+```
+
+To build for production:
+
+```bash
+pnpm build
+```
 
 ### Authentication and the first administrator
 

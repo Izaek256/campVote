@@ -1,8 +1,6 @@
 "use client";
 
-
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 
 import {
   subscribe,
@@ -44,9 +42,7 @@ export function useRealtime(handlers: Record<string, Handler>) {
     const offs = types
       .split(",")
       .filter(Boolean)
-      .map((type) =>
-        subscribe(type, (payload, event) => latest.current[type]?.(payload, event)),
-      );
+      .map((type) => subscribe(type, (payload, event) => latest.current[type]?.(payload, event)));
     return () => {
       for (const off of offs) off();
     };
@@ -114,9 +110,11 @@ export function useWhisper(channel: string | null | undefined) {
  * included. The list is empty while the connection is down and refills from the
  * server's snapshot when it is back. Pass null while the channel is not known.
  */
-export function usePresence<Info = unknown>(channel: string | null | undefined): PresenceMember<Info>[] {
+export function usePresence<Info = unknown>(
+  channel: string | null | undefined
+): PresenceMember<Info>[] {
   const [members, setMembers] = useState<PresenceMember<Info>[]>(() =>
-    channel ? presenceMembers<Info>(channel) : [],
+    channel ? presenceMembers<Info>(channel) : []
   );
 
   useEffect(() => {
@@ -142,31 +140,9 @@ export function usePresence<Info = unknown>(channel: string | null | undefined):
   return members;
 }
 
-/**
- * Keep a React Query cache in step with the server.
- *
- * Every generated resource emits <plural>.created, .updated and .deleted, so
- * a list stays fresh without polling and without each page wiring its own
- * handler. Pass the query key you used for the list.
- *
- *   useLiveResource("invoices", ["invoices"]);
- */
-export function useLiveResource(resource: string, queryKey: unknown[]) {
-  const queryClient = useQueryClient();
-  const key = JSON.stringify(queryKey);
-
-  useEffect(() => {
-    const invalidate = () => {
-      void queryClient.invalidateQueries({ queryKey: JSON.parse(key) });
-    };
-    const offs = ["created", "updated", "deleted"].map((verb) =>
-      subscribe(resource + "." + verb, invalidate),
-    );
-    return () => {
-      for (const off of offs) off();
-    };
-  }, [resource, key, queryClient]);
-}
+// useLiveResource (React Query cache sync) is omitted: the portal does not use
+// React Query, and the hook would add a dependency nobody calls. Add it with
+// @tanstack/react-query when a page needs live list invalidation.
 
 /** The connection state, for a status dot or a "reconnecting" banner. */
 export function useRealtimeStatus(): Status {

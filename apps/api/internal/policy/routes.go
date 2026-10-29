@@ -120,6 +120,9 @@ func init() {
 	adminOnly("DELETE", "/api/v1/admin/deleted-accounts/:id")
 
 	// ── Campus election access ────────────────────────────────────────────
+	// The list is any signed-in caller's index of elections; the handler hides
+	// other people's drafts.
+	authenticated("GET", "/api/v1/elections")
 	permitted("elections.create", "POST", "/api/v1/elections")
 	permitted("elections.view", "GET", "/api/v1/elections/:id")
 	permitted("elections.edit", "PUT", "/api/v1/elections/:id")
