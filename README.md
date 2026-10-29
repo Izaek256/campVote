@@ -40,83 +40,342 @@ The proposed stack is Grit Triple (public web + admin + Go API), Go/Gin/GORM, Ty
 
 Install current supported versions of Git, Docker Engine/Desktop with Compose, Go, Node.js and the package manager required by the generated scaffold, plus the Grit CLI. Record the actual versions in `docs/implementation/SETUP_LOG.md`.
 
-## Local database option
+## Setup options
 
-`compose.dev.yaml` starts only a local PostgreSQL service for early development. It is optional: if the generated Grit scaffold already provides a database service, use one setup path rather than starting two PostgreSQL instances. Change the sample credentials before use and never reuse them in production.
+You can run campVote in two ways:
+
+1. **Docker Compose (recommended)** - All services run in containers
+2. **Local development** - PostgreSQL in Docker, apps run locally
+
+Choose the setup that fits your workflow.
+
+---
+
+## Option 1: Docker Compose (All Services in Containers)
+
+This runs PostgreSQL, API, voter portal, and admin dashboard entirely in Docker containers. Two profiles are available:
+
+- **WSL setup** (`--profile wsl`): Uses your local PostgreSQL on Windows (for WSL2 Docker)
+- **Containerized setup** (`--profile container`): Runs PostgreSQL in a Docker container (for non-WSL or fully containerized)
+
+### Running on WSL (Windows Subsystem for Linux)
+
+**Important:** Docker's default bridge network in WSL2 often has no outbound internet access, causing build failures (npm, apk, go mod downloads timeout). A workaround is in place:
+
+- Build blocks use `network: host` to access the internet during builds
+- Use the provided script `./scripts/up-wsl.sh` which handles BuildKit permission requirements
+- Once Docker networking (MTU/iptables) is fixed, the `network: host` lines and script can be removed
 
 ```bash
-docker compose -f compose.dev.yaml up -d
-# To stop the database without deleting its data:
-docker compose -f compose.dev.yaml down
-# To remove the local database volume too (destructive):
-docker compose -f compose.dev.yaml down -v
+# In WSL at /mnt/d/campVote
+./scripts/up-wsl.sh
 ```
 
-Copy `.env.example` to `.env` only after checking which variables the pinned scaffold actually expects. `.env` must remain untracked. Never use real voter rosters, live election data, or production secrets for local development.
+The script tries:
+1. Standard `docker compose` build (may work if entitlement already granted)
+2. Falls back to `docker buildx bake --allow=network.host` if standard build fails
+3. Prints which path was used
 
-## Quick start (local development)
+**Note:** The script does not modify your system (daemon.json, iptables, wsl.conf). The `network: host` is only for build time; running containers use the normal `campvote` bridge network.
+
+### Prerequisites
+
+- Docker Engine and Docker Compose installed
+- Git
+- For WSL setup: PostgreSQL running on Windows at localhost:5432
+
+### Step-by-step setup (choose your profile)
+
+#### For WSL (local PostgreSQL on Windows):
 
 ```bash
-# 1. Install dependencies
+# 1. Clone the repository
+git clone https://github.com/Izaek256/campVote.git
+cd campVote
+
+# 2. Set up environment variables
+cp .env.example .env
+# Edit .env to set secure passwords
+# POSTGRES_PASSWORD must match your Windows PostgreSQL password
+# Example:
+# POSTGRES_PASSWORD=your-windows-pg-password
+# SESSION_SECRET=dev-session-secret-change-in-production
+# JWT_SECRET=dev-jwt-secret-change-in-production
+
+# 3. Build and start services with WSL profile
+docker compose --profile wsl up -d --build
+
+# 4. Check service status
+docker compose ps
+# All services should show "running"
+```
+
+#### For containerized (PostgreSQL in Docker):
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Izaek256/campVote.git
+cd campVote
+
+# 2. Set up environment variables
+cp .env.example .env
+# Edit .env to set secure passwords
+# Example:
+# POSTGRES_PASSWORD=campvote_dev_password
+# SESSION_SECRET=dev-session-secret-change-in-production
+# JWT_SECRET=dev-jwt-secret-change-in-production
+
+# 3. Build and start services with container profile
+docker compose --profile container up -d --build
+
+# 4. Check service status
+docker compose ps
+# All services should show "running" (postgres should be "healthy")
+```
+
+### One-time database setup (first run only)
+
+Run these commands from inside the API container:
+
+**For WSL setup:**
+```bash
+# Run database migrations
+docker compose --profile wsl exec api go run ./cmd/migrate
+
+# (Optional) Seed demo data for development
+docker compose --profile wsl exec api go run ./cmd/seed
+
+# Create the first administrator account
+docker compose --profile wsl exec -e BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
+  -e BOOTSTRAP_ADMIN_PASSWORD='your-secure-password-here' \
+  -e BOOTSTRAP_ADMIN_FIRST_NAME=Admin \
+  -e BOOTSTRAP_ADMIN_LAST_NAME=User \
+  api go run ./cmd/bootstrap
+```
+
+**For containerized setup:**
+```bash
+# Run database migrations
+docker compose --profile container exec api-container go run ./cmd/migrate
+
+# (Optional) Seed demo data for development
+docker compose --profile container exec api-container go run ./cmd/seed
+
+# Create the first administrator account
+docker compose --profile container exec -e BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
+  -e BOOTSTRAP_ADMIN_PASSWORD='your-secure-password-here' \
+  -e BOOTSTRAP_ADMIN_FIRST_NAME=Admin \
+  -e BOOTSTRAP_ADMIN_LAST_NAME=User \
+  api-container go run ./cmd/bootstrap
+```
+
+**Important:** The bootstrap command only works once. After an admin exists, you cannot run it again. Use the admin dashboard to create additional staff accounts.
+
+### Access the applications
+
+- **Voter portal & Admin dashboard**: http://localhost:3000
+  - Voter pages: `/`, `/elections`, `/elections/[id]/ballot`, `/elections/[id]/results`
+  - Admin pages: `/staff`, `/staff/elections/[id]`
+- **API**: http://localhost:8080
+
+### Demo accounts
+
+When `APP_ENV=development`, the following demo accounts are created:
+
+- **Student voter**: `ivan.mugisha@std.must.ac.ug` / `admin123`
+- **Staff admin**: `admin@must.ac.ug` (use the password you set during bootstrap)
+
+**Warning:** Demo accounts and data are for local development only. Never use them in production.
+
+### Stopping Docker Compose
+
+```bash
+# Stop WSL setup (preserves local database data)
+docker compose --profile wsl down
+
+# Stop containerized setup (preserves database data)
+docker compose --profile container down
+
+# Stop containerized setup and remove database data (destructive - all data lost)
+docker compose --profile container down -v
+
+# View logs
+docker compose --profile wsl logs -f [service-name]
+# Example: docker compose --profile wsl logs -f api
+```
+
+### Troubleshooting Docker setup
+
+```bash
+# Check if containers are running
+docker compose ps
+
+# Check which profile is active
+docker compose config
+
+# Restart a specific service (WSL)
+docker compose --profile wsl restart api
+
+# Rebuild a service after code changes (WSL)
+docker compose --profile wsl up -d --build api
+
+# View real-time logs for a service (containerized)
+docker compose --profile container logs -f web
+
+# Remove all containers and volumes (complete reset)
+docker compose --profile container down -v
+docker system prune -f
+```
+
+---
+
+## Option 2: Local Development (PostgreSQL in Docker, Apps Local)
+
+This runs PostgreSQL in Docker but runs the Go API and Next.js apps locally on your machine. This is the standard setup for active development.
+
+### Prerequisites
+
+- Docker Engine and Docker Compose (for PostgreSQL only)
+- Go 1.23+
+- Node.js 20+
+- pnpm package manager
+- Git
+
+### Step-by-step setup
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Izaek256/campVote.git
+cd campVote
+
+# 2. Install pnpm (if not already installed)
+npm install -g pnpm@10.33.4
+
+# 3. Install all workspace dependencies
 pnpm install
 
-# 2. Start local PostgreSQL
+# 4. Start PostgreSQL in Docker
 docker compose -f compose.dev.yaml up -d
 
-# 3. Copy env template and fill local values
+# 5. Set up environment variables
 cp .env.example .env
+# Edit .env to set secure passwords
+# Minimum required changes:
+# POSTGRES_PASSWORD=your-local-password
+# DATABASE_URL=postgres://campvote_dev:your-local-password@localhost:5432/campvote_dev?sslmode=disable
+# SESSION_SECRET=dev-session-secret-change-in-production
+# JWT_SECRET=dev-jwt-secret-change-in-production
 
-# 4. Run migrations (from apps/api)
-cd apps/api && go run ./cmd/migrate 2>/dev/null; cd ../..
+# 6. Run database migrations
+cd apps/api
+go run ./cmd/migrate
+cd ../..
 
-# 5. Seed demo data (optional, for development)
-cd apps/api && go run ./cmd/seed 2>/dev/null; cd ../..
+# 7. (Optional) Seed demo data
+cd apps/api
+go run ./cmd/seed
+cd ../..
 
-# 6. Start all apps in parallel
+# 8. Create the first administrator
+cd apps/api
+BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
+BOOTSTRAP_ADMIN_PASSWORD='your-secure-password-here' \
+BOOTSTRAP_ADMIN_FIRST_NAME=Admin \
+BOOTSTRAP_ADMIN_LAST_NAME=User \
+go run ./cmd/bootstrap
+cd ../..
+
+# 9. Start all applications in parallel
 pnpm dev
 ```
 
-- Voter portal: http://localhost:3000
-- Admin dashboard: http://localhost:3001
-- API: http://localhost:8080
+### Access the applications
 
-### Frontend-specific setup
+- **Voter portal & Admin dashboard**: http://localhost:3000
+  - Voter pages: `/`, `/elections`, `/elections/[id]/ballot`, `/elections/[id]/results`
+  - Admin pages: `/staff`, `/staff/elections/[id]`
+- **API**: http://localhost:8080
 
-The voter portal (`apps/web`) and admin dashboard (`apps/admin`) are Next.js applications. They require:
-
-- Node.js 18+ (check `package.json` for exact version)
-- pnpm package manager (configured in `pnpm-workspace.yaml`)
-
-To run only the frontend:
+### Running individual services
 
 ```bash
-# Voter portal only
-cd apps/web && pnpm dev
+# Start only the API
+pnpm dev:api
 
-# Admin dashboard only
-cd apps/admin && pnpm dev
+# Start only the voter portal
+pnpm dev:web
+
+# Start only the admin dashboard
+pnpm dev:admin
 ```
+
+### Stopping local development
+
+```bash
+# Stop the running apps (Ctrl+C in the terminal where pnpm dev is running)
+
+# Stop PostgreSQL (preserves data)
+docker compose -f compose.dev.yaml down
+
+# Stop PostgreSQL and remove data (destructive)
+docker compose -f compose.dev.yaml down -v
+```
+
+### Demo accounts
+
+Same as Docker setup:
+- **Student voter**: `ivan.mugisha@std.must.ac.ug` / `admin123`
+- **Staff admin**: `admin@must.ac.ug` (use your bootstrap password)
+
+---
+
+## Common tasks (both setups)
+
+### Frontend-specific notes
+
+The voter portal (`apps/web`) and admin dashboard (`apps/admin`) are Next.js applications:
+
+- Node.js 20+ (check `package.json` for exact version)
+- pnpm package manager (configured in `pnpm-workspace.yaml`)
 
 To build for production:
 
 ```bash
+# Build all packages
 pnpm build
+
+# Build specific package
+cd apps/web && pnpm build
+cd apps/admin && pnpm build
 ```
 
-### Authentication and the first administrator
+### Authentication and first administrator
 
-No administrator is seeded and there is no default admin password. On a fresh database, run migrations first, then create the first administrator once:
+No administrator is seeded by default. The bootstrap command:
 
-```bash
-cd apps/api
-BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
-BOOTSTRAP_ADMIN_PASSWORD='a-long-unique-password' \
-go run ./cmd/bootstrap
-```
+- Only works on a fresh database
+- Requires a 12+ character password
+- Refuses to run once any administrator exists
+- Should be run once, then the `BOOTSTRAP_ADMIN_*` variables removed
 
-The command refuses to run once any administrator exists and requires a 12+ character password. Remove the `BOOTSTRAP_ADMIN_*` variables afterwards. Details, cookie flags, lockout thresholds and test evidence are in [`docs/auth.md`](docs/auth.md).
+After bootstrap, use the admin dashboard to create additional staff accounts. See [`docs/auth.md`](docs/auth.md) for details on cookie flags, lockout thresholds, and authentication hardening.
 
-Demo student accounts (`admin123`) and demo elections are created only when `APP_ENV=development`. They are synthetic local fixtures — never reuse them, or any demo data, in production.
+### Environment variables
+
+Key variables in `.env`:
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `APP_ENV` | Yes | Set to `development` for demo data |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SESSION_SECRET` | Yes | Cookie signing secret |
+| `JWT_SECRET` | Yes | JWT token signing secret |
+| `POSTGRES_PASSWORD` | Yes | Database password (Docker setup) |
+| `REQUIRE_EMAIL_VERIFICATION` | No | Default `false` for local dev |
+| `LOGIN_MAX_ATTEMPTS` | No | Default `10` (set `0` to disable) |
+| `PASSWORD_BREACH_CHECK` | No | Default `false` |
+
+See `.env.example` for all available variables and explanations.
 
 ### Common commands
 
