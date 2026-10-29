@@ -73,7 +73,7 @@ export function PasskeysCard() {
           encodeURIComponent(begin.data.session_id) +
           "&name=" +
           encodeURIComponent(guessDeviceName()),
-        encodeAttestation(cred),
+        encodeAttestation(cred)
       );
       await qc.invalidateQueries({ queryKey: ["passkeys"] });
       toast.success("Passkey added");
@@ -100,8 +100,8 @@ export function PasskeysCard() {
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-foreground">Passkeys</h2>
             <p className="mt-1 text-sm leading-relaxed text-text-muted">
-              Sign in with your fingerprint, face or device PIN. Nothing to remember, and
-              nothing a phishing page can collect.
+              Sign in with your fingerprint, face or device PIN. Nothing to remember, and nothing a
+              phishing page can collect.
             </p>
           </div>
         </div>

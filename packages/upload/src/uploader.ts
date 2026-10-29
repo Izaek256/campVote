@@ -61,9 +61,7 @@ export function createUploader({ transport, optimize, profiles }: UploaderOption
   async function getProfiles(): Promise<MediaProfile[]> {
     if (cache) return cache;
     try {
-      const res = await transport.get<{ data: { profiles: MediaProfile[] } }>(
-        "/media/profiles",
-      );
+      const res = await transport.get<{ data: { profiles: MediaProfile[] } }>("/media/profiles");
       cache = res.data.profiles?.length ? res.data.profiles : [DEFAULT_PROFILE];
     } catch {
       cache = [DEFAULT_PROFILE];
@@ -91,7 +89,7 @@ export function createUploader({ transport, optimize, profiles }: UploaderOption
     rendition: Rendition,
     filename: string,
     accepts: string[] | undefined,
-    onProgress?: (f: number) => void,
+    onProgress?: (f: number) => void
   ): Promise<{ key: string; url: string } | null> {
     const presign = await transport.post<{
       data: { presigned_url: string; key: string; public_url: string; method?: string };
@@ -106,12 +104,7 @@ export function createUploader({ transport, optimize, profiles }: UploaderOption
     });
     if (presign.data.method === "multipart") return null;
 
-    await transport.put(
-      presign.data.presigned_url,
-      rendition.blob,
-      rendition.mime,
-      onProgress,
-    );
+    await transport.put(presign.data.presigned_url, rendition.blob, rendition.mime, onProgress);
 
     return { key: presign.data.key, url: presign.data.public_url };
   }
@@ -125,11 +118,11 @@ export function createUploader({ transport, optimize, profiles }: UploaderOption
     file: Blob,
     filename: string,
     options: UploadOptions,
-    profile: MediaProfile,
+    profile: MediaProfile
   ): Promise<FileRef> {
     if (!transport.postForm) {
       throw new Error(
-        "This API's storage takes uploads through the API (STORAGE_DRIVER=local), and the upload transport has no postForm",
+        "This API's storage takes uploads through the API (STORAGE_DRIVER=local), and the upload transport has no postForm"
       );
     }
     const form = new FormData();
@@ -140,7 +133,7 @@ export function createUploader({ transport, optimize, profiles }: UploaderOption
     const res = await transport.postForm<{ data: FileRef }>(
       "/uploads?" + query.toString(),
       form,
-      options.onProgress,
+      options.onProgress
     );
     options.onProgress?.(1);
     return { ...res.data, profile: profile.name };
@@ -155,7 +148,7 @@ export function createUploader({ transport, optimize, profiles }: UploaderOption
   async function upload(
     file: Blob,
     filename: string,
-    options: UploadOptions = {},
+    options: UploadOptions = {}
   ): Promise<FileRef> {
     const profile = await profileFor(options.profile);
     if (throughAPI) return uploadThroughAPI(file, filename, options, profile);

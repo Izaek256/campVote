@@ -1,0 +1,109 @@
+:root {
+  --font-ui: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  --r: 0px;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --sunken: #f3f6f4;
+  --ink: #0a0f0c;
+  --ink-2: #38423d;
+  --ink-3: #5b6761;
+  --line: #d3d9d6;
+  --line-strong: #0a0f0c;
+  --primary: #12783f;
+  --primary-hover: #0d5f32;
+  --on-primary: #ffffff;
+  --danger: #b42424;
+  --danger-hover: #8f1b1b;
+  --on-danger: #ffffff;
+  --focus: #1b9455;
+  --disabled-bg: #eef1ef;
+  --disabled-ink: #7a8680;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #070a08;
+    --surface: #0d1310;
+    --sunken: #131b17;
+    --ink: #f2f7f4;
+    --ink-2: #b7c3bc;
+    --ink-3: #8d9b94;
+    --line: #25302a;
+    --line-strong: #f2f7f4;
+    --primary: #3fae72;
+    --primary-hover: #5cc48a;
+    --on-primary: #04120a;
+    --danger: #f06a6a;
+    --danger-hover: #f58a8a;
+    --on-danger: #1a0505;
+    --focus: #7cc79a;
+    --disabled-bg: #18201c;
+    --disabled-ink: #6c7a73;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #070a08;
+  --surface: #0d1310;
+  --sunken: #131b17;
+  --ink: #f2f7f4;
+  --ink-2: #b7c3bc;
+  --ink-3: #8d9b94;
+  --line: #25302a;
+  --line-strong: #f2f7f4;
+  --primary: #3fae72;
+  --primary-hover: #5cc48a;
+  --on-primary: #04120a;
+  --danger: #f06a6a;
+  --danger-hover: #f58a8a;
+  --on-danger: #1a0505;
+  --focus: #7cc79a;
+  --disabled-bg: #18201c;
+  --disabled-ink: #6c7a73;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+figure,
+dl,
+dd {
+  margin: 0;
+}
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: var(--primary);
+  text-underline-offset: 3px;
+}
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}

@@ -75,7 +75,9 @@ export function SignInLinksCard() {
                   className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm"
                 >
                   <span className="text-foreground">{when(row.created_at)}</span>
-                  <span className="text-text-secondary">from {row.ip_address || "an unknown address"}</span>
+                  <span className="text-text-secondary">
+                    from {row.ip_address || "an unknown address"}
+                  </span>
                   <span className="text-text-muted">&middot; {outcome(row)}</span>
                 </li>
               ))}

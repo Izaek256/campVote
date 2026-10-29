@@ -39,7 +39,8 @@ export default function DeletedAccountsPage() {
 
   const { data, isPending } = useQuery<{ data: DeletedUser[] }>({
     queryKey: ["admin", "deleted-accounts"],
-    queryFn: async () => (await apiClient.get<{ data: DeletedUser[] }>("/api/admin/deleted-accounts")).data,
+    queryFn: async () =>
+      (await apiClient.get<{ data: DeletedUser[] }>("/api/admin/deleted-accounts")).data,
   });
 
   function refresh() {
@@ -49,7 +50,8 @@ export default function DeletedAccountsPage() {
   }
 
   const restore = useMutation({
-    mutationFn: (user: DeletedUser) => apiClient.post("/api/admin/deleted-accounts/" + user.id + "/restore"),
+    mutationFn: (user: DeletedUser) =>
+      apiClient.post("/api/admin/deleted-accounts/" + user.id + "/restore"),
     onSuccess: refresh,
     onError: (e) => setError(getApiErrorMessage(e, "Could not restore that account")),
   });
@@ -70,7 +72,10 @@ export default function DeletedAccountsPage() {
       />
 
       {error && (
-        <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+        <div
+          role="alert"
+          className="mb-4 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger"
+        >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>
@@ -133,9 +138,9 @@ export default function DeletedAccountsPage() {
       </div>
 
       <p className="mt-4 text-xs leading-relaxed text-text-muted">
-        Restoring an account lets it sign in again with the password it had. Deleting it for good removes
-        the row and nothing else: erasing what a person left behind across every table is a different
-        operation, with different law attached to it, and it lives on the GDPR page.
+        Restoring an account lets it sign in again with the password it had. Deleting it for good
+        removes the row and nothing else: erasing what a person left behind across every table is a
+        different operation, with different law attached to it, and it lives on the GDPR page.
       </p>
 
       <ConfirmModal

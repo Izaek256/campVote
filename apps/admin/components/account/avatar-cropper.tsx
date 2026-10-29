@@ -46,7 +46,13 @@ type Drag =
   | { kind: "move"; pointerX: number; pointerY: number; startX: number; startY: number }
   | { kind: "resize"; corner: Corner; anchorX: number; anchorY: number };
 
-export function AvatarCropper({ file, onCancel, onCropped, size = 512, saving = false }: AvatarCropperProps) {
+export function AvatarCropper({
+  file,
+  onCancel,
+  onCropped,
+  size = 512,
+  saving = false,
+}: AvatarCropperProps) {
   const [url, setUrl] = useState("");
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [error, setError] = useState("");
@@ -107,13 +113,19 @@ export function AvatarCropper({ file, onCancel, onCropped, size = 512, saving = 
         y: Math.max(0, Math.min(shown.h - edge, next.y)),
       };
     },
-    [shown.w, shown.h],
+    [shown.w, shown.h]
   );
 
   function onMoveStart(event: React.PointerEvent<HTMLDivElement>) {
     if (!image) return;
     event.preventDefault();
-    drag.current = { kind: "move", pointerX: event.clientX, pointerY: event.clientY, startX: sel.x, startY: sel.y };
+    drag.current = {
+      kind: "move",
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      startX: sel.x,
+      startY: sel.y,
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
@@ -141,7 +153,7 @@ export function AvatarCropper({ file, onCancel, onCropped, size = 512, saving = 
           x: current.startX + (event.clientX - current.pointerX),
           y: current.startY + (event.clientY - current.pointerY),
           size: sel.size,
-        }),
+        })
       );
       return;
     }
@@ -181,11 +193,15 @@ export function AvatarCropper({ file, onCancel, onCropped, size = 512, saving = 
     if (event.key === "+" || event.key === "=") {
       event.preventDefault();
       // Grown from the middle, so the part somebody framed stays framed.
-      setSel((current) => clamp({ x: current.x - NUDGE / 2, y: current.y - NUDGE / 2, size: current.size + NUDGE }));
+      setSel((current) =>
+        clamp({ x: current.x - NUDGE / 2, y: current.y - NUDGE / 2, size: current.size + NUDGE })
+      );
     }
     if (event.key === "-" || event.key === "_") {
       event.preventDefault();
-      setSel((current) => clamp({ x: current.x + NUDGE / 2, y: current.y + NUDGE / 2, size: current.size - NUDGE }));
+      setSel((current) =>
+        clamp({ x: current.x + NUDGE / 2, y: current.y + NUDGE / 2, size: current.size - NUDGE })
+      );
     }
   }
 
@@ -241,8 +257,18 @@ export function AvatarCropper({ file, onCancel, onCropped, size = 512, saving = 
   const handles: Array<{ corner: Corner; className: string; cursor: string; label: string }> = [
     { corner: "nw", className: "-left-1.5 -top-1.5", cursor: "nwse-resize", label: "top left" },
     { corner: "ne", className: "-right-1.5 -top-1.5", cursor: "nesw-resize", label: "top right" },
-    { corner: "sw", className: "-bottom-1.5 -left-1.5", cursor: "nesw-resize", label: "bottom left" },
-    { corner: "se", className: "-bottom-1.5 -right-1.5", cursor: "nwse-resize", label: "bottom right" },
+    {
+      corner: "sw",
+      className: "-bottom-1.5 -left-1.5",
+      cursor: "nesw-resize",
+      label: "bottom left",
+    },
+    {
+      corner: "se",
+      className: "-bottom-1.5 -right-1.5",
+      cursor: "nwse-resize",
+      label: "bottom right",
+    },
   ];
 
   return (
@@ -276,7 +302,10 @@ export function AvatarCropper({ file, onCancel, onCropped, size = 512, saving = 
 
         <div className="p-5">
           {error ? (
-            <p role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+            <p
+              role="alert"
+              className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger"
+            >
               {error}
             </p>
           ) : (
@@ -343,7 +372,12 @@ export function AvatarCropper({ file, onCancel, onCropped, size = 512, saving = 
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
-          <button type="button" onClick={onCancel} disabled={saving} className={buttonClasses({ variant: "outline", size: "sm" })}>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className={buttonClasses({ variant: "outline", size: "sm" })}
+          >
             Cancel
           </button>
           <button

@@ -123,8 +123,8 @@ export function RecoveryContactCard({
         ) : pending ? (
           <div className="space-y-3">
             <p className="text-sm text-text-secondary">
-              We sent a six-digit code to <span className="font-mono">{pending}</span>. It
-              expires in 15 minutes.
+              We sent a six-digit code to <span className="font-mono">{pending}</span>. It expires
+              in 15 minutes.
             </p>
             <div className="flex gap-2">
               <Input

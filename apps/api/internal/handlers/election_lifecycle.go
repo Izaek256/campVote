@@ -137,6 +137,33 @@ func (h *ElectionLifecycleHandler) Create(c *gin.Context) {
 	respond.Created(c, h.view(election, now), "Election created")
 }
 
+// List returns the elections a signed-in caller may see. A draft is visible
+// only to its creator; every other state is visible to any signed-in caller so
+// the voter portal can show what is scheduled, open or closed.
+func (h *ElectionLifecycleHandler) List(c *gin.Context) {
+	actor := policy.ActorFrom(c)
+	query := h.DB.Order("starts_at DESC").Limit(100)
+	if !actor.Admin {
+		query = query.Where("status <> ? OR created_by_id = ?",
+			models.ElectionStatusDraft, actor.UserID)
+	}
+	var elections []models.Election
+	if err := query.Find(&elections).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	now := h.now()
+	out := make([]electionView, 0, len(elections))
+	for i := range elections {
+		if err := lifecycle.Ensure(h.DB, &elections[i], now); err != nil {
+			respond.Internal(c, err)
+			return
+		}
+		out = append(out, h.view(&elections[i], now))
+	}
+	respond.OK(c, out)
+}
+
 // Get returns one election and its display-only phase.
 func (h *ElectionLifecycleHandler) Get(c *gin.Context) {
 	authority, ok := h.authority(c, policy.PermElectionView)

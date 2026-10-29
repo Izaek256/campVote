@@ -22,7 +22,13 @@ import { SignInLinksCard } from "@/components/account/sign-in-links";
 import { uploadFile } from "@/lib/api-client";
 import { buttonClasses } from "@/components/ui/button";
 import {
-  User as UserIcon, Briefcase, Trash2, Save, Loader2, Upload, ShieldCheck,
+  User as UserIcon,
+  Briefcase,
+  Trash2,
+  Save,
+  Loader2,
+  Upload,
+  ShieldCheck,
 } from "@/lib/icons";
 
 const inputClass =
@@ -74,7 +80,9 @@ export default function AccountPage() {
   // the one condition the server attaches the password requirement to.
   const watchedEmail = personalForm.watch("email");
   const emailChanged =
-    Boolean(user?.email) && Boolean(watchedEmail) && watchedEmail.trim().toLowerCase() !== user!.email.toLowerCase();
+    Boolean(user?.email) &&
+    Boolean(watchedEmail) &&
+    watchedEmail.trim().toLowerCase() !== user!.email.toLowerCase();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: form.reset is stable; the forms refill when the user loads.
   useEffect(() => {
@@ -128,13 +136,17 @@ export default function AccountPage() {
 
   if (!user) return null;
 
-  const initials = ((user.first_name?.[0] || "") + (user.last_name?.[0] || "")).toUpperCase() || "U";
+  const initials =
+    ((user.first_name?.[0] || "") + (user.last_name?.[0] || "")).toUpperCase() || "U";
   const isAdmin = user?.role === "ADMIN";
   const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ");
 
   return (
     <div>
-      <PageHeader title="Account" subtitle="Your details, how you sign in, and where you are signed in." />
+      <PageHeader
+        title="Account"
+        subtitle="Your details, how you sign in, and where you are signed in."
+      />
 
       {/* Hero card — Profile Picture section with explicit header so the
           user knows what the Upload New button replaces. Layout: gradient
@@ -152,7 +164,11 @@ export default function AccountPage() {
           <div className="relative">
             <span className="block h-24 w-24 overflow-hidden rounded-2xl ring-4 ring-bg-elevated bg-bg-secondary">
               {user.avatar ? (
-                <img src={user.avatar} alt={fullName || "Avatar"} className="h-full w-full object-cover" />
+                <img
+                  src={user.avatar}
+                  alt={fullName || "Avatar"}
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 <span className="flex h-full w-full items-center justify-center text-2xl font-bold text-foreground">
                   {initials}
@@ -168,14 +184,24 @@ export default function AccountPage() {
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
             <button
               type="button"
               onClick={() => avatarInputRef.current?.click()}
               disabled={avatarUploading}
               className={buttonClasses({ className: "shadow-sm" })}
             >
-              {avatarUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {avatarUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
               Upload new
             </button>
             {avatarError && (
@@ -243,13 +269,19 @@ export default function AccountPage() {
                 className={inputClass}
               />
               <p className="mt-1.5 text-xs text-text-muted">
-                Changing your email needs your password, because that address is where a
-                password reset is sent.
+                Changing your email needs your password, because that address is where a password
+                reset is sent.
               </p>
             </Field>
           )}
           {updateProfile.isError && (
-            <p className="text-sm text-danger">{(updateProfile.error as { response?: { data?: { error?: { message?: string } } } } | null)?.response?.data?.error?.message ?? "That did not save. Try again."}</p>
+            <p className="text-sm text-danger">
+              {(
+                updateProfile.error as {
+                  response?: { data?: { error?: { message?: string } } };
+                } | null
+              )?.response?.data?.error?.message ?? "That did not save. Try again."}
+            </p>
           )}
           <div className="flex justify-end">
             <SubmitButton pending={updateProfile.isPending}>
@@ -374,7 +406,11 @@ export default function AccountPage() {
 }
 
 function ProfileCard({
-  icon, title, description, message, children,
+  icon,
+  title,
+  description,
+  message,
+  children,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -405,10 +441,20 @@ function ProfileCard({
   );
 }
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-text-muted">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-text-muted">
+        {label}
+      </span>
       {children}
       {error && <p className="mt-1 text-xs text-danger">{error}</p>}
     </label>
@@ -417,11 +463,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 
 function SubmitButton({ pending, children }: { pending: boolean; children: React.ReactNode }) {
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className={buttonClasses()}
-    >
+    <button type="submit" disabled={pending} className={buttonClasses()}>
       {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : children}
     </button>
   );

@@ -65,7 +65,9 @@
         // Listbox options take focus through aria-activedescendant, not tabIndex.
         "useFocusableInteractive": "off",
         // A combobox's list is a ul with role="listbox", as the ARIA pattern describes.
-        "noNoninteractiveElementToInteractiveRole": "off"
+        "noNoninteractiveElementToInteractiveRole": "off",
+        // The avatar cropper uses tabIndex on a div for keyboard navigation.
+        "noNoninteractiveTabindex": "off"
       },
       "suspicious": {
         // Skeleton rows and fixed-length lists that never reorder are keyed by position.
@@ -97,7 +99,9 @@
         // Used after checks TypeScript cannot follow.
         "noNonNullAssertion": "off",
         // Math.pow is what the templates use, and it reads the same.
-        "useExponentiationOperator": "off"
+        "useExponentiationOperator": "off",
+        // CSS specificity warnings are acceptable for this codebase
+        "noDescendingSpecificity": "off"
       }
     }
   }

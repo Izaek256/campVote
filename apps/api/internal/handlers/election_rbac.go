@@ -152,6 +152,12 @@ func (h *ElectionRBACHandler) RemoveRole(c *gin.Context) {
 	respond.OK(c, gin.H{"removed": true})
 }
 
+type tallyView struct {
+	models.ElectionTally
+	CandidateName string `json:"candidate_name,omitempty"`
+	PositionTitle string `json:"position_title,omitempty"`
+}
+
 // Results returns aggregate tallies only when the actor may see them and the
 // election's publication policy allows it. There is no voter identity in
 // ElectionTally, by design.
@@ -175,6 +181,36 @@ func (h *ElectionRBACHandler) Results(c *gin.Context) {
 		respond.Internal(c, err)
 		return
 	}
+	// Names are display metadata, not part of the tally: attach them so the
+	// results screen does not have to guess from a UUID.
+	var candidates []models.Candidate
+	if err := h.DB.Where("election_id = ?", authority.Election.ID).
+		Find(&candidates).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	var positions []models.Position
+	if err := h.DB.Where("election_id = ?", authority.Election.ID).
+		Find(&positions).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	candidateNames := make(map[string]string, len(candidates))
+	for _, candidate := range candidates {
+		candidateNames[candidate.ID] = candidate.FullName
+	}
+	positionTitles := make(map[string]string, len(positions))
+	for _, position := range positions {
+		positionTitles[position.ID] = position.Title
+	}
+	out := make([]tallyView, 0, len(tallies))
+	for _, tally := range tallies {
+		view := tallyView{ElectionTally: tally, PositionTitle: positionTitles[tally.PositionID]}
+		if tally.CandidateID != nil {
+			view.CandidateName = candidateNames[*tally.CandidateID]
+		}
+		out = append(out, view)
+	}
 	label := "PROVISIONAL"
 	if authority.Election.Status == models.ElectionStatusFinalized ||
 		authority.Election.Status == models.ElectionStatusArchived {
@@ -184,7 +220,7 @@ func (h *ElectionRBACHandler) Results(c *gin.Context) {
 		"election_id": authority.Election.ID,
 		"status":      authority.Election.Status,
 		"label":       label,
-		"tallies":     tallies,
+		"tallies":     out,
 	})
 }
 

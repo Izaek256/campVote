@@ -44,7 +44,7 @@ export async function canEncodeWebP(): Promise<boolean> {
     canvas.width = 1;
     canvas.height = 1;
     const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/webp", 0.8),
+      canvas.toBlob(resolve, "image/webp", 0.8)
     );
     webpSupport = blob?.type === "image/webp";
   } catch {
@@ -100,7 +100,12 @@ function target(srcW: number, srcH: number, box: RenditionSize) {
  * down the lossless path, where it is many times larger. A JPEG source skips
  * the scan entirely, since the format has no alpha channel.
  */
-function hasAlpha(ctx: CanvasRenderingContext2D, w: number, h: number, sourceType: string): boolean {
+function hasAlpha(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  sourceType: string
+): boolean {
   if (sourceType === "image/jpeg") return false;
   const { data } = ctx.getImageData(0, 0, w, h);
   for (let i = 3; i < data.length; i += 4) {
@@ -112,19 +117,17 @@ function hasAlpha(ctx: CanvasRenderingContext2D, w: number, h: number, sourceTyp
 async function encode(
   canvas: HTMLCanvasElement,
   format: string,
-  quality: number,
+  quality: number
 ): Promise<{ blob: Blob; format: string }> {
   const want = MIME[format] ?? "image/jpeg";
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, want, quality),
-  );
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, want, quality));
   if (!blob) throw new Error("canvas produced no image");
   // toBlob falls back to PNG rather than failing on an unsupported type, so
   // trust what came back rather than what was asked for.
   const got = blob.type || want;
   if (got !== want && got === "image/png" && want !== "image/png") {
     const jpeg = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", quality),
+      canvas.toBlob(resolve, "image/jpeg", quality)
     );
     if (jpeg) return { blob: jpeg, format: "jpeg" };
   }
@@ -136,7 +139,7 @@ async function render(
   box: RenditionSize,
   profile: MediaProfile,
   sourceType: string,
-  name: string,
+  name: string
 ): Promise<Rendition> {
   const { w: srcW, h: srcH } = sizeOf(src);
   const { w, h } = target(srcW, srcH, box);
@@ -182,17 +185,19 @@ async function render(
 }
 
 /** Optimise an image in the browser. */
-export async function optimizeImage(
-  file: Blob,
-  profile: MediaProfile,
-): Promise<OptimizedImage> {
+export async function optimizeImage(file: Blob, profile: MediaProfile): Promise<OptimizedImage> {
   const src = await decode(file);
   const { w: srcW, h: srcH } = sizeOf(src);
 
   if (profile.max_pixels > 0 && srcW * srcH > profile.max_pixels) {
     throw new Error(
-      "That image is " + srcW + "x" + srcH + ", larger than this app accepts (" +
-        Math.round(profile.max_pixels / 1000000) + " megapixels).",
+      "That image is " +
+        srcW +
+        "x" +
+        srcH +
+        ", larger than this app accepts (" +
+        Math.round(profile.max_pixels / 1000000) +
+        " megapixels)."
     );
   }
 
@@ -201,7 +206,7 @@ export async function optimizeImage(
     { width: profile.max_width, height: profile.max_height, crop: profile.crop },
     profile,
     file.type,
-    "primary",
+    "primary"
   );
 
   const extra: Rendition[] = [];

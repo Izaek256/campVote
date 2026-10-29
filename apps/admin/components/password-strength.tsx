@@ -71,7 +71,11 @@ export function PasswordStrength({
                 className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
                 style={
                   ok
-                    ? { borderColor: "#00b894", background: "rgba(0, 184, 148, 0.15)", color: "#00b894" }
+                    ? {
+                        borderColor: "#00b894",
+                        background: "rgba(0, 184, 148, 0.15)",
+                        color: "#00b894",
+                      }
                     : { borderColor: "currentColor", opacity: 0.3, color: "transparent" }
                 }
               >

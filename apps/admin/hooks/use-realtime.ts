@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -44,9 +43,7 @@ export function useRealtime(handlers: Record<string, Handler>) {
     const offs = types
       .split(",")
       .filter(Boolean)
-      .map((type) =>
-        subscribe(type, (payload, event) => latest.current[type]?.(payload, event)),
-      );
+      .map((type) => subscribe(type, (payload, event) => latest.current[type]?.(payload, event)));
     return () => {
       for (const off of offs) off();
     };
@@ -114,9 +111,11 @@ export function useWhisper(channel: string | null | undefined) {
  * included. The list is empty while the connection is down and refills from the
  * server's snapshot when it is back. Pass null while the channel is not known.
  */
-export function usePresence<Info = unknown>(channel: string | null | undefined): PresenceMember<Info>[] {
+export function usePresence<Info = unknown>(
+  channel: string | null | undefined
+): PresenceMember<Info>[] {
   const [members, setMembers] = useState<PresenceMember<Info>[]>(() =>
-    channel ? presenceMembers<Info>(channel) : [],
+    channel ? presenceMembers<Info>(channel) : []
   );
 
   useEffect(() => {
@@ -160,7 +159,7 @@ export function useLiveResource(resource: string, queryKey: unknown[]) {
       void queryClient.invalidateQueries({ queryKey: JSON.parse(key) });
     };
     const offs = ["created", "updated", "deleted"].map((verb) =>
-      subscribe(resource + "." + verb, invalidate),
+      subscribe(resource + "." + verb, invalidate)
     );
     return () => {
       for (const off of offs) off();

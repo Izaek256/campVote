@@ -16,8 +16,8 @@ export type RealtimeEvent = { type: string; channel?: string; payload: unknown }
 export type Handler = (payload: any, event: RealtimeEvent) => void;
 export type Status = "connecting" | "open" | "closed";
 
-const WS_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080")
-  .replace(/^http/, "ws") + "/api/ws";
+const WS_URL =
+  (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").replace(/^http/, "ws") + "/api/ws";
 
 /**
  * The browser cannot supply a token: login stores the JWT in the HttpOnly
@@ -44,7 +44,12 @@ export type ChannelHandlers = Record<string, Handler>;
  */
 const channels = new Map<string, Set<{ handlers: ChannelHandlers }>>();
 
-function send(message: { type: string; channel: string; event?: string; payload?: unknown }): boolean {
+function send(message: {
+  type: string;
+  channel: string;
+  event?: string;
+  payload?: unknown;
+}): boolean {
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(message));
     return true;
@@ -92,7 +97,7 @@ function trackPresence(channel: string, evt: RealtimeEvent) {
     const list = (evt.payload as { members?: PresenceMember[] } | null)?.members ?? [];
     presence.set(
       channel,
-      new Map(list.map((member): [string, PresenceMember] => [member.user_id, member])),
+      new Map(list.map((member): [string, PresenceMember] => [member.user_id, member]))
     );
     return;
   }
@@ -253,7 +258,9 @@ async function connectStream(): Promise<void> {
 
   const names = [...channels.keys()];
   const query = authQuery();
-  const url = sseURL() + query +
+  const url =
+    sseURL() +
+    query +
     (names.length ? (query ? "&" : "?") + "channels=" + encodeURIComponent(names.join(",")) : "");
 
   const es = new EventSource(url, { withCredentials: true });
@@ -283,7 +290,10 @@ async function connectStream(): Promise<void> {
 
 export async function connect(): Promise<void> {
   if (typeof WebSocket === "undefined") return; // SSR, or a test runner
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
+  ) {
     return;
   }
   closedByUs = false;

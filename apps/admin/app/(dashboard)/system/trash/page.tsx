@@ -48,7 +48,9 @@ interface ListResponse {
 export default function TrashPage() {
   const queryClient = useQueryClient();
   const [table, setTable] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<{ kind: "purge" | "empty"; item?: TrashItem } | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: "purge" | "empty"; item?: TrashItem } | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
 
   const buckets = useQuery<BucketsResponse>({
@@ -82,7 +84,8 @@ export default function TrashPage() {
   });
 
   const purge = useMutation({
-    mutationFn: (item: TrashItem) => apiClient.delete("/api/admin/trash/" + item.table + "/" + item.id),
+    mutationFn: (item: TrashItem) =>
+      apiClient.delete("/api/admin/trash/" + item.table + "/" + item.id),
     onSuccess: refresh,
     onError: (e) => setError(getApiErrorMessage(e, "Could not delete that")),
   });
@@ -103,7 +106,10 @@ export default function TrashPage() {
       />
 
       {error && (
-        <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+        <div
+          role="alert"
+          className="mb-4 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger"
+        >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>
@@ -129,7 +135,9 @@ export default function TrashPage() {
               }
             >
               {humanise(bucket.table)}
-              <span className="rounded-full bg-bg-tertiary px-1.5 text-xs tabular-nums">{bucket.count}</span>
+              <span className="rounded-full bg-bg-tertiary px-1.5 text-xs tabular-nums">
+                {bucket.count}
+              </span>
             </button>
           );
         })}
@@ -208,9 +216,9 @@ export default function TrashPage() {
       </div>
 
       <p className="mt-4 text-xs leading-relaxed text-text-muted">
-        A deleted record is kept for {retention} days and then removed for good by a daily job. That job
-        runs on the queue, so without Redis it does not run and nothing expires on its own: the records
-        stay here until somebody empties the bin.
+        A deleted record is kept for {retention} days and then removed for good by a daily job. That
+        job runs on the queue, so without Redis it does not run and nothing expires on its own: the
+        records stay here until somebody empties the bin.
       </p>
 
       <ConfirmModal
@@ -218,7 +226,9 @@ export default function TrashPage() {
         title={confirm?.kind === "empty" ? "Empty the bin?" : "Delete forever?"}
         description={
           confirm?.kind === "empty"
-            ? "Every deleted " + humanise(active ?? "").toLowerCase() + " record goes for good. This cannot be undone."
+            ? "Every deleted " +
+              humanise(active ?? "").toLowerCase() +
+              " record goes for good. This cannot be undone."
             : "“" + (confirm?.item?.label ?? "") + "” goes for good. This cannot be undone."
         }
         confirmLabel="Delete forever"
@@ -248,7 +258,11 @@ function Expiry({ at }: { at: string }) {
 
 function when(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleDateString(undefined, { day: "numeric", month: "short" }) +
+        ", " +
+        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 /** blog_posts -> Blog posts. */

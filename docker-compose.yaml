@@ -1,0 +1,119 @@
+services:
+  # Containerized PostgreSQL (for non-WSL or fully containerized setup)
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: campvote_dev
+      POSTGRES_USER: campvote_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-campvote_dev_password}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - campvote_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campvote_dev -d campvote_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    profiles:
+      - container
+
+  # API for WSL setup (uses local PostgreSQL on Windows host)
+  api:
+    build:
+      # Workaround: bridge network has no outbound internet in WSL; remove once Docker networking (MTU/iptables) is fixed
+      network: host
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - DATABASE_URL=postgres://campvote_dev:${POSTGRES_PASSWORD:-campvote_dev_password}@host.docker.internal:5432/campvote_dev?sslmode=disable
+      - SESSION_SECRET=${SESSION_SECRET:-dev-session-secret-change-in-production}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      - REQUIRE_EMAIL_VERIFICATION=${REQUIRE_EMAIL_VERIFICATION:-false}
+      - LOGIN_MAX_ATTEMPTS=${LOGIN_MAX_ATTEMPTS:-10}
+      - LOGIN_LOCKOUT_MINUTES=${LOGIN_LOCKOUT_MINUTES:-15}
+      - PASSWORD_BREACH_CHECK=${PASSWORD_BREACH_CHECK:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles:
+      - wsl
+    networks:
+      - campvote
+
+  # API for containerized setup (uses containerized PostgreSQL)
+  api-container:
+    build:
+      # Workaround: bridge network has no outbound internet in WSL; remove once Docker networking (MTU/iptables) is fixed
+      network: host
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - DATABASE_URL=postgres://campvote_dev:${POSTGRES_PASSWORD:-campvote_dev_password}@postgres:5432/campvote_dev?sslmode=disable
+      - SESSION_SECRET=${SESSION_SECRET:-dev-session-secret-change-in-production}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      - REQUIRE_EMAIL_VERIFICATION=${REQUIRE_EMAIL_VERIFICATION:-false}
+      - LOGIN_MAX_ATTEMPTS=${LOGIN_MAX_ATTEMPTS:-10}
+      - LOGIN_LOCKOUT_MINUTES=${LOGIN_LOCKOUT_MINUTES:-15}
+      - PASSWORD_BREACH_CHECK=${PASSWORD_BREACH_CHECK:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - container
+    networks:
+      - campvote
+
+  # Web frontend (includes both voter portal and admin dashboard under /staff routes)
+  web:
+    build:
+      # Workaround: bridge network has no outbound internet in WSL; remove once Docker networking (MTU/iptables) is fixed
+      network: host
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://api:8080
+    depends_on:
+      - api
+    profiles:
+      - wsl
+    networks:
+      - campvote
+
+  web-container:
+    build:
+      # Workaround: bridge network has no outbound internet in WSL; remove once Docker networking (MTU/iptables) is fixed
+      network: host
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://api-container:8080
+    depends_on:
+      - api-container
+    profiles:
+      - container
+    networks:
+      - campvote
+
+volumes:
+  campvote_postgres_data:
+
+networks:
+  campvote:
+    driver: bridge

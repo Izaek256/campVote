@@ -23,6 +23,7 @@ out/
 coverage/
 .next/
 .turbo/
+*.tsbuildinfo
 .tmp/
 tmp/
 

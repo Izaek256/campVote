@@ -30,12 +30,11 @@ interface AxiosLike {
 export function createAxiosTransport(client: AxiosLike, basePath = ""): UploadTransport {
   const at = (path: string) => basePath + path;
   return {
-    get: async <T,>(path: string) => (await client.get(at(path))).data as T,
-    post: async <T,>(path: string, body: unknown) =>
-      (await client.post(at(path), body)).data as T,
+    get: async <T>(path: string) => (await client.get(at(path))).data as T,
+    post: async <T>(path: string, body: unknown) => (await client.post(at(path), body)).data as T,
     put: (url, body, contentType, onProgress) =>
       putWithProgress(url, body, contentType, onProgress),
-    postForm: async <T,>(path: string, form: FormData, onProgress?: (fraction: number) => void) =>
+    postForm: async <T>(path: string, form: FormData, onProgress?: (fraction: number) => void) =>
       (
         await client.post(at(path), form, {
           // Named, so axios sends the form as it is instead of turning it into
@@ -60,7 +59,7 @@ export function createAxiosTransport(client: AxiosLike, basePath = ""): UploadTr
  */
 export function createFetchTransport(
   baseUrl: string,
-  getToken?: () => string | null | Promise<string | null>,
+  getToken?: () => string | null | Promise<string | null>
 ): UploadTransport {
   const headers = async (): Promise<Record<string, string>> => {
     const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -69,7 +68,7 @@ export function createFetchTransport(
     return h;
   };
 
-  const json = async <T,>(res: Response): Promise<T> => {
+  const json = async <T>(res: Response): Promise<T> => {
     if (!res.ok) {
       const body = await res.text();
       throw new Error("Request failed (" + res.status + "): " + body.slice(0, 200));
@@ -78,26 +77,31 @@ export function createFetchTransport(
   };
 
   return {
-    get: async <T,>(path: string) =>
+    get: async <T>(path: string) =>
       json<T>(await fetch(baseUrl + path, { headers: await headers(), credentials: "include" })),
-    post: async <T,>(path: string, body: unknown) =>
+    post: async <T>(path: string, body: unknown) =>
       json<T>(
         await fetch(baseUrl + path, {
           method: "POST",
           headers: await headers(),
           credentials: "include",
           body: JSON.stringify(body),
-        }),
+        })
       ),
     put: (url, body, contentType, onProgress) =>
       putWithProgress(url, body, contentType, onProgress),
     // No Content-Type: fetch sets multipart/form-data with its boundary.
-    postForm: async <T,>(path: string, form: FormData) => {
+    postForm: async <T>(path: string, form: FormData) => {
       const h: Record<string, string> = {};
       const token = await getToken?.();
       if (token) h.Authorization = "Bearer " + token;
       return json<T>(
-        await fetch(baseUrl + path, { method: "POST", headers: h, credentials: "include", body: form }),
+        await fetch(baseUrl + path, {
+          method: "POST",
+          headers: h,
+          credentials: "include",
+          body: form,
+        })
       );
     },
   };
@@ -117,13 +121,13 @@ function putWithProgress(
   url: string,
   body: Blob,
   contentType: string,
-  onProgress?: (fraction: number) => void,
+  onProgress?: (fraction: number) => void
 ): Promise<void> {
   if (typeof XMLHttpRequest === "undefined") {
     return fetch(url, { method: "PUT", body, headers: { "Content-Type": contentType } }).then(
       (res) => {
         if (!res.ok) throw new Error("Upload failed (" + res.status + ")");
-      },
+      }
     );
   }
 
@@ -136,7 +140,8 @@ function putWithProgress(
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error("Upload failed (" + xhr.status + "): " + xhr.responseText.slice(0, 200)));
+      else
+        reject(new Error("Upload failed (" + xhr.status + "): " + xhr.responseText.slice(0, 200)));
     };
     xhr.onerror = () => reject(new Error("Upload failed: network error"));
     xhr.ontimeout = () => reject(new Error("Upload timed out"));

@@ -30,6 +30,7 @@ func lifecycleEngine(t *testing.T, db *gorm.DB, clock *time.Time) *gin.Engine {
 	protected := r.Group("")
 	protected.Use(middleware.APIKeyOrAuth(db, middleware.Auth(db, auth)))
 	protected.Use(policy.Guard(db))
+	protected.GET("/api/v1/elections", h.List)
 	protected.GET("/api/v1/elections/:id/lifecycle", h.Phase)
 	protected.GET("/api/v1/elections/:id/ballot", bh.View)
 	protected.POST("/api/v1/elections/:id/ballot/submit", bh.Submit)
@@ -326,4 +327,42 @@ func TestTimezoneOffsetsAreNormalizedAndNaiveTimesRejected(t *testing.T) {
 		"starts_at": "2027-03-14T01:30:00",
 		"ends_at":   "2027-03-14T04:00:00",
 	}).AssertUnprocessable()
+}
+
+func TestElectionListHidesOtherPeoplesDrafts(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	clock := now
+	engine := lifecycleEngine(t, db, &clock)
+	auth := testkit.Auth(testkit.Config(), db)
+	admin := rbacUser(t, db, "list-admin@must.ac.ug", models.RoleAdmin)
+	voter := rbacUser(t, db, "list-voter@std.must.ac.ug", models.RoleStudentVoter)
+	adminToken := testkit.SignIn(t, db, auth, admin)
+	voterToken := testkit.SignIn(t, db, auth, voter)
+	client := testkit.New(t, engine)
+
+	created := createLifecycleElection(t, client, adminToken,
+		now.Add(24*time.Hour), now.Add(30*time.Hour))
+
+	var mine []lifecycleElection
+	client.As(adminToken).Get("/api/v1/elections").AssertOK().BindData(&mine)
+	if len(mine) != 1 || mine[0].ID != created.ID {
+		t.Fatalf("admin list = %+v, want the draft they created", mine)
+	}
+
+	var hidden []lifecycleElection
+	client.As(voterToken).Get("/api/v1/elections").AssertOK().BindData(&hidden)
+	if len(hidden) != 0 {
+		t.Fatalf("voter list = %+v, want no other user's draft", hidden)
+	}
+
+	if err := db.Model(&models.Election{}).Where("id = ?", created.ID).
+		Update("status", models.ElectionStatusScheduled).Error; err != nil {
+		t.Fatal(err)
+	}
+	var visible []lifecycleElection
+	client.As(voterToken).Get("/api/v1/elections").AssertOK().BindData(&visible)
+	if len(visible) != 1 || visible[0].ID != created.ID {
+		t.Fatalf("voter list = %+v, want the scheduled election", visible)
+	}
 }
