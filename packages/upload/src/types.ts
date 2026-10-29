@@ -61,10 +61,7 @@ export interface OptimizedImage {
  * React Native. Injected into the uploader rather than imported by it, so no
  * bundler has to resolve a platform at build time.
  */
-export type Optimizer = (
-  file: Blob,
-  profile: MediaProfile,
-) => Promise<OptimizedImage>;
+export type Optimizer = (file: Blob, profile: MediaProfile) => Promise<OptimizedImage>;
 
 /** What the API records once the bytes are in storage. */
 export interface FileRef {
@@ -78,7 +75,10 @@ export interface FileRef {
   thumbnail_url?: string;
   format?: string;
   optimised?: boolean;
-  renditions?: Record<string, { url: string; key: string; width?: number; height?: number; size?: number; mime?: string }>;
+  renditions?: Record<
+    string,
+    { url: string; key: string; width?: number; height?: number; size?: number; mime?: string }
+  >;
   profile?: string;
 }
 
@@ -95,7 +95,12 @@ export interface UploadTransport {
    * authorisation in the query string, and attaching an Authorization header
    * to it makes S3 reject the request.
    */
-  put(url: string, body: Blob, contentType: string, onProgress?: (fraction: number) => void): Promise<void>;
+  put(
+    url: string,
+    body: Blob,
+    contentType: string,
+    onProgress?: (fraction: number) => void
+  ): Promise<void>;
   /**
    * POST a multipart form to the API, returning parsed JSON.
    *

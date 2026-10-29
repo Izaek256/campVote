@@ -22,7 +22,7 @@ interface Manipulator {
   manipulateAsync(
     uri: string,
     actions: Array<Record<string, unknown>>,
-    options: { compress: number; format: unknown; base64?: boolean },
+    options: { compress: number; format: unknown; base64?: boolean }
   ): Promise<ManipulateResult>;
   SaveFormat: { JPEG: unknown; PNG: unknown };
 }
@@ -49,7 +49,7 @@ async function loadManipulator(): Promise<Manipulator> {
     return (await import(/* @vite-ignore */ id)) as unknown as Manipulator;
   } catch {
     throw new Error(
-      "expo-image-manipulator is not installed. Run: npx expo install expo-image-manipulator",
+      "expo-image-manipulator is not installed. Run: npx expo install expo-image-manipulator"
     );
   }
 }
@@ -65,7 +65,7 @@ async function render(
   image: NativeImage,
   box: RenditionSize,
   profile: MediaProfile,
-  name: string,
+  name: string
 ): Promise<Rendition> {
   const m = await loadManipulator();
   const { w, h } = target(image.width, image.height, box);
@@ -105,11 +105,11 @@ async function render(
  */
 export async function optimizeNativeImage(
   image: NativeImage,
-  profile: MediaProfile,
+  profile: MediaProfile
 ): Promise<OptimizedImage> {
   if (profile.max_pixels > 0 && image.width * image.height > profile.max_pixels) {
     throw new Error(
-      "That image is " + image.width + "x" + image.height + ", larger than this app accepts.",
+      "That image is " + image.width + "x" + image.height + ", larger than this app accepts."
     );
   }
 
@@ -117,7 +117,7 @@ export async function optimizeNativeImage(
     image,
     { width: profile.max_width, height: profile.max_height, crop: profile.crop },
     profile,
-    "primary",
+    "primary"
   );
 
   const extra: Rendition[] = [];

@@ -89,7 +89,7 @@ describe("uploader", () => {
 
     const ref = await up.upload(
       new Blob([new Uint8Array(10)], { type: "image/jpeg" }),
-      "photo.jpg",
+      "photo.jpg"
     );
 
     expect(t.puts).toHaveLength(2);
@@ -107,10 +107,7 @@ describe("uploader", () => {
       profiles: [profile],
     });
 
-    await up.upload(
-      new Blob([new Uint8Array(6000000)], { type: "image/jpeg" }),
-      "photo.jpg",
-    );
+    await up.upload(new Blob([new Uint8Array(6000000)], { type: "image/jpeg" }), "photo.jpg");
 
     // The server signs this number into the URL, so it has to be exactly what
     // gets sent. Reporting the original 6 MB would make S3 reject every PUT.
@@ -130,7 +127,7 @@ describe("uploader", () => {
 
     const ref = await up.upload(
       new Blob([new Uint8Array(100)], { type: "application/pdf" }),
-      "doc.pdf",
+      "doc.pdf"
     );
 
     expect(optimize).not.toHaveBeenCalled();
@@ -169,11 +166,11 @@ describe("uploader", () => {
     const first = await up.upload(
       new Blob([new Uint8Array(10)], { type: "image/jpeg" }),
       "photo.jpg",
-      { accepts: ["image"] },
+      { accepts: ["image"] }
     );
     const second = await up.upload(
       new Blob([new Uint8Array(10)], { type: "image/jpeg" }),
-      "second.jpg",
+      "second.jpg"
     );
 
     expect(puts).toHaveLength(0);
@@ -211,7 +208,7 @@ describe("uploader", () => {
     });
 
     await expect(
-      up.upload(new Blob([new Uint8Array(10)], { type: "image/png" }), "bomb.png"),
+      up.upload(new Blob([new Uint8Array(10)], { type: "image/png" }), "bomb.png")
     ).rejects.toThrow("megapixels");
     expect(t.puts).toHaveLength(0);
   });
@@ -226,10 +223,7 @@ describe("uploader", () => {
       profiles: [profile],
     });
 
-    const ref = await up.upload(
-      new Blob([new Uint8Array(500)], { type: "image/jpeg" }),
-      "odd.jpg",
-    );
+    const ref = await up.upload(new Blob([new Uint8Array(500)], { type: "image/jpeg" }), "odd.jpg");
 
     // Losing somebody's file because a codec choked is worse than storing it
     // exactly as it arrived.

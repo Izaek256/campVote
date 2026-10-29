@@ -82,13 +82,13 @@ export function useUpload(uploader: Uploader) {
       }
       return refs;
     },
-    [uploader, patch],
+    [uploader, patch]
   );
 
   const reset = useCallback(() => setItems([]), []);
   const remove = useCallback(
     (id: string) => setItems((prev) => prev.filter((it) => it.id !== id)),
-    [],
+    []
   );
 
   return { upload, items, reset, remove };

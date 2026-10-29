@@ -59,7 +59,9 @@
   border: 2px dashed var(--grit-dz-border);
   border-radius: var(--grit-dz-radius);
   background: var(--grit-dz-surface-alt);
-  transition: border-color 120ms ease, background-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
 }
 
 .grit-dz__zone:hover {

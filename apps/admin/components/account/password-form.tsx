@@ -48,7 +48,7 @@ export function PasswordForm() {
   function onSubmit(values: Values) {
     changePassword.mutate(
       { current_password: values.current_password, password: values.password },
-      { onSuccess: () => reset({ current_password: "", password: "" }) },
+      { onSuccess: () => reset({ current_password: "", password: "" }) }
     );
   }
 
@@ -69,7 +69,10 @@ export function PasswordForm() {
       <div className="p-6">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <div className="space-y-1.5">
-            <label htmlFor="account-current-password" className="block text-sm font-medium text-text-secondary">
+            <label
+              htmlFor="account-current-password"
+              className="block text-sm font-medium text-text-secondary"
+            >
               Current password
             </label>
             <div className="relative">
@@ -86,13 +89,20 @@ export function PasswordForm() {
                 aria-label={showCurrent ? "Hide the password" : "Show the password"}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-text-muted transition-colors hover:text-foreground"
               >
-                {showCurrent ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                {showCurrent ? (
+                  <EyeOff className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Eye className="h-4 w-4" aria-hidden="true" />
+                )}
               </button>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="account-new-password" className="block text-sm font-medium text-text-secondary">
+            <label
+              htmlFor="account-new-password"
+              className="block text-sm font-medium text-text-secondary"
+            >
               New password
             </label>
             <div className="relative">
@@ -110,7 +120,11 @@ export function PasswordForm() {
                 aria-label={showNext ? "Hide the password" : "Show the password"}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-text-muted transition-colors hover:text-foreground"
               >
-                {showNext ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                {showNext ? (
+                  <EyeOff className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Eye className="h-4 w-4" aria-hidden="true" />
+                )}
               </button>
             </div>
           </div>
@@ -119,8 +133,11 @@ export function PasswordForm() {
 
           {changePassword.isError && (
             <p role="alert" className="text-sm text-danger">
-              {(changePassword.error as { response?: { data?: { error?: { message?: string } } } } | null)
-                ?.response?.data?.error?.message ?? "That did not save. Try again."}
+              {(
+                changePassword.error as {
+                  response?: { data?: { error?: { message?: string } } };
+                } | null
+              )?.response?.data?.error?.message ?? "That did not save. Try again."}
             </p>
           )}
           {changePassword.isSuccess && (
@@ -134,7 +151,9 @@ export function PasswordForm() {
             disabled={!ready || changePassword.isPending}
             className={buttonClasses({ variant: "primary" })}
           >
-            {changePassword.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            {changePassword.isPending && (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            )}
             Change password
           </button>
         </form>

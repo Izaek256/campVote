@@ -136,11 +136,11 @@ export function Dropzone({
 
       const refs = await upload(
         accepted.map((f) => ({ blob: f, name: f.name })),
-        { profile, accepts },
+        { profile, accepts }
       );
       if (refs.length) onChange?.(refs);
     },
-    [accepts, disabled, items.length, maxFiles, onChange, profile, upload],
+    [accepts, disabled, items.length, maxFiles, onChange, profile, upload]
   );
 
   const full = items.length >= maxFiles;
@@ -171,7 +171,7 @@ export function Dropzone({
           dragging && "grit-dz__zone--dragging",
           (disabled || full) && "grit-dz__zone--disabled",
           cn.zone,
-          dragging && cn.zoneDragging,
+          dragging && cn.zoneDragging
         )}
         data-dragging={dragging || undefined}
         data-disabled={disabled || full || undefined}
