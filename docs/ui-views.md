@@ -2,11 +2,6 @@
 
 This document tracks all UI views in the campVote application, their routes, roles, API endpoints, and owning issues.
 
-## Format
-
-| View / Route | Roles | Data / API | Key Elements | States | Notes | Owning Issue |
-|---|---|---|---|---|---|---|
-
 ## ISSUE-06 Views
 
 | View / Route | Roles | Data / API | Key Elements | States | Notes | Owning Issue |
@@ -26,7 +21,7 @@ This document tracks all UI views in the campVote application, their routes, rol
 |---|---|---|---|---|---|---|
 | Ballot Secrecy Statement | `/privacy/ballot-secrecy` and inline modal | Any authenticated user | Static content from `docs/privacy-boundary.md` | Plain-language sections: What is protected, What is not guaranteed, Who can see participation, Who cannot see choices | n/a | Copy is reviewed by stakeholders; no words like "100% anonymous" or "untraceable" | ISSUE-07 |
 | Pre-vote Notice | (component) | Eligible voter | None | Short summary + link to full statement; acknowledgement is optional unless SRS requires it | Dismissal remembered server-side or not at all (no choice data in browser storage) | Used by ISSUE-08 | ISSUE-07 |
-| Participation/Turnout Panel | `/admin/elections/:id/turnout` | Officer, Auditor | Counts only: eligible, voted, percent; optional per-faculty aggregates only if group size ≥ configured minimum | Counters, refresh timestamp (server time) | Small-group suppression message ("hidden to protect privacy") | Never a per-voter list of who voted unless SRS explicitly requires; never any choice data | ISSUE-07 |
+| Participation/Turnout Panel | `/staff/elections/:id/turnout` | Officer, Auditor | `GET /api/v1/staff/elections/:id/turnout` | Counts only: eligible, voted, percent; optional per-faculty aggregates only if group size ≥ configured minimum | Counters, refresh timestamp (server time) | Small-group suppression message ("hidden to protect privacy") | Never a per-voter list of who voted unless SRS explicitly requires; never any choice data | ISSUE-07 |
 | Voter Confirmation Wording | (component `VoteRecordedNotice`) | Voter | None | States that a vote was recorded and when (coarse time), not what it was | n/a | No "download/print/share my ballot" actions; no choice echo | ISSUE-07 |
 
 ## Pre-ISSUE-06 Views
