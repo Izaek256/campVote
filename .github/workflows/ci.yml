@@ -35,6 +35,7 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.59.1
+        working-directory: apps/api
 
       - name: Run linter
         working-directory: apps/api
