@@ -911,6 +911,8 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	ballotVersionHandler := handlers.NewBallotVersionHandler(db)
 	candidateHandler := handlers.NewCandidateHandler(db)
 	positionHandler := handlers.NewPositionHandler(db)
+	// ISSUE-07: Turnout and privacy
+	turnoutHandler := handlers.NewTurnoutHandler(db)
 	// Which scaling stage this deployment is at, measured rather than guessed.
 	// Reads the live request percentiles, the connection count against the
 	// ceiling, and what Postgres says about its own slowest queries.
@@ -1527,6 +1529,9 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.GET("/elections/:id/ballot/versions", ballotVersionHandler.ListVersions)
 		staff.GET("/elections/:id/ballot/versions/:version_id", ballotVersionHandler.GetVersion)
 		staff.GET("/elections/:id/ballot/versions/compare", ballotVersionHandler.CompareVersions)
+
+		// ISSUE-07: Turnout and privacy
+		staff.GET("/elections/:id/turnout", turnoutHandler.GetTurnout)
 	}
 
 	// Admin routes: the ADMIN role and nothing less. Anything that should be
