@@ -32,7 +32,7 @@ jobs:
         run: go mod download
 
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.1.2
 
       - name: Run linter
         working-directory: apps/api
@@ -99,7 +99,4 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check formatting
-        run: pnpm format
-
-      - name: Check if format changed files
-        run: git diff --exit-code
+        run: pnpm format:check

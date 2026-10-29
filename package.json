@@ -6,6 +6,7 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "format": "biome format --write .",
+    "format:check": "biome check .",
     "type-check": "turbo type-check",
     "dev:api": "cd apps/api && air",
     "dev:web": "cd apps/web && pnpm dev",
