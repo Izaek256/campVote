@@ -907,6 +907,10 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	electionLifecycleHandler := handlers.NewElectionLifecycleHandler(db)
 	eligibilityHandler := handlers.NewEligibilityHandler(db)
 	ballotHandler := handlers.NewBallotHandler(db)
+	// ISSUE-06: Ballot versioning and candidate workflow
+	ballotVersionHandler := handlers.NewBallotVersionHandler(db)
+	candidateHandler := handlers.NewCandidateHandler(db)
+	positionHandler := handlers.NewPositionHandler(db)
 	// Which scaling stage this deployment is at, measured rather than guessed.
 	// Reads the live request percentiles, the connection count against the
 	// ceiling, and what Postgres says about its own slowest queries.
@@ -1338,6 +1342,9 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.POST("/elections/:id/ballot/start", ballotHandler.Start)
 		protected.POST("/elections/:id/ballot/submit", ballotHandler.Submit)
 
+		// ISSUE-06: My candidacies
+		protected.GET("/candidates/my", candidateHandler.GetMyCandidacies)
+
 		// grit:routes:protected
 	}
 
@@ -1499,6 +1506,27 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.POST("/elections/:id/roster/:rosterId/status", eligibilityHandler.SetStatus)
 		staff.POST("/elections/:id/eligibility/freeze", eligibilityHandler.Freeze)
 		staff.GET("/elections/:id/eligibility/report", eligibilityHandler.Report)
+
+		// ISSUE-06: Ballot versioning and candidate workflow
+		// Position management
+		staff.GET("/elections/:id/positions", positionHandler.List)
+		staff.POST("/elections/:id/positions", positionHandler.Create)
+		staff.PUT("/elections/:id/positions/:position_id", positionHandler.Update)
+		staff.DELETE("/elections/:id/positions/:position_id", positionHandler.Delete)
+
+		// Candidate management
+		staff.GET("/elections/:id/candidates", candidateHandler.List)
+		staff.POST("/elections/:id/candidates", candidateHandler.Create)
+		staff.PUT("/elections/:id/candidates/:candidate_id", candidateHandler.Update)
+		staff.POST("/elections/:id/candidates/:candidate_id/approve", candidateHandler.Approve)
+		staff.POST("/elections/:id/candidates/:candidate_id/reject", candidateHandler.Reject)
+		staff.POST("/elections/:id/candidates/:candidate_id/withdraw", candidateHandler.Withdraw)
+
+		// Ballot versioning
+		staff.POST("/elections/:id/ballot/publish", ballotVersionHandler.Publish)
+		staff.GET("/elections/:id/ballot/versions", ballotVersionHandler.ListVersions)
+		staff.GET("/elections/:id/ballot/versions/:version_id", ballotVersionHandler.GetVersion)
+		staff.GET("/elections/:id/ballot/versions/compare", ballotVersionHandler.CompareVersions)
 	}
 
 	// Admin routes: the ADMIN role and nothing less. Anything that should be

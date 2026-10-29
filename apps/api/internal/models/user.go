@@ -183,6 +183,7 @@ func Models() []interface{} {
 		&VoterParticipation{},
 		&AnonymousBallot{},
 		&BallotSelection{},
+		&BallotVersion{},
 		&ElectionTally{},
 		&ElectionAuditLog{},
 		// grit:models
