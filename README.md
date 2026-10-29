@@ -329,6 +329,108 @@ Same as Docker setup:
 
 ---
 
+## Option 3: Local Development (PostgreSQL Local on Windows, Apps Local)
+
+This runs PostgreSQL locally on Windows (not in Docker) and runs the Go API and Next.js apps locally. Use this if you have PostgreSQL installed directly on Windows.
+
+### Prerequisites
+
+- PostgreSQL 16+ installed locally on Windows
+- Go 1.23+
+- Node.js 20+
+- pnpm package manager
+- Git
+
+### Step-by-step setup
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Izaek256/campVote.git
+cd campVote
+
+# 2. Install pnpm (if not already installed)
+npm install -g pnpm@10.33.4
+
+# 3. Install all workspace dependencies
+pnpm install
+
+# 4. Set up environment variables
+cp .env.example .env
+# Edit .env to set secure passwords
+# Minimum required changes:
+# POSTGRES_PASSWORD=your-windows-postgres-password
+# DATABASE_URL=postgres://campvote_dev:your-password@localhost:5432/campvote_dev?sslmode=disable&client_encoding=UTF8
+# SESSION_SECRET=dev-session-secret-change-in-production
+# JWT_SECRET=dev-jwt-secret-change-in-production
+
+# 5. Create PostgreSQL user and database (one-time setup)
+# Open PowerShell or Command Prompt as administrator:
+psql -U postgres -c "CREATE USER campvote_dev WITH PASSWORD 'your-password';"
+psql -U postgres -c "CREATE DATABASE campvote_dev OWNER campvote_dev;"
+psql -U postgres -d campvote_dev -c "GRANT ALL ON SCHEMA public TO campvote_dev;"
+psql -U postgres -d campvote_dev -c "ALTER SCHEMA public OWNER TO campvote_dev;"
+
+# 6. Run database migrations
+cd apps/api
+go run ./cmd/migrate
+cd ../..
+
+# 7. (Optional) Seed demo data
+cd apps/api
+go run ./cmd/seed
+cd ../..
+
+# 8. Create the first administrator
+cd apps/api
+BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
+BOOTSTRAP_ADMIN_PASSWORD='your-secure-password-12+chars' \
+BOOTSTRAP_ADMIN_FIRST_NAME=Admin \
+BOOTSTRAP_ADMIN_LAST_NAME=User \
+go run ./cmd/bootstrap
+cd ../..
+
+# 9. Remove bootstrap credentials from .env after successful creation
+
+# 10. Start all applications in parallel
+pnpm dev
+```
+
+### Access the applications
+
+- **Voter portal & Admin dashboard**: http://localhost:3000
+  - Voter pages: `/`, `/elections`, `/elections/[id]/ballot`, `/elections/[id]/results`
+  - Admin pages: `/staff`, `/staff/elections/[id]`
+- **API**: http://localhost:8080
+- **API Documentation**: http://localhost:8080/docs
+- **GORM Studio**: http://localhost:8080/studio
+
+### Running individual services
+
+```bash
+# Start only the API
+cd apps/api && go run ./cmd/server
+
+# Start only the voter portal
+cd apps/web && pnpm dev
+
+# Start only the admin dashboard
+cd apps/admin && pnpm dev
+```
+
+### Stopping local development
+
+```bash
+# Stop the running apps (Ctrl+C in the terminal)
+# PostgreSQL stays running as a Windows service
+```
+
+### Demo accounts
+
+- **Student voter**: `ivan.mugisha@std.must.ac.ug` / `admin123`
+- **Staff admin**: Your bootstrap email and password
+
+---
+
 ## Common tasks (both setups)
 
 ### Frontend-specific notes
