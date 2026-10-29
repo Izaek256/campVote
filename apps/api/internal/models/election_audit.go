@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Significant administrative audit actions (FR-AUDIT-01)
+// Significant administrative audit actions (FR-AUDIT-01, ISSUE-06)
 const (
 	AuditActionElectionCreated     = "ELECTION_CREATED"
 	AuditActionElectionUpdated     = "ELECTION_UPDATED"
@@ -24,6 +24,12 @@ const (
 	AuditActionEligibilityOverride = "ELIGIBILITY_OVERRIDE"
 	AuditActionCandidateApproved   = "CANDIDATE_APPROVED"
 	AuditActionCandidateRejected   = "CANDIDATE_REJECTED"
+	AuditActionCandidateNominated  = "CANDIDATE_NOMINATED"
+	AuditActionCandidateWithdrawn  = "CANDIDATE_WITHDRAWN"
+	AuditActionPositionCreated    = "POSITION_CREATED"
+	AuditActionPositionUpdated    = "POSITION_UPDATED"
+	AuditActionPositionDeleted    = "POSITION_DELETED"
+	AuditActionBallotPublished     = "BALLOT_PUBLISHED"
 	AuditActionRecountTriggered    = "RECOUNT_TRIGGERED"
 	AuditActionResultsCertified    = "RESULTS_CERTIFIED"
 )

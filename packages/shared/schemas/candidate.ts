@@ -11,6 +11,11 @@ export const CandidateSchema = z.object({
   ballot_number: z.number().int(),
   approval_status: z.string(),
   review_notes: z.string(),
+  nominated_by: z.string().optional(),
+  reviewed_by: z.string().optional(),
+  reviewed_at: z.string().nullable().optional(),
+  withdrawn_at: z.string().nullable().optional(),
+  withdrawal_reason: z.string().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
