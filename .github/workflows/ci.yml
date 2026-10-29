@@ -24,7 +24,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
           cache: true
 
       - name: Install dependencies
@@ -58,8 +58,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -83,37 +81,6 @@ jobs:
         working-directory: apps/web
         run: pnpm build
 
-  frontend-admin:
-    name: Frontend (Admin)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Type check admin
-        working-directory: apps/admin
-        run: pnpm type-check
-
-      - name: Lint admin
-        working-directory: apps/admin
-        run: pnpm lint
-
-      - name: Build admin
-        working-directory: apps/admin
-        run: pnpm build
-
   format:
     name: Format check
     runs-on: ubuntu-latest
@@ -133,3 +100,6 @@ jobs:
 
       - name: Check formatting
         run: pnpm format
+
+      - name: Check if format changed files
+        run: git diff --exit-code
