@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
 interface TurnoutData {
@@ -17,11 +17,7 @@ export default function TurnoutPage() {
   const [turnout, setTurnout] = useState<TurnoutData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchTurnout();
-  }, [electionId]);
-
-  const fetchTurnout = async () => {
+  const fetchTurnout = useCallback(async () => {
     try {
       const response = await fetch(`/api/v1/staff/elections/${electionId}/turnout`);
       if (!response.ok) throw new Error("Failed to fetch turnout");
@@ -32,7 +28,11 @@ export default function TurnoutPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [electionId]);
+
+  useEffect(() => {
+    fetchTurnout();
+  }, [fetchTurnout]);
 
   if (loading) return <div className="p-8">Loading...</div>;
 
@@ -47,8 +47,8 @@ export default function TurnoutPage() {
           <h2 className="text-lg font-semibold mb-2">Hidden to Protect Privacy</h2>
           <p className="text-sm">
             Turnout counts for this election are not displayed because the number of eligible voters
-            is below the configured privacy threshold. This prevents the identification of individual
-            voters through turnout data.
+            is below the configured privacy threshold. This prevents the identification of
+            individual voters through turnout data.
           </p>
         </div>
       ) : (
@@ -76,7 +76,8 @@ export default function TurnoutPage() {
         <p className="font-medium text-sm">Privacy Note</p>
         <p className="text-xs mt-1">
           This panel shows counts only. It does not show a list of who voted or any ballot choices.
-          Individual voter participation records are stored separately from ballot selections to protect privacy.
+          Individual voter participation records are stored separately from ballot selections to
+          protect privacy.
         </p>
       </div>
     </div>

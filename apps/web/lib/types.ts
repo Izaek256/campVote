@@ -59,6 +59,15 @@ export interface Election {
   accepting_votes: boolean;
   display_timezone: string;
   allowed_transitions: ElectionStatus[];
+  my_vote_status?: VoteStatus;
+}
+
+export interface VoteStatus {
+  election_id: string;
+  voted: boolean;
+  recorded_at?: string;
+  phase?: ElectionStatus;
+  server_time?: string;
 }
 
 export interface EligibilityDecision {
@@ -70,6 +79,8 @@ export interface BallotCandidate {
   id: string;
   full_name: string;
   manifesto: string;
+  photo_url?: string;
+  bio?: string;
   ballot_number: number;
 }
 
@@ -80,6 +91,7 @@ export interface BallotPosition {
   question_type: "SINGLE_CHOICE" | "MULTI_CHOICE" | "REFERENDUM" | string;
   min_selections: number;
   max_selections: number;
+  seats?: number;
   allow_blank: boolean;
   display_order: number;
   candidates: BallotCandidate[];
@@ -90,6 +102,8 @@ export interface Ballot {
   title: string;
   starts_at: string;
   ends_at: string;
+  ballot_version_id?: string | null;
+  ballot_version?: number | null;
   positions: BallotPosition[];
 }
 
@@ -97,6 +111,11 @@ export interface SubmitResult {
   election_id: string;
   confirmation_token: string;
   message: string;
+}
+
+export interface SubmitOptions {
+  ballotVersionId?: string | null;
+  idempotencyKey: string;
 }
 
 export interface Tally {

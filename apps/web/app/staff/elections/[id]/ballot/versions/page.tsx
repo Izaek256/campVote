@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { BallotVersion, BallotContent } from "@campvote/shared/types/ballot_version";
+import type { BallotVersion } from "@campvote/shared/types/ballot_version";
+
+interface VersionComparison {
+  same_hash: boolean;
+  v1: BallotVersion;
+  v2: BallotVersion;
+}
 
 export default function BallotVersionsPage() {
   const params = useParams();
@@ -11,14 +17,10 @@ export default function BallotVersionsPage() {
   const [versions, setVersions] = useState<BallotVersion[]>([]);
   const [selectedV1, setSelectedV1] = useState<string>(searchParams.get("v1") || "");
   const [selectedV2, setSelectedV2] = useState<string>(searchParams.get("v2") || "");
-  const [comparison, setComparison] = useState<any>(null);
+  const [comparison, setComparison] = useState<VersionComparison | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchVersions();
-  }, [electionId]);
-
-  const fetchVersions = async () => {
+  const fetchVersions = useCallback(async () => {
     try {
       const response = await fetch(`/api/v1/staff/elections/${electionId}/ballot/versions`);
       if (!response.ok) throw new Error("Failed to fetch versions");
@@ -29,7 +31,11 @@ export default function BallotVersionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [electionId]);
+
+  useEffect(() => {
+    fetchVersions();
+  }, [fetchVersions]);
 
   const handleCompare = async () => {
     if (!selectedV1 || !selectedV2) {
@@ -99,7 +105,9 @@ export default function BallotVersionsPage() {
       {comparison && (
         <div className="border rounded-lg p-6">
           <h2 className="text-lg font-semibold mb-4">Comparison Result</h2>
-          <div className={`p-4 rounded mb-4 ${comparison.same_hash ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"}`}>
+          <div
+            className={`p-4 rounded mb-4 ${comparison.same_hash ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"}`}
+          >
             {comparison.same_hash ? "Versions are identical" : "Versions differ"}
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -151,9 +159,7 @@ export default function BallotVersionsPage() {
               <div className="mt-2 text-xs text-gray-600 font-mono">
                 Hash: {version.content_hash}
               </div>
-              <div className="mt-2 text-sm text-gray-600">
-                Published by: {version.published_by}
-              </div>
+              <div className="mt-2 text-sm text-gray-600">Published by: {version.published_by}</div>
             </div>
           ))}
         </div>

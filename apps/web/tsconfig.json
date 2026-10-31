@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@campvote/shared/*": ["../../packages/shared/*"],
+      "@campvote/web/*": ["./*"]
     }
   },
   "include": [

@@ -1,39 +1,38 @@
-import { z } from "zod";
+export interface BallotVersion {
+  id: string;
+  election_id: string;
+  version: number;
+  content_hash: string;
+  content_json: string;
+  published_by: string;
+  published_at: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
 
-export const BallotVersionSchema = z.object({
-  id: z.string(),
-  election_id: z.string(),
-  version: z.number().int(),
-  content_hash: z.string(),
-  content_json: z.string(),
-  published_by: z.string(),
-  published_at: z.string(),
-  status: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
-});
+export interface BallotContentCandidate {
+  id: string;
+  full_name: string;
+  photo_url: string;
+  manifesto: string;
+  bio: string;
+  ballot_number: number;
+}
 
-export const BallotContentSchema = z.object({
-  positions: z.array(z.object({
-    id: z.string(),
-    title: z.string(),
-    description: z.string(),
-    question_type: z.string(),
-    min_selections: z.number().int(),
-    max_selections: z.number().int(),
-    seats: z.number().int(),
-    allow_blank: z.boolean(),
-    display_order: z.number().int(),
-    candidates: z.array(z.object({
-      id: z.string(),
-      full_name: z.string(),
-      photo_url: z.string(),
-      manifesto: z.string(),
-      bio: z.string(),
-      ballot_number: z.number().int(),
-    })),
-  })),
-});
+export interface BallotContentPosition {
+  id: string;
+  title: string;
+  description: string;
+  question_type: string;
+  min_selections: number;
+  max_selections: number;
+  seats: number;
+  allow_blank: boolean;
+  display_order: number;
+  candidates: BallotContentCandidate[];
+}
 
-export type BallotVersion = z.infer<typeof BallotVersionSchema>;
-export type BallotContent = z.infer<typeof BallotContentSchema>;
+export interface BallotContent {
+  positions: BallotContentPosition[];
+}

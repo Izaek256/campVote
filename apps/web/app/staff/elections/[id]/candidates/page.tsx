@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Candidate } from "@campvote/shared/types/candidate";
+import type { Candidate } from "@campvote/shared/types/candidate";
 
 type StatusFilter = "ALL" | "NOMINATED" | "APPROVED" | "REJECTED" | "WITHDRAWN";
 
@@ -13,15 +13,12 @@ export default function CandidatesPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>("ALL");
 
-  useEffect(() => {
-    fetchCandidates();
-  }, [electionId, filter]);
-
-  const fetchCandidates = async () => {
+  const fetchCandidates = useCallback(async () => {
     try {
-      const url = filter === "ALL"
-        ? `/api/v1/staff/elections/${electionId}/candidates`
-        : `/api/v1/staff/elections/${electionId}/candidates?status=${filter}`;
+      const url =
+        filter === "ALL"
+          ? `/api/v1/staff/elections/${electionId}/candidates`
+          : `/api/v1/staff/elections/${electionId}/candidates?status=${filter}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch candidates");
       const data = await response.json();
@@ -31,7 +28,11 @@ export default function CandidatesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [electionId, filter]);
+
+  useEffect(() => {
+    fetchCandidates();
+  }, [fetchCandidates]);
 
   const handleApprove = async (candidateId: string) => {
     const reason = prompt("Reason for approval:");
@@ -78,25 +79,23 @@ export default function CandidatesPage() {
       <h1 className="text-2xl font-bold mb-6">Candidate Nominations</h1>
 
       <div className="flex gap-2 mb-6">
-        {(["ALL", "NOMINATED", "APPROVED", "REJECTED", "WITHDRAWN"] as StatusFilter[]).map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilter(status)}
-            className={`px-4 py-2 rounded ${
-              filter === status
-                ? "bg-green-600 text-white"
-                : "bg-gray-100 hover:bg-gray-200"
-            }`}
-          >
-            {status}
-          </button>
-        ))}
+        {(["ALL", "NOMINATED", "APPROVED", "REJECTED", "WITHDRAWN"] as StatusFilter[]).map(
+          (status) => (
+            <button
+              key={status}
+              onClick={() => setFilter(status)}
+              className={`px-4 py-2 rounded ${
+                filter === status ? "bg-green-600 text-white" : "bg-gray-100 hover:bg-gray-200"
+              }`}
+            >
+              {status}
+            </button>
+          )
+        )}
       </div>
 
       {candidates.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          No candidates found for this filter.
-        </div>
+        <div className="text-center py-12 text-gray-500">No candidates found for this filter.</div>
       ) : (
         <div className="space-y-4">
           {candidates.map((candidate) => (
@@ -113,18 +112,30 @@ export default function CandidatesPage() {
                   <div>
                     <h3 className="font-semibold">{candidate.full_name}</h3>
                     <p className="text-sm text-gray-500">
-                      Status: <span className={`inline-block px-2 py-1 rounded text-xs ${
-                        candidate.approval_status === "APPROVED" ? "bg-green-100 text-green-800" :
-                        candidate.approval_status === "REJECTED" ? "bg-red-100 text-red-800" :
-                        candidate.approval_status === "WITHDRAWN" ? "bg-gray-100 text-gray-800" :
-                        "bg-yellow-100 text-yellow-800"
-                      }`}>{candidate.approval_status}</span>
+                      Status:{" "}
+                      <span
+                        className={`inline-block px-2 py-1 rounded text-xs ${
+                          candidate.approval_status === "APPROVED"
+                            ? "bg-green-100 text-green-800"
+                            : candidate.approval_status === "REJECTED"
+                              ? "bg-red-100 text-red-800"
+                              : candidate.approval_status === "WITHDRAWN"
+                                ? "bg-gray-100 text-gray-800"
+                                : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {candidate.approval_status}
+                      </span>
                     </p>
                     {candidate.manifesto && (
-                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{candidate.manifesto}</p>
+                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                        {candidate.manifesto}
+                      </p>
                     )}
                     {candidate.review_notes && (
-                      <p className="text-sm text-gray-500 mt-1 italic">Note: {candidate.review_notes}</p>
+                      <p className="text-sm text-gray-500 mt-1 italic">
+                        Note: {candidate.review_notes}
+                      </p>
                     )}
                   </div>
                 </div>

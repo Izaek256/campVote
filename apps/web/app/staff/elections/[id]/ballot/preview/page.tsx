@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { BallotView } from "@campvote/web/components/ballot-view";
-import { BallotContent } from "@campvote/shared/types/ballot_version";
+import type { BallotContent } from "@campvote/shared/types/ballot_version";
 
 export default function BallotPreviewPage() {
   const params = useParams();
@@ -11,18 +11,16 @@ export default function BallotPreviewPage() {
   const [content, setContent] = useState<BallotContent | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchLatestVersion();
-  }, [electionId]);
-
-  const fetchLatestVersion = async () => {
+  const fetchLatestVersion = useCallback(async () => {
     try {
       const response = await fetch(`/api/v1/staff/elections/${electionId}/ballot/versions`);
       if (!response.ok) throw new Error("Failed to fetch versions");
       const data = await response.json();
       if (data.versions && data.versions.length > 0) {
         const latest = data.versions[0];
-        const versionResponse = await fetch(`/api/v1/staff/elections/${electionId}/ballot/versions/${latest.id}`);
+        const versionResponse = await fetch(
+          `/api/v1/staff/elections/${electionId}/ballot/versions/${latest.id}`
+        );
         if (versionResponse.ok) {
           const versionData = await versionResponse.json();
           setContent(versionData.content);
@@ -33,7 +31,11 @@ export default function BallotPreviewPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [electionId]);
+
+  useEffect(() => {
+    fetchLatestVersion();
+  }, [fetchLatestVersion]);
 
   if (loading) return <div className="p-8">Loading...</div>;
 
@@ -41,7 +43,9 @@ export default function BallotPreviewPage() {
     <div className="p-8">
       <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-6">
         <p className="font-medium">Preview Mode</p>
-        <p className="text-sm">No vote or participation is recorded. This is a ballot preview only.</p>
+        <p className="text-sm">
+          No vote or participation is recorded. This is a ballot preview only.
+        </p>
       </div>
 
       {content ? (

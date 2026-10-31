@@ -137,7 +137,7 @@ func init() {
 	// the handler returns the ballot only when the server-side eligibility
 	// check passes for this election.
 	authenticated("GET", "/api/v1/elections/:id/eligibility", "/api/v1/elections/:id/ballot",
-		"/api/v1/elections/:id/lifecycle")
+		"/api/v1/elections/:id/lifecycle", "/api/v1/elections/:id/my-vote-status")
 	authenticated("POST", "/api/v1/elections/:id/ballot/start", "/api/v1/elections/:id/ballot/submit")
 
 	// Roster evidence is officer-only and election-scoped in the handler.

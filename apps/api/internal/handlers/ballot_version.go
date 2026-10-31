@@ -31,10 +31,24 @@ func (h *BallotVersionHandler) now() time.Time {
 
 // BuildBallotContent constructs the ballot content JSON from positions and candidates.
 func (h *BallotVersionHandler) BuildBallotContent(electionID string) (string, error) {
-	var positions []models.Position
-	if err := h.DB.Where("election_id = ?", electionID).
-		Order("display_order ASC, title ASC").Find(&positions).Error; err != nil {
+	content, err := BallotContentFor(h.DB, electionID)
+	if err != nil {
 		return "", err
+	}
+	jsonBytes, err := json.Marshal(content)
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
+}
+
+// BallotContentFor loads the approved positions and candidates as the ballot
+// definition used for rendering, hashing and vote validation.
+func BallotContentFor(db *gorm.DB, electionID string) (models.BallotContent, error) {
+	var positions []models.Position
+	if err := db.Where("election_id = ?", electionID).
+		Order("display_order ASC, title ASC").Find(&positions).Error; err != nil {
+		return models.BallotContent{}, err
 	}
 
 	content := models.BallotContent{
@@ -43,10 +57,10 @@ func (h *BallotVersionHandler) BuildBallotContent(electionID string) (string, er
 
 	for _, position := range positions {
 		var candidates []models.Candidate
-		if err := h.DB.Where("election_id = ? AND position_id = ? AND approval_status = ?",
+		if err := db.Where("election_id = ? AND position_id = ? AND approval_status = ?",
 			electionID, position.ID, models.CandidateStatusApproved).
 			Order("ballot_number ASC, full_name ASC").Find(&candidates).Error; err != nil {
-			return "", err
+			return models.BallotContent{}, err
 		}
 
 		posContent := models.BallotPositionContent{
@@ -75,13 +89,7 @@ func (h *BallotVersionHandler) BuildBallotContent(electionID string) (string, er
 
 		content.Positions = append(content.Positions, posContent)
 	}
-
-	jsonBytes, err := json.Marshal(content)
-	if err != nil {
-		return "", err
-	}
-
-	return string(jsonBytes), nil
+	return content, nil
 }
 
 // ValidateBallot checks if the ballot meets all publication requirements.
@@ -266,7 +274,7 @@ func (h *BallotVersionHandler) GetVersion(c *gin.Context) {
 
 	respond.OK(c, gin.H{
 		"version":      version,
-		"content":     content,
+		"content":      content,
 		"content_hash": version.ContentHash,
 	})
 }
@@ -303,10 +311,10 @@ func (h *BallotVersionHandler) CompareVersions(c *gin.Context) {
 	}
 
 	respond.OK(c, gin.H{
-		"v1":       v1,
+		"v1":         v1,
 		"v1_content": content1,
-		"v2":       v2,
+		"v2":         v2,
 		"v2_content": content2,
-		"same_hash": v1.ContentHash == v2.ContentHash,
+		"same_hash":  v1.ContentHash == v2.ContentHash,
 	})
 }

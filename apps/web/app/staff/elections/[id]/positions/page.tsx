@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Position } from "@campvote/shared/types/position";
+import type { Position } from "@campvote/shared/types/position";
 
 export default function PositionsPage() {
   const params = useParams();
@@ -12,11 +12,7 @@ export default function PositionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
-  useEffect(() => {
-    fetchPositions();
-  }, [electionId]);
-
-  const fetchPositions = async () => {
+  const fetchPositions = useCallback(async () => {
     try {
       const response = await fetch(`/api/v1/staff/elections/${electionId}/positions`);
       if (!response.ok) throw new Error("Failed to fetch positions");
@@ -27,7 +23,11 @@ export default function PositionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [electionId]);
+
+  useEffect(() => {
+    fetchPositions();
+  }, [fetchPositions]);
 
   if (loading) return <div className="p-8">Loading...</div>;
   if (error) return <div className="p-8 text-red-600">Error: {error}</div>;

@@ -24,6 +24,16 @@ This document tracks all UI views in the campVote application, their routes, rol
 | Participation/Turnout Panel | `/staff/elections/:id/turnout` | Officer, Auditor | `GET /api/v1/staff/elections/:id/turnout` | Counts only: eligible, voted, percent; optional per-faculty aggregates only if group size ≥ configured minimum | Counters, refresh timestamp (server time) | Small-group suppression message ("hidden to protect privacy") | Never a per-voter list of who voted unless SRS explicitly requires; never any choice data | ISSUE-07 |
 | Voter Confirmation Wording | (component `VoteRecordedNotice`) | Voter | None | States that a vote was recorded and when (coarse time), not what it was | n/a | No "download/print/share my ballot" actions; no choice echo | ISSUE-07 |
 
+## ISSUE-08 Views
+
+| View / Route | Roles | Data / API | Key Elements | States | Notes | Owning Issue |
+|---|---|---|---|---|---|---|
+| My Elections (updated) | `/elections` | Voter | `GET /api/v1/elections` (now carries `my_vote_status`) | Title, phase badge, opens/closes EAT, `Voted` chip, action button (`Vote now` / `View election` / `View vote status`) | Empty; no-match filter | Vote status comes from the server list, not a client guess | ISSUE-08 |
+| Ballot / vote form | `/elections/:id/ballot` | Eligible voter, election open | `GET /api/v1/elections/:id/ballot`, `POST .../ballot/start` | Breadcrumb, per-position min/max counters, radio/checkbox groups, blank (abstain) option where allowed, privacy banner | Not open; closed; not eligible; already voted; stale version; session expired; load error | Selections held in component state only (A3); no autosave | ISSUE-08 |
+| Review & confirm | (step inside `/elections/:id/ballot`) | Voter | none (in-memory selections) | Per-position summary, `Edit` per position, confirm checkbox, `Submit ballot` disabled until confirmed, progress state | Validation failure focuses the first invalid position | No separate route; the step keeps state in one place | ISSUE-08 |
+| Confirmation | (state inside `/elections/:id/ballot`) | Voter who voted | submit response | `VoteRecordedNotice`, participation reference, links to status and elections list | n/a | No choice echo, no print/share | ISSUE-08 |
+| Vote status | `/elections/:id/status` | Voter | `GET /api/v1/elections/:id/my-vote-status` | Voted (coarse time, what it proves); no vote (open → `Open ballot`, closed → explanation); results link when the phase allows | Load error; session expired | Reached from every error state of the vote flow; no re-vote path for a recorded vote | ISSUE-08 |
+
 ## Pre-ISSUE-06 Views
 
 | View / Route | Roles | Data / API | Key Elements | States | Notes | Owning Issue |

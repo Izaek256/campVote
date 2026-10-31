@@ -1,6 +1,6 @@
 "use client";
 
-import { BallotContent } from "@campvote/shared/types/ballot-version";
+import type { BallotContent } from "@campvote/shared/types/ballot_version";
 
 interface BallotViewProps {
   content: BallotContent;
@@ -37,16 +37,14 @@ export function BallotView({ content, mode, onSelectionChange, selections = {} }
     onSelectionChange(positionId, ["ABSTAIN"]);
   };
 
-  const getSelectionCount = (positionId: string) => {
-    return selections[positionId]?.length || 0;
-  };
-
   return (
     <div className="space-y-8">
       {isPreview && (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
           <p className="font-medium">Preview Mode</p>
-          <p className="text-sm">No vote or participation is recorded. This is a ballot preview only.</p>
+          <p className="text-sm">
+            No vote or participation is recorded. This is a ballot preview only.
+          </p>
         </div>
       )}
 
@@ -60,9 +58,7 @@ export function BallotView({ content, mode, onSelectionChange, selections = {} }
           <div key={position.id} className="border rounded-lg p-6">
             <div className="mb-4">
               <h3 className="text-lg font-semibold">{position.title}</h3>
-              {position.description && (
-                <p className="text-gray-600 mt-1">{position.description}</p>
-              )}
+              {position.description && <p className="text-gray-600 mt-1">{position.description}</p>}
               <div className="mt-2 flex items-center gap-4 text-sm text-gray-500">
                 <span>Seats: {position.seats}</span>
                 <span>
@@ -80,7 +76,9 @@ export function BallotView({ content, mode, onSelectionChange, selections = {} }
                 return (
                   <button
                     key={candidate.id}
-                    onClick={() => handleSelection(position.id, candidate.id, position.question_type)}
+                    onClick={() =>
+                      handleSelection(position.id, candidate.id, position.question_type)
+                    }
                     disabled={isDisabled}
                     className={`w-full text-left p-4 border-2 rounded-lg transition-all ${
                       isSelected
@@ -131,7 +129,11 @@ export function BallotView({ content, mode, onSelectionChange, selections = {} }
                   <div className="flex items-center gap-2">
                     <span className="font-medium">Abstain</span>
                     {isAbstained && (
-                      <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                      <svg
+                        className="w-5 h-5 text-gray-600"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
                         <path
                           fillRule="evenodd"
                           d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
@@ -146,7 +148,8 @@ export function BallotView({ content, mode, onSelectionChange, selections = {} }
 
             {count < position.min_selections && !isPreview && (
               <p className="mt-3 text-sm text-red-600">
-                Minimum {position.min_selections} selection{position.min_selections > 1 ? "s" : ""} required
+                Minimum {position.min_selections} selection{position.min_selections > 1 ? "s" : ""}{" "}
+                required
               </p>
             )}
           </div>

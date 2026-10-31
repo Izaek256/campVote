@@ -30,6 +30,7 @@ const (
 	AuditActionPositionUpdated    = "POSITION_UPDATED"
 	AuditActionPositionDeleted    = "POSITION_DELETED"
 	AuditActionBallotPublished     = "BALLOT_PUBLISHED"
+	AuditActionVoteCast            = "VOTE_CAST"
 	AuditActionRecountTriggered    = "RECOUNT_TRIGGERED"
 	AuditActionResultsCertified    = "RESULTS_CERTIFIED"
 )

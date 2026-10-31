@@ -1,0 +1,946 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>campVote UI Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+/* Layout concept: fixed left index + a grid of spec cards. Every card = live demo + class name + rule. Sharp corners driven by --r. */
+:root{
+  --font-ui:'Space Grotesk','Segoe UI',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+  --r:0px;
+  --bg:#FFFFFF; --surface:#FFFFFF; --sunken:#F3F6F4; --ink:#0A0F0C; --ink-2:#38423D; --ink-3:#5B6761;
+  --line:#D3D9D6; --line-strong:#0A0F0C;
+  --g50:#EDF7F1; --g100:#D6EDDF; --g200:#AEDBC0; --g300:#7CC79A; --g400:#3FAE72; --g500:#1B9455; --g600:#12783F; --g700:#0D5F32; --g800:#0A4A27; --g900:#06301A;
+  --r50:#FDECEC; --r100:#F9D2D2; --r300:#E88A8A; --r500:#D13434; --r600:#B42424; --r700:#8F1B1B;
+  --primary:#12783F; --primary-hover:#0D5F32; --on-primary:#FFFFFF; --primary-soft:#EDF7F1; --primary-line:#AEDBC0;
+  --danger:#B42424; --danger-hover:#8F1B1B; --on-danger:#FFFFFF; --danger-soft:#FDECEC; --danger-line:#E88A8A;
+  --focus:#1B9455; --disabled-bg:#EEF1EF; --disabled-ink:#7A8680;
+  --scrim:rgba(10,15,12,.6);
+  --hatch:repeating-linear-gradient(135deg,transparent 0 5px,rgba(18,120,63,.28) 5px 6px);
+  --ease:cubic-bezier(.2,.7,.2,1);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#070A08; --surface:#0D1310; --sunken:#131B17; --ink:#F2F7F4; --ink-2:#B7C3BC; --ink-3:#8D9B94;
+  --line:#25302A; --line-strong:#F2F7F4;
+  --primary:#3FAE72; --primary-hover:#5CC48A; --on-primary:#04120A; --primary-soft:#0F2A1C; --primary-line:#1F5A3A;
+  --danger:#F06A6A; --danger-hover:#F58A8A; --on-danger:#1A0505; --danger-soft:#2A1011; --danger-line:#7A2B2D;
+  --focus:#7CC79A; --disabled-bg:#18201C; --disabled-ink:#6C7A73; --scrim:rgba(0,0,0,.72);
+  --hatch:repeating-linear-gradient(135deg,transparent 0 5px,rgba(124,199,154,.3) 5px 6px);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#070A08; --surface:#0D1310; --sunken:#131B17; --ink:#F2F7F4; --ink-2:#B7C3BC; --ink-3:#8D9B94;
+  --line:#25302A; --line-strong:#F2F7F4;
+  --primary:#3FAE72; --primary-hover:#5CC48A; --on-primary:#04120A; --primary-soft:#0F2A1C; --primary-line:#1F5A3A;
+  --danger:#F06A6A; --danger-hover:#F58A8A; --on-danger:#1A0505; --danger-soft:#2A1011; --danger-line:#7A2B2D;
+  --focus:#7CC79A; --disabled-bg:#18201C; --disabled-ink:#6C7A73; --scrim:rgba(0,0,0,.72);
+  --hatch:repeating-linear-gradient(135deg,transparent 0 5px,rgba(124,199,154,.3) 5px 6px);
+  color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+*,*::before,*::after{box-sizing:border-box}
+h1,h2,h3,h4,p,ul,ol,figure,dl,dd{margin:0}ul,ol{padding:0;list-style:none}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--primary);text-underline-offset:3px}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.mono{font-family:var(--font-mono)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+svg.i{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:square;stroke-linejoin:miter}
+svg.i.s{width:14px;height:14px}svg.i.l{width:24px;height:24px}
+
+/* ===== page shell ===== */
+.shell{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:100vh;padding-left:max(0px,env(safe-area-inset-left,0px));padding-right:max(0px,env(safe-area-inset-right,0px))}
+.index{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;border-right:1px solid var(--line);padding:24px 16px;display:flex;flex-direction:column;gap:20px;background:var(--bg)}
+.index .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;letter-spacing:-.01em;text-decoration:none;color:var(--ink)}
+.index .brand b{font-weight:400}
+.mark{width:28px;height:28px;background:var(--ink);display:grid;place-items:center;border-radius:var(--r)}
+.mark svg{width:20px;height:20px}
+.index nav{display:flex;flex-direction:column;gap:2px}
+.index nav a{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;color:var(--ink-2);text-decoration:none;font-weight:500;border-radius:var(--r);border-left:2px solid transparent}
+.index nav a:hover{background:var(--sunken);color:var(--ink)}
+.index nav a.on{color:var(--ink);font-weight:700;border-left-color:var(--primary);background:var(--sunken)}
+.index nav a span{font-family:var(--font-mono);font-size:11px;color:var(--ink-3)}
+.ctrls{margin-top:auto;display:flex;flex-direction:column;gap:8px}
+.ctrls .lab{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.main{min-width:0;padding-left:max(32px,env(safe-area-inset-left,0px));padding-right:max(32px,env(safe-area-inset-right,0px));padding-block:0 96px}
+.hero{padding:56px 0 40px;border-bottom:1px solid var(--line-strong);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:end}
+.hero h1{font-size:clamp(40px,6vw,76px);line-height:.98;letter-spacing:-.035em;font-weight:700}
+.hero p{margin-top:16px;max-width:60ch;color:var(--ink-2);font-size:18px;line-height:1.5}
+.hero .meta{display:grid;grid-template-columns:auto auto;gap:6px 24px;font-family:var(--font-mono);font-size:12px;color:var(--ink-2)}
+.hero .meta dt{color:var(--ink-3)}
+.sec{padding-top:64px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--line-strong);margin-bottom:24px}
+.sec-h h2{font-size:32px;letter-spacing:-.02em;line-height:1.1}
+.sec-h .mono{font-size:12px;color:var(--ink-3)}
+.sec>.lead{max-width:70ch;color:var(--ink-2);margin:-8px 0 24px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr))}
+.grid.w2{grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr))}
+.grid.w3{grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))}
+.full{grid-column:1/-1}
+.spec{border:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;min-width:0;border-radius:var(--r)}
+.spec-h{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.spec-h h3{font-size:14px;font-weight:700;letter-spacing:.01em}
+.spec-h code{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-3);text-align:right}
+.demo{padding:20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;flex:1}
+.demo.col{flex-direction:column;align-items:stretch}
+.demo.pad0{padding:0}.demo.sx{overflow-x:auto;flex-wrap:nowrap}
+.demo.sunk{background:var(--sunken)}
+.cap{padding:10px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-2);background:var(--sunken)}
+.cap b{color:var(--ink)}
+.lbl{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+
+/* ===== tokens ===== */
+.ramp{display:grid;grid-template-columns:repeat(10,minmax(0,1fr))}
+.ramp div{padding:6px;font-family:var(--font-mono);font-size:10.5px;display:flex;flex-direction:column;justify-content:flex-end}
+.demo>.ramp{flex:1}.ramp div{min-height:72px}.ramp.r{grid-template-columns:repeat(6,minmax(0,1fr))}
+.sw-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:0;border:1px solid var(--line)}
+.sw-row div{padding:10px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-family:var(--font-mono);font-size:11px;display:flex;flex-direction:column;gap:2px}
+.sw-row i{display:block;height:36px;border:1px solid var(--line);margin-bottom:6px;border-radius:var(--r)}
+.type-row{display:grid;grid-template-columns:140px minmax(0,1fr);gap:16px;align-items:baseline;padding:14px 20px;border-bottom:1px solid var(--line)}
+.type-row:last-child{border-bottom:0}
+.type-row .mono{font-size:11.5px;color:var(--ink-3)}
+.sp{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.sp div{background:var(--primary);width:var(--w);height:24px}
+.sp span{display:flex;flex-direction:column;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--ink-3)}
+.iconsg{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));width:100%;border:1px solid var(--line)}
+.iconsg div{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 4px;font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.iconsg svg{color:var(--ink);width:22px;height:22px}
+
+/* ===== buttons ===== */
+.btn{--h:44px;position:relative;display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:var(--h);padding:0 20px;border:1.5px solid var(--line-strong);background:var(--surface);color:var(--ink);font-weight:600;font-size:15px;letter-spacing:.005em;line-height:1;text-decoration:none;cursor:pointer;border-radius:var(--r);transition:background .15s,color .15s,transform .08s,border-color .15s;white-space:nowrap}
+.btn:hover{background:var(--ink);color:var(--bg)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.btn.primary:hover{background:var(--primary-hover);border-color:var(--primary-hover);color:var(--on-primary)}
+.btn.danger{background:var(--danger);border-color:var(--danger);color:var(--on-danger)}
+.btn.danger:hover{background:var(--danger-hover);border-color:var(--danger-hover);color:var(--on-danger)}
+.btn.danger-o{border-color:var(--danger);color:var(--danger)}
+.btn.danger-o:hover{background:var(--danger);color:var(--on-danger)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink)}
+.btn.ghost:hover{background:var(--sunken);color:var(--ink)}
+.btn.sm{--h:34px;padding:0 14px;font-size:13.5px}
+.btn.lg{--h:56px;padding:0 28px;font-size:17px}
+.btn.block{display:flex;width:100%}
+.btn.icon{padding:0;width:var(--h)}
+.btn[disabled],.btn.dis{background:var(--disabled-bg);border-color:var(--line);color:var(--disabled-ink);cursor:not-allowed;transform:none}
+.btn[disabled]:hover{background:var(--disabled-bg);color:var(--disabled-ink)}
+.btn.is-focus{outline:3px solid var(--focus);outline-offset:2px}
+.btn.is-hover{background:var(--ink);color:var(--bg)}
+.btn.primary.is-hover{background:var(--primary-hover);color:var(--on-primary)}
+.btn .lab-ok,.btn .lab-load{display:none}
+.btn[data-state="loading"]{pointer-events:none}
+.btn[data-state="loading"] .lab-idle,.btn[data-state="done"] .lab-idle{display:none}
+.btn[data-state="loading"] .lab-load,.btn[data-state="done"] .lab-ok{display:inline-flex;align-items:center;gap:10px}
+.btn[data-state="done"]{pointer-events:none;background:var(--g800);border-color:var(--g800);color:#fff}
+:root[data-theme="dark"] .btn[data-state="done"]{background:var(--g300);border-color:var(--g300);color:#04120A}
+.btn[data-bar]::after{content:"";position:absolute;left:0;bottom:0;height:3px;width:0;background:currentColor;opacity:.7}
+.btn[data-bar][data-state="loading"]::after{animation:fill 1.8s linear forwards}
+@keyframes fill{to{width:100%}}
+.spin{width:18px;height:18px;border:2.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:rot .7s linear infinite;flex:none}
+.spin.sq{border-radius:0;animation:rot .9s steps(8) infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.dots{display:inline-flex;gap:4px}.dots i{width:6px;height:6px;background:currentColor;animation:blink 1s infinite}.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes blink{0%,60%,100%{opacity:.25}30%{opacity:1}}
+.tick{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:square;stroke-dasharray:24;stroke-dashoffset:24}
+.btn[data-state="done"] .tick,.draw .tick{animation:draw .45s var(--ease) .05s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+/* ===== loaders ===== */
+.loader-box{display:grid;place-items:center;gap:12px;padding:12px;width:100%;text-align:center;font-family:var(--font-mono);font-size:11.5px;color:var(--ink-3)}
+.ld-ring{width:40px;height:40px;border:4px solid var(--g100);border-top-color:var(--primary);border-radius:50%;animation:rot .8s linear infinite}
+.ld-sq{width:40px;height:40px;border:4px solid var(--line);border-top-color:var(--ink);animation:rot 1s steps(8) infinite}
+.ld-grid{display:grid;grid-template-columns:repeat(3,10px);gap:4px}.ld-grid i{width:10px;height:10px;background:var(--primary);animation:blink 1.2s infinite}
+.ld-grid i:nth-child(2),.ld-grid i:nth-child(4){animation-delay:.15s}.ld-grid i:nth-child(3),.ld-grid i:nth-child(5),.ld-grid i:nth-child(7){animation-delay:.3s}.ld-grid i:nth-child(6),.ld-grid i:nth-child(8){animation-delay:.45s}.ld-grid i:nth-child(9){animation-delay:.6s}
+.ld-bar{width:100%;height:4px;background:var(--g100);overflow:hidden;position:relative}
+.ld-bar::after{content:"";position:absolute;inset:0;width:35%;background:var(--primary);animation:slide 1.3s var(--ease) infinite}
+@keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
+.ld-steps{display:flex;gap:4px;width:100%}.ld-steps i{flex:1;height:8px;background:var(--line)}.ld-steps i.on{background:var(--primary)}.ld-steps i.cur{background:var(--primary);animation:blink 1s infinite}
+.skel{background:var(--sunken);position:relative;overflow:hidden;height:14px;border-radius:var(--r)}
+.skel::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(127,150,138,.22),transparent);transform:translateX(-100%);animation:sh 1.4s infinite}
+@keyframes sh{to{transform:translateX(100%)}}
+.ring{--p:68;width:96px;height:96px;display:grid;place-items:center;position:relative}
+.ring svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:8}
+.ring .bg{stroke:var(--g100)}.ring .fg{stroke:var(--primary);stroke-dasharray:264;stroke-dashoffset:calc(264 - 264 * var(--p) / 100);transition:stroke-dashoffset .8s var(--ease)}
+.ring b{font-size:20px;font-variant-numeric:tabular-nums}
+.pagebar{position:relative;height:3px;background:transparent;width:100%;overflow:hidden}
+.pagebar i{position:absolute;left:0;top:0;bottom:0;background:var(--primary);width:0;animation:pg 2.4s var(--ease) infinite}
+@keyframes pg{0%{width:0}70%{width:85%}100%{width:100%;opacity:0}}
+
+/* ===== inputs ===== */
+.field{display:flex;flex-direction:column;gap:6px;width:100%}
+.field>label,.field>.l{font-weight:600;font-size:14px}
+.field .hint{font-size:13px;color:var(--ink-3)}
+.field .err{font-size:13px;color:var(--danger);display:flex;gap:6px;align-items:flex-start;font-weight:500}
+.field .okm{font-size:13px;color:var(--primary);display:flex;gap:6px;font-weight:500}
+.in,.sel,.ta{width:100%;min-height:44px;padding:0 12px;border:1.5px solid var(--line-strong);background:var(--surface);border-radius:var(--r);font-size:15px;color:var(--ink)}
+.in::placeholder,.ta::placeholder{color:var(--ink-3)}
+.in:hover,.sel:hover,.ta:hover{background:var(--sunken)}
+.in:focus-visible,.sel:focus-visible,.ta:focus-visible{outline:3px solid var(--focus);outline-offset:0}
+.ta{min-height:96px;padding:10px 12px;resize:vertical}
+.sel{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23808B85' stroke-width='2' stroke-linecap='square'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;background-size:18px;padding-right:36px}
+.in.bad{border-color:var(--danger);box-shadow:inset 0 0 0 1px var(--danger)}
+.in.good{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+.in[disabled]{background:var(--disabled-bg);border-color:var(--line);color:var(--disabled-ink);cursor:not-allowed}
+.affix{display:flex;width:100%}.affix .in{border-right:0}.affix .sfx{display:grid;place-items:center;padding:0 12px;border:1.5px solid var(--line-strong);background:var(--sunken);font-family:var(--font-mono);font-size:12.5px;font-weight:500}
+.chk{display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:15px}
+.chk input{appearance:none;flex:none;width:22px;height:22px;margin:0;border:1.5px solid var(--line-strong);background:var(--surface);display:grid;place-content:center;cursor:pointer;border-radius:var(--r)}
+.chk input[type=radio]{border-radius:50%}
+.chk input:checked{background:var(--primary);border-color:var(--primary)}
+.chk input[type=checkbox]:checked::after{content:"";width:12px;height:7px;border-left:2.5px solid var(--on-primary);border-bottom:2.5px solid var(--on-primary);transform:rotate(-45deg) translate(1px,-1px)}
+.chk input[type=radio]:checked{background:var(--surface)}
+.chk input[type=radio]:checked::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--primary)}
+.chk input:indeterminate{background:var(--primary);border-color:var(--primary)}
+.chk input:indeterminate::after{content:"";width:10px;height:2.5px;background:var(--on-primary)}
+.chk input[disabled]{background:var(--disabled-bg);border-color:var(--line);cursor:not-allowed}
+.chk input[disabled]+span{color:var(--disabled-ink)}
+.chk input:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.swt{display:flex;gap:12px;align-items:center;cursor:pointer}
+.swt input{appearance:none;width:48px;height:26px;margin:0;border:1.5px solid var(--line-strong);background:var(--surface);position:relative;cursor:pointer;border-radius:var(--r);transition:background .2s}
+.swt input::after{content:"";position:absolute;top:3px;left:3px;width:17px;height:17px;background:var(--ink);border-radius:var(--r);transition:transform .2s var(--ease),background .2s}
+.swt input:checked{background:var(--primary);border-color:var(--primary)}
+.swt input:checked::after{transform:translateX(22px);background:var(--on-primary)}
+.swt input:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.seg{display:inline-flex;border:1.5px solid var(--line-strong);border-radius:var(--r);overflow:hidden}
+.seg button{border:0;border-right:1.5px solid var(--line-strong);background:var(--surface);padding:0 16px;min-height:38px;font-weight:600;font-size:14px;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.drop{display:grid;place-items:center;gap:6px;text-align:center;padding:28px 16px;border:1.5px dashed var(--line-strong);background:var(--surface);width:100%;border-radius:var(--r)}
+.otp{display:flex;gap:8px}.otp input{width:48px;height:56px;text-align:center;font-family:var(--font-mono);font-size:22px;font-weight:500;border:1.5px solid var(--line-strong);background:var(--surface);border-radius:var(--r);padding:0}
+.otp input:focus-visible{outline:3px solid var(--focus);outline-offset:0}
+.searchbox{position:relative;width:100%}.searchbox svg{position:absolute;left:12px;top:13px;color:var(--ink-3)}.searchbox .in{padding-left:40px}
+
+/* ===== feedback ===== */
+.banner{display:flex;gap:12px;padding:12px 14px;border:1px solid var(--line);border-left-width:1px;background:var(--surface);width:100%;border-radius:var(--r);font-size:14px}
+.banner svg{margin-top:2px}.banner b{display:block}
+.banner.ok{background:var(--primary-soft);border-color:var(--primary-line)}.banner.ok svg{color:var(--primary)}
+.banner.bad{background:var(--danger-soft);border-color:var(--danger-line)}.banner.bad svg{color:var(--danger)}
+.banner.hatch{background:var(--surface);background-image:var(--hatch);border-color:var(--line-strong)}
+.banner.hatch>div{background:var(--surface);padding:0 6px}
+.chip{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;font-size:12.5px;font-weight:600;border:1px solid var(--line-strong);background:var(--surface);border-radius:var(--r);white-space:nowrap}
+.chip::before{content:"";width:7px;height:7px;background:currentColor}
+.chip.open{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.chip.sched{border-color:var(--primary);color:var(--primary)}
+.chip.draft{border-color:var(--line);color:var(--ink-3);background:var(--sunken)}
+.chip.review{background-image:var(--hatch);border-color:var(--ink)}
+.chip.final{background:var(--g900);border-color:var(--g900);color:#fff}
+:root[data-theme="dark"] .chip.final{background:var(--g200);border-color:var(--g200);color:#04120A}
+.chip.cancel{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.chip.closed{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.chip.nd::before{display:none}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 8px;border:1px solid var(--line);font-family:var(--font-mono);font-size:11.5px;color:var(--ink-2);border-radius:var(--r)}
+.toasts{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;z-index:60;width:min(380px,calc(100vw - 32px))}
+.toast{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;background:var(--ink);color:var(--bg);border-radius:var(--r);animation:tin .3s var(--ease);font-size:14px}
+.toast.bad{background:var(--danger);color:var(--on-danger)}
+.toast.ok svg{color:var(--g300)}
+.toast .x{margin-left:auto;background:none;border:0;color:inherit;cursor:pointer;padding:0}
+.toast.out{animation:tout .25s forwards}
+@keyframes tin{from{transform:translateY(12px);opacity:0}}
+@keyframes tout{to{transform:translateX(24px);opacity:0}}
+.modal-wrap{position:fixed;inset:0;background:var(--scrim);display:none;place-items:center;padding:16px;z-index:50}
+.modal-wrap.on{display:grid;animation:fade .2s}
+.modal{background:var(--surface);width:min(480px,100%);border:1.5px solid var(--line-strong);border-radius:var(--r);animation:pop .25s var(--ease)}
+.modal-h{padding:20px 24px 0;display:flex;justify-content:space-between;gap:12px}.modal-h h3{font-size:20px;letter-spacing:-.01em}
+.modal-b{padding:12px 24px 20px;display:flex;flex-direction:column;gap:14px;color:var(--ink-2)}
+.modal-f{padding:14px 24px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px;background:var(--sunken)}
+@keyframes fade{from{opacity:0}}@keyframes pop{from{transform:translateY(8px) scale(.98);opacity:0}}
+.tip{position:relative;display:inline-block}
+.tip>span{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);background:var(--ink);color:var(--bg);font-size:12.5px;padding:6px 10px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s}
+.tip:hover>span,.tip:focus-within>span{opacity:1}
+.prog{height:10px;background:var(--g100);width:100%;border-radius:var(--r);overflow:hidden}
+.prog i{display:block;height:100%;background:var(--primary);transition:width .6s var(--ease)}
+.prog.red{background:var(--r100)}.prog.red i{background:var(--danger)}
+.empty{display:grid;place-items:center;text-align:center;gap:8px;padding:28px 16px;width:100%}
+.empty .ic{width:56px;height:56px;border:1.5px solid var(--line-strong);display:grid;place-items:center;background-image:var(--hatch);border-radius:var(--r)}
+.empty .ic svg{background:var(--surface);padding:2px}
+.stamp{display:grid;place-items:center;gap:14px;text-align:center;padding:12px;width:100%}
+.stamp .badge{width:72px;height:72px;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;border-radius:var(--r)}
+.stamp .badge .tick{width:36px;height:36px;stroke-width:3;stroke-dasharray:30;stroke-dashoffset:30}
+.stamp.go .badge{animation:pop2 .5s var(--ease)}
+.stamp.go .tick{animation:draw .5s var(--ease) .15s forwards}
+@keyframes pop2{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
+
+/* ===== navigation ===== */
+.crumbs{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--ink-3);flex-wrap:wrap}.crumbs a{color:var(--ink-2)}.crumbs span:last-child{color:var(--ink);font-weight:600}
+.tabs{display:flex;border-bottom:1.5px solid var(--line-strong);overflow-x:auto;width:100%}
+.tabs button{border:0;background:none;padding:12px 16px;font-weight:500;font-size:15px;cursor:pointer;color:var(--ink-2);border-bottom:3px solid transparent;margin-bottom:-1.5px;white-space:nowrap;display:flex;gap:8px;align-items:center}
+.tabs button:hover{color:var(--ink);background:var(--sunken)}
+.tabs button[aria-selected="true"]{color:var(--ink);font-weight:700;border-bottom-color:var(--primary)}
+.count{font-family:var(--font-mono);font-size:11.5px;padding:1px 6px;background:var(--ink);color:var(--bg);border-radius:var(--r)}
+.stepper{min-width:560px;display:flex;align-items:center;width:100%}
+.stepper .s{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;color:var(--ink-3);white-space:nowrap}
+.stepper .s i{width:28px;height:28px;display:grid;place-items:center;border:1.5px solid var(--line-strong);font-style:normal;font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--ink);background:var(--surface);border-radius:var(--r)}
+.stepper .s.done i{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.stepper .s.cur{color:var(--ink);font-weight:700}.stepper .s.cur i{background:var(--ink);color:var(--bg)}
+.stepper .ln{flex:1;height:1.5px;background:var(--line-strong);margin:0 10px;min-width:12px}.stepper .ln.done{background:var(--primary);height:3px}
+.pager{display:flex;gap:0}.pager button{min-width:40px;height:40px;border:1.5px solid var(--line-strong);margin-left:-1.5px;background:var(--surface);cursor:pointer;font-weight:600;font-variant-numeric:tabular-nums}
+.pager button:first-child{margin-left:0;border-radius:var(--r) 0 0 var(--r)}.pager button:last-child{border-radius:0 var(--r) var(--r) 0}
+.pager button[aria-current]{background:var(--ink);color:var(--bg)}
+.rail{min-width:560px;display:flex;width:100%}
+.rail .ls{flex:1;padding-top:10px;border-top:4px solid var(--line);font-size:12px;color:var(--ink-3);font-weight:500;margin-right:4px}
+.rail .ls.done{border-top-color:var(--primary);color:var(--ink-2)}.rail .ls.cur{border-top-color:var(--ink);color:var(--ink);font-weight:700}
+.dev{border:1.5px solid var(--line-strong);background:var(--surface);overflow:hidden;position:relative;border-radius:var(--r)}
+.dev-d{display:grid;grid-template-columns:200px minmax(0,1fr);height:380px;width:100%}
+.d-side{background:#0A0F0C;color:#C9D5CE;padding:14px 10px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
+.d-side .b{display:flex;align-items:center;gap:8px;color:#fff;font-weight:700;padding:4px 8px 14px}
+.d-side a{display:flex;gap:10px;align-items:center;padding:8px 10px;color:inherit;text-decoration:none;border-radius:var(--r)}
+.d-side a.on{background:#1B2A22;color:#fff;border-left:3px solid var(--g400);padding-left:7px}
+.d-side .h{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#7C8C84;padding:12px 10px 4px}
+.d-main{display:flex;flex-direction:column;min-width:0;background:var(--sunken)}
+.d-top{display:flex;align-items:center;justify-content:space-between;height:48px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+.d-body{padding:16px;display:grid;gap:12px;grid-template-columns:repeat(3,1fr);align-content:start}
+.blk{background:var(--surface);border:1px solid var(--line);padding:10px;min-height:56px;display:flex;flex-direction:column;gap:6px;border-radius:var(--r)}
+.blk .skel{height:8px}.blk.w2{grid-column:span 2}.blk.w3{grid-column:1/-1}.blk.tall{min-height:120px}
+.dev-t{display:grid;grid-template-columns:56px minmax(0,1fr);height:380px;width:100%;max-width:520px}
+.t-rail{background:#0A0F0C;display:flex;flex-direction:column;align-items:center;gap:10px;padding:12px 0;color:#C9D5CE}
+.t-rail .on{background:#1B2A22;color:#fff;padding:8px;border-left:3px solid var(--g400)}
+.t-rail svg{width:20px;height:20px}
+.dev-m{width:320px;max-width:100%;height:560px;display:flex;flex-direction:column;margin:0 auto}
+.m-top{display:flex;align-items:center;justify-content:space-between;padding:0 14px;height:56px;border-bottom:1.5px solid var(--line-strong);background:var(--surface)}
+.m-body{flex:1;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--sunken);overflow:hidden}
+.m-tabs{display:grid;grid-template-columns:repeat(4,1fr);border-top:1.5px solid var(--line-strong);background:var(--surface)}
+.m-tabs a{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 10px;min-height:56px;font-size:11.5px;font-weight:600;color:var(--ink-3);text-decoration:none}
+.m-tabs a.on{color:var(--ink);box-shadow:inset 0 3px 0 var(--primary)}
+.m-draw{position:absolute;inset:0;display:grid;grid-template-columns:78% 22%}
+.m-draw .pnl{background:var(--surface);border-right:1.5px solid var(--line-strong);padding:16px;display:flex;flex-direction:column;gap:2px}
+.m-draw .pnl a{padding:12px 8px;border-bottom:1px solid var(--line);color:var(--ink);text-decoration:none;font-weight:600;display:flex;justify-content:space-between}
+.m-draw .sc{background:var(--scrim)}
+.pubnav{min-width:640px;display:flex;align-items:center;gap:24px;width:100%;padding:0 20px;height:64px;border-bottom:1.5px solid var(--line-strong);background:var(--surface)}
+.pubnav .lk{display:flex;gap:4px;height:100%}.pubnav .lk a{display:flex;align-items:center;padding:0 12px;color:var(--ink-2);text-decoration:none;font-weight:500;border-bottom:3px solid transparent}
+.pubnav .lk a.on{color:var(--ink);font-weight:700;border-bottom-color:var(--primary)}
+
+/* ===== data ===== */
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th{text-align:left;font-size:12px;font-family:var(--font-mono);letter-spacing:.04em;text-transform:uppercase;font-weight:500;color:var(--ink-2);padding:10px 14px;border-bottom:1.5px solid var(--line-strong);background:var(--sunken);white-space:nowrap}
+.tbl td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tr:hover td{background:var(--sunken)}.tbl tr.sel td{background:var(--primary-soft)}
+.tbl .r{text-align:right;font-variant-numeric:tabular-nums}
+.tbl-wrap{overflow-x:auto;width:100%}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:100%}
+.kpi{padding:16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:2px}.kpi:last-child{border-right:0}
+.kpi .l{font-size:13px;color:var(--ink-2);font-weight:500}.kpi .v{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1.15;font-variant-numeric:tabular-nums}.kpi .s{font-size:12.5px;color:var(--ink-3);font-family:var(--font-mono)}
+.tally{display:flex;flex-direction:column;gap:14px;width:100%}
+.trow{display:grid;grid-template-columns:150px minmax(0,1fr) 110px;gap:14px;align-items:center;font-size:14px}
+.trow .bar{height:18px;background:var(--g50);border:1px solid var(--line)}.trow .bar i{display:block;height:100%;background:var(--g300)}.trow .bar.lead i{background:var(--primary)}
+.trow .vl{text-align:right;font-variant-numeric:tabular-nums}
+.lead-tag{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;background:var(--ink);color:var(--bg);padding:1px 6px;margin-left:6px}
+.card{border:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;border-radius:var(--r);width:100%}
+.card .cb{padding:14px;display:flex;flex-direction:column;gap:8px}
+.ph{display:grid;place-items:center;background-color:var(--g50);background-image:var(--hatch);color:var(--primary);font-family:var(--font-mono);font-size:12px;font-weight:500;position:relative;border:1px solid var(--line);border-radius:var(--r)}
+.ph span{background:var(--surface);padding:2px 8px;border:1px solid var(--line)}
+.ph.r45{aspect-ratio:4/5}.ph.r169{aspect-ratio:16/9}.ph.r11{aspect-ratio:1}.ph.r31{aspect-ratio:3/1}
+.av{width:40px;height:40px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-weight:700;font-size:14px;flex:none;border-radius:var(--r)}
+.av.g{background:var(--primary);color:var(--on-primary)}.av.o{background:var(--surface);color:var(--ink);border:1.5px solid var(--line-strong)}.av.sm{width:28px;height:28px;font-size:11px}.av.lg{width:64px;height:64px;font-size:22px}
+.tl{display:flex;flex-direction:column;width:100%}
+.tl div{display:grid;grid-template-columns:18px 1fr;gap:12px;padding-bottom:16px;position:relative;font-size:14px}
+.tl div::before{content:"";position:absolute;left:8px;top:18px;bottom:0;width:2px;background:var(--line)}
+.tl div:last-child::before{display:none}.tl div:last-child{padding-bottom:0}
+.tl i{width:18px;height:18px;border:1.5px solid var(--line-strong);background:var(--surface);margin-top:2px}
+.tl .done i{background:var(--primary);border-color:var(--primary)}.tl .cur i{background:var(--ink)}
+.tl small{display:block;color:var(--ink-3);font-family:var(--font-mono);font-size:11.5px}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:8px 16px;font-size:14px;width:100%}.kv dt{color:var(--ink-3)}.kv dd{margin:0}
+.hash{font-family:var(--font-mono);font-size:12px;background:var(--sunken);padding:2px 6px;border:1px solid var(--line);word-break:break-all}
+.audit{display:grid;grid-template-columns:96px 1fr auto;gap:12px;align-items:baseline;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13.5px;width:100%}
+.audit time{font-family:var(--font-mono);font-size:12px;color:var(--ink-3)}
+.chart{width:100%;height:auto;display:block}
+.chart text{font-family:var(--font-mono);font-size:10px;fill:var(--ink-3)}
+
+/* ===== ballot ===== */
+.opt{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1.5px solid var(--line-strong);background:var(--surface);cursor:pointer;width:100%;text-align:left;border-radius:var(--r);min-height:72px}
+.opt:hover{background:var(--sunken)}
+.opt .nm{font-weight:700;font-size:16px;line-height:1.25}.opt .mt{font-size:13px;color:var(--ink-2)}
+.opt .box{width:24px;height:24px;border:1.5px solid var(--line-strong);flex:none;display:grid;place-items:center;border-radius:var(--r);background:var(--surface)}
+.opt .box.rd{border-radius:50%}
+.opt[aria-checked="true"]{border-color:var(--primary);background:var(--primary-soft);box-shadow:inset 0 0 0 1.5px var(--primary)}
+.opt[aria-checked="true"] .box{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.opt[aria-checked="true"] .box.rd{background:var(--surface)}
+.opt[aria-checked="true"] .box.rd::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--primary)}
+.opt .box svg{width:14px;height:14px;opacity:0;stroke-width:3}.opt[aria-checked="true"] .box:not(.rd) svg{opacity:1}
+.opt[aria-disabled="true"]{background:var(--disabled-bg);border-color:var(--line);color:var(--disabled-ink);cursor:not-allowed}
+.opt.bad{border-color:var(--danger);box-shadow:inset 0 0 0 1px var(--danger)}
+.counter{display:inline-flex;font-family:var(--font-mono);font-size:12.5px;border:1.5px solid var(--line-strong);padding:3px 10px;font-weight:500;border-radius:var(--r)}
+.counter.full{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.counter.bad{background:var(--danger);border-color:var(--danger);color:var(--on-danger)}
+.cd{display:flex;gap:0;border:1.5px solid var(--line-strong);width:max-content}
+.cd div{padding:8px 14px;text-align:center;border-right:1.5px solid var(--line-strong);min-width:64px}.cd div:last-child{border-right:0}
+.cd b{display:block;font-size:26px;font-variant-numeric:tabular-nums;line-height:1.1}.cd small{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3);text-transform:uppercase}
+.rank{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1.5px solid var(--line-strong);background:var(--surface);width:100%}
+.rank .n{width:32px;height:32px;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;font-weight:700;font-variant-numeric:tabular-nums;border-radius:var(--r)}
+
+/* ===== build brief ===== */
+pre.code{margin:0;padding:16px;overflow:auto;background:var(--ink);color:var(--bg);font-family:var(--font-mono);font-size:12.5px;line-height:1.65;max-height:420px;width:100%;border-radius:var(--r)}
+.rules{display:grid;gap:0;width:100%}.rules li{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:14px}
+.rules li:last-child{border-bottom:0}.rules .y{color:var(--primary)}.rules .n{color:var(--danger)}
+.map td:first-child{font-family:var(--font-mono);font-size:12.5px;white-space:nowrap}
+
+/* ===== animations ===== */
+.stg{min-height:132px;width:100%;display:grid;place-items:center;position:relative;overflow:hidden;gap:10px;align-content:center}
+.a-box{width:132px;height:64px;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;font-weight:700;border-radius:var(--r)}
+@keyframes routeIn{from{opacity:0;transform:translateX(28px)}}
+@keyframes routeUp{from{opacity:0;transform:translateY(12px)}}
+@keyframes drIn{from{transform:translateX(100%)}}
+@keyframes menuIn{from{opacity:0;transform:translateY(-6px)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+@keyframes flash{0%{background:var(--g200)}100%{background:transparent}}
+@keyframes grow{from{transform:scaleX(0)}}
+@keyframes skel{0%,80%{opacity:1}100%{opacity:0}}
+@keyframes fadeIn{from{opacity:0}}
+@keyframes fillw{from{width:0}}
+@keyframes ping{0%{transform:scale(1);opacity:.6}100%{transform:scale(3);opacity:0}}
+.go .a-route{animation:routeIn .35s var(--ease)}
+.go .a-pop{animation:pop .25s var(--ease)}
+.a-dr-wrap{width:100%;height:132px;border:1px solid var(--line);position:relative;overflow:hidden;background:var(--sunken)}
+.a-dr{position:absolute;top:0;right:0;bottom:0;width:55%;background:var(--surface);border-left:1.5px solid var(--line-strong);padding:12px;display:flex;flex-direction:column;gap:8px}
+.go .a-dr{animation:drIn .35s var(--ease)}
+.a-menu{width:180px;background:var(--surface);border:1.5px solid var(--line-strong);display:flex;flex-direction:column;padding:4px;border-radius:var(--r)}
+.a-menu span{padding:8px 10px;font-size:14px}.a-menu span:first-child{background:var(--sunken)}
+.go .a-menu{animation:menuIn .18s var(--ease)}
+.go .a-toast{animation:tin .3s var(--ease),tout .25s 1.8s forwards}
+.a-skwrap{position:relative;width:100%;min-height:76px}
+.a-sk{position:absolute;inset:0;opacity:0;background:var(--surface);display:flex;flex-direction:column;gap:10px;pointer-events:none}
+.go .a-sk{animation:skel 1.2s forwards}
+.go .a-ct{animation:fadeIn .3s 1.05s both}
+.go .a-grow i{transform-origin:left;animation:grow .9s var(--ease) both}
+.go .a-grow .trow:nth-child(2) i{animation-delay:.1s}.go .a-grow .trow:nth-child(3) i{animation-delay:.2s}
+.a-live{display:flex;align-items:baseline;gap:10px;padding:6px 10px}
+.a-live.fl{animation:flash 1.2s}
+.go .a-shake{animation:shake .4s}
+.go .a-stg>*{animation:routeUp .4s var(--ease) both}
+.go .a-stg>*:nth-child(2){animation-delay:.08s}.go .a-stg>*:nth-child(3){animation-delay:.16s}.go .a-stg>*:nth-child(4){animation-delay:.24s}
+.a-stg{display:flex;flex-direction:column;gap:6px;width:100%}
+.a-stg>*{padding:8px 12px;border:1px solid var(--line);background:var(--surface);font-size:14px}
+.go .a-tick .tick{animation:draw .45s var(--ease) forwards}
+.a-tickbox{width:56px;height:56px;border:2px solid var(--primary);color:var(--primary);display:grid;place-items:center;border-radius:var(--r)}
+.a-tickbox .tick{width:30px;height:30px;stroke-width:3;stroke-dasharray:30;stroke-dashoffset:30}
+.go .a-fill i{animation:fillw 1s var(--ease) both}
+.livedot{position:relative;display:inline-block;width:10px;height:10px;background:var(--primary)}
+.livedot::after{content:"";position:absolute;inset:0;background:var(--primary);animation:ping 1.6s infinite}
+.opt{transition:background .15s,border-color .15s,box-shadow .15s}
+/* ===== interactive ===== */
+.acc{width:100%;border:1px solid var(--line)}
+.acc-i{border-bottom:1px solid var(--line)}.acc-i:last-child{border-bottom:0}
+.acc-i>button{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px;background:var(--surface);border:0;font-weight:600;font-size:15px;text-align:left;cursor:pointer}
+.acc-i>button:hover{background:var(--sunken)}
+.acc-i>button svg{transition:transform .25s var(--ease)}
+.acc-i.open>button svg{transform:rotate(180deg)}
+.acc-p{display:grid;grid-template-rows:0fr;transition:grid-template-rows .25s var(--ease)}
+.acc-i.open .acc-p{grid-template-rows:1fr}
+.acc-p>div{overflow:hidden}.acc-p p{padding:0 14px 14px;color:var(--ink-2);font-size:14px}
+.pop-host{position:relative;display:inline-block}
+.pop{position:absolute;top:calc(100% + 6px);left:0;min-width:220px;background:var(--surface);border:1.5px solid var(--line-strong);padding:4px;z-index:5;display:none;border-radius:var(--r)}
+.pop.on{display:block;animation:menuIn .18s var(--ease)}
+.pop.right{left:auto;right:0}
+.pop a,.pop button.mi{display:flex;gap:10px;align-items:center;width:100%;padding:9px 10px;border:0;background:none;text-align:left;color:var(--ink);text-decoration:none;font-size:14px;cursor:pointer}
+.pop a:hover,.pop button.mi:hover,.pop .hl{background:var(--sunken)}
+.pop hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+.pop .nt{padding:10px;border-bottom:1px solid var(--line);font-size:13.5px;display:flex;gap:10px}
+.pop .nt.un::before{content:"";width:8px;height:8px;background:var(--primary);margin-top:6px;flex:none}
+.badge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 4px;background:var(--danger);color:var(--on-danger);font-size:11px;font-weight:700;display:grid;place-items:center;font-family:var(--font-mono)}
+.cal{width:100%;border:1.5px solid var(--line-strong);background:var(--surface)}
+.cal-h{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);font-weight:700}
+.cal-g{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-g span,.cal-g button{height:38px;display:grid;place-items:center;border:0;background:none;font-size:13.5px;font-variant-numeric:tabular-nums}
+.cal-g span{font-family:var(--font-mono);font-size:11px;color:var(--ink-3)}
+.cal-g button{cursor:pointer}.cal-g button:hover{background:var(--sunken)}
+.cal-g button[aria-pressed="true"]{background:var(--primary);color:var(--on-primary);font-weight:700}
+.cal-g button.mut{color:var(--ink-3)}
+.tagin{display:flex;flex-wrap:wrap;gap:6px;padding:6px;border:1.5px solid var(--line-strong);background:var(--surface);width:100%;min-height:44px;border-radius:var(--r)}
+.tagin .t{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 4px 0 10px;background:var(--primary-soft);border:1px solid var(--primary-line);font-size:13.5px;font-weight:500}
+.tagin .t button{border:0;background:none;width:22px;height:22px;display:grid;place-items:center;cursor:pointer;padding:0}
+.tagin input{border:0;outline:0;background:none;flex:1;min-width:100px;font-size:15px;padding:0 6px}
+.tagin:focus-within{outline:3px solid var(--focus);outline-offset:0}
+.th-s{cursor:pointer;user-select:none}.th-s button{all:unset;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.bulk{display:none;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--ink);color:var(--bg);width:100%;font-size:14px}.bulk.on{display:flex}
+.drw{width:min(440px,100%);background:var(--surface);border-left:1.5px solid var(--line-strong);display:flex;flex-direction:column;animation:drIn .35s var(--ease);height:100%}
+.hold{--p:0;position:relative;overflow:hidden;user-select:none;touch-action:none}
+.hold::before{content:"";position:absolute;inset:0;background:var(--g900);transform-origin:left;transform:scaleX(var(--p))}
+.hold>span{position:relative;display:inline-flex;align-items:center;gap:10px}
+.hold.done{background:var(--g800)}
+.upl{width:100%;display:flex;flex-direction:column;gap:8px}
+.fileline{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);font-size:14px}
+.fileline .mono{margin-left:auto;font-size:12px;color:var(--ink-3)}
+@media (max-width:960px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .index{position:sticky;height:auto;flex-direction:row;align-items:center;gap:12px;padding:10px 16px;z-index:20;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto}
+  .index nav{flex-direction:row;gap:0}.index nav a{white-space:nowrap;border-left:0;border-bottom:2px solid transparent}.index nav a.on{border-bottom-color:var(--primary)}.index nav a span{display:none}
+  .ctrls{margin:0 0 0 auto;flex-direction:row;align-items:center}.ctrls .lab{display:none}
+  .main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .hero{grid-template-columns:1fr}
+  .dev-d{grid-template-columns:150px minmax(0,1fr)}.d-body{grid-template-columns:1fr 1fr}
+  .kpis{grid-template-columns:1fr 1fr}.kpi:nth-child(2){border-right:0}.kpi:nth-child(-n+2){border-bottom:1px solid var(--line)}
+  .trow{grid-template-columns:100px minmax(0,1fr) 84px}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-7-7 7 7-7 7"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-5-5"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M1 21c0-4 3.6-7 8-7s8 3 8 7M17 4a4 4 0 0 1 0 8M23 21c0-3-2-5.5-5-6.5"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11 12 3l9 8v10H3zM9 21v-8h6v8"/></symbol>
+    <symbol id="i-ballot" viewBox="0 0 24 24"><path d="M3 13h18v8H3zM7 13V3h10v10M10 8h4"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M7 16v-5M12 16V6M17 16v-8"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><path d="M4 11h16v10H4zM8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20zM12 10v5M12 18h.01"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><path d="M3 5h18v16H3zM3 10h18M8 2v6M16 2v6"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M5 2h9l5 5v15H5zM14 2v5h5M8 13h8M8 17h6"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 20h16"/></symbol>
+    <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 4v12m0 0-5-5m5 5 5-5M4 20h16"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+    <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H3V3h6M16 17l5-5-5-5M21 12H9"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V3h8v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16zM14 6l4 4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5zM9 12l2 2 4-4"/></symbol>
+    <symbol id="i-hist" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 32 32"><path d="M2 27 11 10l6 10 3-5 10 12z" fill="currentColor" stroke="none"/><circle cx="24" cy="8" r="4" fill="currentColor" stroke="none"/></symbol>
+  </defs>
+</svg>
+
+<div class="shell">
+  <aside class="index" aria-label="Kit sections">
+    <a class="brand" href="#top"><span class="mark" style="color:var(--bg)"><svg viewBox="0 0 32 32"><use href="#i-moon"/></svg></span><span>camp<b>Vote</b></span></a>
+    <nav>
+      <a href="#foundations" class="on">Foundations<span>07</span></a>
+      <a href="#actions">Buttons &amp; actions<span>06</span></a>
+      <a href="#loaders">Loaders &amp; motion<span>09</span></a>
+      <a href="#inputs">Inputs<span>11</span></a>
+      <a href="#feedback">Feedback<span>10</span></a>
+      <a href="#navigation">Navigation<span>11</span></a>
+      <a href="#data">Data display<span>14</span></a>
+      <a href="#ballot">Voting parts<span>06</span></a>
+      <a href="#animations">Animations<span>13</span></a>
+      <a href="#interactive">Interactive parts<span>14</span></a>
+      <a href="#brief">LLM build brief<span>03</span></a>
+    </nav>
+    <div class="ctrls">
+      <span class="lab">Theme</span>
+      <div class="seg" role="group" aria-label="Theme"><button type="button" data-theme-set="light" aria-pressed="true">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div>
+      <span class="lab">Corners (--r)</span>
+      <div class="seg" role="group" aria-label="Corner radius"><button type="button" data-r="0px" aria-pressed="true">0</button><button type="button" data-r="10px" aria-pressed="false">10</button></div>
+    </div>
+  </aside>
+
+  <main class="main" id="top">
+    <header class="hero">
+      <div>
+        <div class="lbl">UI kit · v0.1 · for builders and LLMs</div>
+        <h1 style="margin-top:12px">campVote<br>interface kit</h1>
+        <p>Sharp, symmetric, white and black with greens and one red. Every component below is live. Corner radius, theme and fonts are tokens, so one change restyles everything.</p>
+      </div>
+      <dl class="meta"><dt>Font UI</dt><dd>Space Grotesk</dd><dt>Font data</dt><dd>IBM Plex Mono</dd><dt>Radius</dt><dd>--r: 0px</dd><dt>Grid</dt><dd>8px base</dd><dt>Time</dt><dd>EAT (UTC+3)</dd></dl>
+    </header>
+
+    <!-- ================= FOUNDATIONS ================= -->
+    <section class="sec" id="foundations">
+      <div class="sec-h"><h2>Foundations</h2><span class="mono">tokens</span></div>
+      <p class="lead">White ground, black text, a green family for action and success, red only for danger and cancellation. Status is never colour alone: every chip has a text label and a shape or pattern.</p>
+      <div class="grid w2">
+        <article class="spec full"><header class="spec-h"><h3>Green ramp</h3><code>--g50 … --g900</code></header>
+          <div class="demo pad0 col"><div class="ramp">
+            <div style="background:var(--g50);color:#06301A">g50<br>#EDF7F1</div><div style="background:var(--g100);color:#06301A">g100<br>#D6EDDF</div><div style="background:var(--g200);color:#06301A">g200<br>#AEDBC0</div><div style="background:var(--g300);color:#06301A">g300<br>#7CC79A</div><div style="background:var(--g400);color:#04120A">g400<br>#3FAE72</div><div style="background:var(--g500);color:#fff">g500<br>#1B9455</div><div style="background:var(--g600);color:#fff">g600<br>#12783F</div><div style="background:var(--g700);color:#fff">g700<br>#0D5F32</div><div style="background:var(--g800);color:#fff">g800<br>#0A4A27</div><div style="background:var(--g900);color:#fff">g900<br>#06301A</div>
+          </div></div>
+          <div class="cap"><b>g600</b> is the primary button (white text, 5.9:1). <b>g50 to g200</b> are soft fills and lines. <b>g800 to g900</b> mark certified and final states.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Red ramp</h3><code>--r50 … --r700</code></header>
+          <div class="demo pad0 col"><div class="ramp r">
+            <div style="background:var(--r50);color:#3A0A0A">r50<br>#FDECEC</div><div style="background:var(--r100);color:#3A0A0A">r100<br>#F9D2D2</div><div style="background:var(--r300);color:#3A0A0A">r300<br>#E88A8A</div><div style="background:var(--r500);color:#fff">r500<br>#D13434</div><div style="background:var(--r600);color:#fff">r600<br>#B42424</div><div style="background:var(--r700);color:#fff">r700<br>#8F1B1B</div>
+          </div></div>
+          <div class="cap">Danger, destructive actions, errors, cancelled elections. Nothing else.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Neutrals and semantic tokens</h3><code>flip with theme</code></header>
+          <div class="demo pad0"><div class="sw-row" style="border:0;width:100%">
+            <div><i style="background:var(--bg)"></i>--bg<span style="color:var(--ink-3)">page</span></div><div><i style="background:var(--sunken)"></i>--sunken<span style="color:var(--ink-3)">wells, zebra</span></div><div><i style="background:var(--ink)"></i>--ink<span style="color:var(--ink-3)">text, borders</span></div><div><i style="background:var(--ink-2)"></i>--ink-2<span style="color:var(--ink-3)">secondary</span></div><div><i style="background:var(--ink-3)"></i>--ink-3<span style="color:var(--ink-3)">hints</span></div><div><i style="background:var(--line)"></i>--line<span style="color:var(--ink-3)">hairline</span></div><div><i style="background:var(--primary)"></i>--primary<span style="color:var(--ink-3)">action</span></div><div><i style="background:var(--danger)"></i>--danger<span style="color:var(--ink-3)">destructive</span></div>
+          </div></div>
+          <div class="cap">Strong edges use <b>--line-strong</b> (black in light, white in dark) at 1.5px. Hairlines use <b>--line</b> at 1px.</div></article>
+        <article class="spec full"><header class="spec-h"><h3>Type scale</h3><code>--font-ui · --font-mono</code></header>
+          <div class="demo pad0 col" style="gap:0">
+            <div class="type-row"><span class="mono">display 56/56 · 700</span><span style="font-size:56px;line-height:1;font-weight:700;letter-spacing:-.035em">Elect. Count. Certify.</span></div>
+            <div class="type-row"><span class="mono">h1 36/40 · 700</span><span style="font-size:36px;line-height:40px;font-weight:700;letter-spacing:-.02em">Guild Elections 2026/27</span></div>
+            <div class="type-row"><span class="mono">h2 24/30 · 600</span><span style="font-size:24px;line-height:30px;font-weight:600;letter-spacing:-.01em">Positions on the ballot</span></div>
+            <div class="type-row"><span class="mono">h3 18/24 · 600</span><span style="font-size:18px;line-height:24px;font-weight:600">Kyomuhendo Esther</span></div>
+            <div class="type-row"><span class="mono">body 15/24 · 400</span><span>Voting is by secret ballot. You may leave a position blank. You cannot change your ballot after you submit it.</span></div>
+            <div class="type-row"><span class="mono">small 13/18 · 400</span><span style="font-size:13px;line-height:18px;color:var(--ink-2)">Percent of 2,311 valid votes. Rounded to one decimal.</span></div>
+            <div class="type-row"><span class="mono">label mono 11 · caps</span><span class="lbl">Live provisional · updated 10:48:12 EAT</span></div>
+            <div class="type-row"><span class="mono">data mono 14 · tabular</span><span class="mono" style="font-size:14px">2,417 / 5,860 = 41.2%   sha256:9f3c…a71e</span></div>
+          </div>
+          <div class="cap">Space Grotesk for everything people read. IBM Plex Mono for numbers in tables, hashes, times, ids and small caps labels. Use <b>tabular-nums</b> wherever digits line up.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Spacing</h3><code>8px base · --s1 … --s8</code></header>
+          <div class="demo"><div class="sp">
+            <span><div style="--w:4px"></div>4</span><span><div style="--w:8px"></div>8</span><span><div style="--w:12px"></div>12</span><span><div style="--w:16px"></div>16</span><span><div style="--w:24px"></div>24</span><span><div style="--w:32px"></div>32</span><span><div style="--w:48px"></div>48</span><span><div style="--w:64px"></div>64</span>
+          </div></div>
+          <div class="cap">Paddings are symmetrical: same value left and right, same top and bottom unless a header strip needs less. Components touch on a shared 1px or 1.5px line instead of leaving gaps.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Corners, lines, elevation</h3><code>--r · 1px · 1.5px</code></header>
+          <div class="demo">
+            <div style="width:88px;height:64px;border:1.5px solid var(--line-strong);border-radius:var(--r);display:grid;place-items:center" class="mono">--r</div>
+            <div style="width:88px;height:64px;border:1px solid var(--line);display:grid;place-items:center;border-radius:var(--r)" class="mono">1px</div>
+            <div style="width:88px;height:64px;background:var(--sunken);display:grid;place-items:center;border-radius:var(--r)" class="mono">sunken</div>
+          </div>
+          <div class="cap"><b>No shadows</b> on cards. Depth comes from lines and fills. Only modals, menus and toasts sit above the page, with a scrim. Use the Corners switch in the sidebar to preview 0 against 10px.</div></article>
+        <article class="spec full"><header class="spec-h"><h3>Icons</h3><code>svg.i · 1.75 stroke · square caps</code></header>
+          <div class="demo"><div class="iconsg">
+            <div><svg class="i"><use href="#i-check"/></svg>check</div><div><svg class="i"><use href="#i-x"/></svg>x</div><div><svg class="i"><use href="#i-plus"/></svg>plus</div><div><svg class="i"><use href="#i-arrow"/></svg>arrow</div><div><svg class="i"><use href="#i-down"/></svg>down</div><div><svg class="i"><use href="#i-search"/></svg>search</div><div><svg class="i"><use href="#i-user"/></svg>user</div><div><svg class="i"><use href="#i-users"/></svg>users</div><div><svg class="i"><use href="#i-bell"/></svg>bell</div><div><svg class="i"><use href="#i-menu"/></svg>menu</div><div><svg class="i"><use href="#i-home"/></svg>home</div><div><svg class="i"><use href="#i-ballot"/></svg>ballot</div><div><svg class="i"><use href="#i-chart"/></svg>chart</div><div><svg class="i"><use href="#i-lock"/></svg>lock</div><div><svg class="i"><use href="#i-alert"/></svg>alert</div><div><svg class="i"><use href="#i-info"/></svg>info</div><div><svg class="i"><use href="#i-cal"/></svg>calendar</div><div><svg class="i"><use href="#i-clock"/></svg>clock</div><div><svg class="i"><use href="#i-file"/></svg>file</div><div><svg class="i"><use href="#i-up"/></svg>upload</div><div><svg class="i"><use href="#i-dl"/></svg>download</div><div><svg class="i"><use href="#i-sliders"/></svg>settings</div><div><svg class="i"><use href="#i-out"/></svg>sign out</div><div><svg class="i"><use href="#i-eye"/></svg>eye</div><div><svg class="i"><use href="#i-trash"/></svg>trash</div><div><svg class="i"><use href="#i-edit"/></svg>edit</div><div><svg class="i"><use href="#i-shield"/></svg>shield</div><div><svg class="i"><use href="#i-hist"/></svg>history</div>
+          </div></div>
+          <div class="cap">Inline SVG sprite. Icons inherit text colour, sit at 18px beside 15px text, 24px alone. An icon-only button always has an <b>aria-label</b>.</div></article>
+      </div>
+    </section>
+
+    <!-- ================= ACTIONS ================= -->
+    <section class="sec" id="actions">
+      <div class="sec-h"><h2>Buttons &amp; actions</h2><span class="mono">.btn</span></div>
+      <p class="lead">Primary is solid green. Secondary is a black outline that inverts on hover. Danger is red and always asks for confirmation. Click the demo buttons: each runs the loading and confirmation sequence.</p>
+      <div class="grid">
+        <article class="spec"><header class="spec-h"><h3>Variants</h3><code>.btn .primary .danger .danger-o .ghost</code></header>
+          <div class="demo"><button class="btn primary">Submit ballot</button><button class="btn">Review ballot</button><button class="btn danger">Cancel election</button><button class="btn danger-o">Withdraw</button><button class="btn ghost">Skip</button></div>
+          <div class="cap">One primary per view. Labels are verbs: <b>Submit ballot</b>, <b>Approve candidate</b>.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Sizes</h3><code>.sm 34 · base 44 · .lg 56</code></header>
+          <div class="demo"><button class="btn primary sm">Small 34</button><button class="btn primary">Base 44</button><button class="btn primary lg">Large 56</button></div>
+          <div class="cap">Voters use <b>.lg</b> on ballot screens. Mobile targets never go below 44px.</div></article>
+        <article class="spec"><header class="spec-h"><h3>States</h3><code>hover · focus · disabled</code></header>
+          <div class="demo col"><div class="row"><button class="btn primary">Default</button><button class="btn primary is-hover">Hover</button><button class="btn primary is-focus">Focus</button><button class="btn primary" disabled>Disabled</button></div><div class="row"><button class="btn">Default</button><button class="btn is-hover">Hover</button><button class="btn is-focus">Focus</button><button class="btn" disabled>Disabled</button></div></div>
+          <div class="cap">Focus is a 3px green ring offset 2px. Disabled buttons explain why in nearby text, never only by greying out.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Click: spinner then confirmation</h3><code>data-state idle / loading / done</code></header>
+          <div class="demo"><button class="btn primary lg" data-demo><span class="lab-idle">Submit ballot</span><span class="lab-load"><i class="spin"></i>Submitting</span><span class="lab-ok"><svg class="tick" viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg>Accepted</span></button><button class="btn" data-demo><span class="lab-idle">Save draft</span><span class="lab-load"><i class="spin sq"></i>Saving</span><span class="lab-ok"><svg class="tick" viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg>Saved</span></button></div>
+          <div class="cap">Width does not change during the sequence. Spinner for unknown time, then a drawn tick for 1.4 s, then back to idle.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Click: progress bar</h3><code>data-bar</code></header>
+          <div class="demo"><button class="btn primary" data-demo data-bar><span class="lab-idle"><svg class="i"><use href="#i-up"/></svg>Import roster</span><span class="lab-load">Importing<span class="dots"><i></i><i></i><i></i></span></span><span class="lab-ok"><svg class="tick" viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg>Imported</span></button><button class="btn danger" data-demo><span class="lab-idle"><svg class="i"><use href="#i-trash"/></svg>Delete draft</span><span class="lab-load"><i class="spin"></i>Deleting</span><span class="lab-ok"><svg class="tick" viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg>Deleted</span></button></div>
+          <div class="cap">Use the bar when duration is known (uploads, exports). Use dots for short waits.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Icon, group, link</h3><code>.icon · .seg · a</code></header>
+          <div class="demo"><button class="btn icon" aria-label="Notifications"><svg class="i"><use href="#i-bell"/></svg></button><button class="btn primary icon" aria-label="Add"><svg class="i"><use href="#i-plus"/></svg></button><button class="btn">Continue<svg class="i"><use href="#i-arrow"/></svg></button><div class="seg" role="group" aria-label="View"><button aria-pressed="true">Desktop</button><button aria-pressed="false">Mobile</button></div><a href="#actions">Text link</a></div>
+          <div class="cap">Icon buttons are square: width equals height.</div></article>
+      </div>
+    </section>
+
+    <!-- ================= LOADERS ================= -->
+    <section class="sec" id="loaders">
+      <div class="sec-h"><h2>Loaders &amp; motion</h2><span class="mono">animation</span></div>
+      <p class="lead">Motion confirms an action or shows work in progress. Nothing bounces or loops for decoration. All animation stops under reduced-motion settings.</p>
+      <div class="grid w3">
+        <article class="spec"><header class="spec-h"><h3>Spinner (round)</h3><code>.ld-ring</code></header><div class="demo"><div class="loader-box"><div class="ld-ring"></div>Loading results</div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Spinner (square steps)</h3><code>.ld-sq</code></header><div class="demo"><div class="loader-box"><div class="ld-sq"></div>Checking eligibility</div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Pixel grid</h3><code>.ld-grid</code></header><div class="demo"><div class="loader-box"><div class="ld-grid"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>Counting ballots</div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Indeterminate bar</h3><code>.ld-bar</code></header><div class="demo"><div class="loader-box"><div class="ld-bar"></div>Fetching ballot</div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Step loader</h3><code>.ld-steps</code></header><div class="demo"><div class="loader-box"><div class="ld-steps"><i class="on"></i><i class="on"></i><i class="cur"></i><i></i></div>Validating roster: step 3 of 4</div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Progress ring</h3><code>.ring --p</code></header><div class="demo"><div class="loader-box"><div class="ring" id="ring"><svg viewBox="0 0 96 96"><circle class="bg" cx="48" cy="48" r="42"/><circle class="fg" cx="48" cy="48" r="42"/></svg><b id="ringv">68%</b></div><button class="btn sm" id="ringbtn">Animate</button></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Page bar (top of page)</h3><code>.pagebar</code></header><div class="demo"><div class="loader-box"><div class="pagebar"><i></i></div>Route change. Sits at the very top edge.</div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Skeleton rows</h3><code>.skel</code></header><div class="demo col"><div class="skel" style="width:60%;height:18px"></div><div class="skel"></div><div class="skel" style="width:85%"></div><div class="skel" style="width:40%"></div></div><div class="cap">Match the real layout so nothing jumps when content arrives.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Confirmation stamp</h3><code>.stamp.go</code></header><div class="demo"><div class="stamp" id="stamp"><div class="badge"><svg class="tick" viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div><div><b>Your ballot has been accepted</b></div></div><button class="btn sm" id="stampbtn">Replay</button></div><div class="cap">The only celebratory moment in the product, and still plain. No confetti, no choices shown.</div></article>
+      </div>
+      <div class="grid" style="margin-top:16px">
+        <article class="spec"><header class="spec-h"><h3>Motion tokens</h3><code>durations and easing</code></header>
+          <table class="tbl"><tbody><tr><td class="mono">--t-fast</td><td>120 ms</td><td>hover, press</td></tr><tr><td class="mono">--t-base</td><td>200 ms</td><td>fades, toggles</td></tr><tr><td class="mono">--t-slow</td><td>350 ms</td><td>modal, toast, drawer</td></tr><tr><td class="mono">--ease</td><td colspan="2">cubic-bezier(.2,.7,.2,1)</td></tr><tr><td class="mono">loop</td><td colspan="2">spinners 0.7 to 1.0 s linear or steps(8)</td></tr></tbody></table></article>
+      </div>
+    </section>
+
+    <!-- ================= INPUTS ================= -->
+    <section class="sec" id="inputs">
+      <div class="sec-h"><h2>Inputs</h2><span class="mono">forms</span></div>
+      <p class="lead">Real form controls, styled flat. Every field has a visible label, optional hint and an error that says what to fix. Required is stated in words in the label.</p>
+      <div class="grid">
+        <article class="spec"><header class="spec-h"><h3>Text field</h3><code>.field .in</code></header><div class="demo col">
+          <div class="field"><label for="f1">Election title</label><input class="in" id="f1" value="Guild Elections 2026/27"><span class="hint">Shown on the public page.</span></div>
+          <div class="field"><label for="f2">Email</label><input class="in bad" id="f2" value="timothy@gmail.com"><span class="err"><svg class="i s"><use href="#i-alert"/></svg>Use your @std.must.ac.ug address.</span></div>
+          <div class="field"><label for="f3">Reg number</label><input class="in good" id="f3" value="2023/BSC/114"><span class="okm"><svg class="i s"><use href="#i-check"/></svg>Found in roster v3.</span></div>
+          <div class="field"><label for="f4">Locked field</label><input class="in" id="f4" value="Roster v3" disabled></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Select, textarea, affix</h3><code>.sel .ta .affix</code></header><div class="demo col">
+          <div class="field"><label for="s1">Category</label><select class="sel" id="s1"><option>Guild</option><option>Faculty</option><option>Referendum</option></select></div>
+          <div class="field"><label for="t1">Manifesto</label><textarea class="ta" id="t1" placeholder="Up to 1,200 characters"></textarea><span class="hint mono">0 / 1,200</span></div>
+          <div class="field"><label for="a1">Voting opens</label><div class="affix"><input class="in" id="a1" value="Mon 2 Nov 2026, 08:00"><span class="sfx">EAT</span></div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Checkbox and radio</h3><code>.chk</code></header><div class="demo col">
+          <label class="chk"><input type="checkbox" checked><span>Eligibility confirmed</span></label>
+          <label class="chk"><input type="checkbox"><span>I accept the declaration</span></label>
+          <label class="chk"><input type="checkbox" id="indet"><span>Select all (some selected)</span></label>
+          <label class="chk"><input type="checkbox" disabled><span>Unavailable</span></label>
+          <label class="chk"><input type="radio" name="rp" checked><span>After polls close</span></label>
+          <label class="chk"><input type="radio" name="rp"><span>After certification</span></label></div></article>
+        <article class="spec"><header class="spec-h"><h3>Switch and segmented</h3><code>.swt .seg</code></header><div class="demo col">
+          <label class="swt"><input type="checkbox" checked><span>Email notifications</span></label>
+          <label class="swt"><input type="checkbox"><span>Show faculty breakdown</span></label>
+          <div class="seg" role="group" aria-label="Results policy"><button aria-pressed="true">Live</button><button aria-pressed="false">After close</button><button aria-pressed="false">After certification</button></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>File drop</h3><code>.drop</code></header><div class="demo"><div class="drop"><svg class="i l"><use href="#i-up"/></svg><b>Drop guild_roster_v3.csv here</b><span class="hint">or <a href="#inputs">choose a file</a> · CSV, up to 5 MB</span></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Search and one-time code</h3><code>.searchbox .otp</code></header><div class="demo col">
+          <div class="searchbox"><svg class="i"><use href="#i-search"/></svg><input class="in" placeholder="Search elections" aria-label="Search elections"></div>
+          <div class="field"><span class="l">MFA code</span><div class="otp"><input aria-label="Digit 1" maxlength="1" value="4"><input aria-label="Digit 2" maxlength="1" value="8"><input aria-label="Digit 3" maxlength="1" value="2"><input aria-label="Digit 4" maxlength="1"><input aria-label="Digit 5" maxlength="1"><input aria-label="Digit 6" maxlength="1"></div></div></div></article>
+      </div>
+    </section>
+
+    <!-- ================= FEEDBACK ================= -->
+    <section class="sec" id="feedback">
+      <div class="sec-h"><h2>Feedback</h2><span class="mono">status</span></div>
+      <p class="lead">Green means done or open. Red means wrong or cancelled. Anything provisional or under review uses a hatch pattern, so uncertainty looks different from success without adding another colour.</p>
+      <div class="grid">
+        <article class="spec"><header class="spec-h"><h3>Election lifecycle chips</h3><code>.chip + state</code></header><div class="demo">
+          <span class="chip draft">Draft</span><span class="chip sched">Registration</span><span class="chip review">Pending approval</span><span class="chip sched">Scheduled</span><span class="chip open">Open</span><span class="chip closed">Closed</span><span class="chip review">Results under review</span><span class="chip final">Finalized</span><span class="chip draft">Archived</span><span class="chip cancel">Cancelled</span></div>
+          <div class="cap">Ten states from the SRS. Text is the source of truth, colour and pattern support it.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Result labels</h3><code>.banner variants</code></header><div class="demo col">
+          <div class="banner hatch"><svg class="i"><use href="#i-clock"/></svg><div><b>Live provisional</b>Not a final result. A leader is not a winner until certified.</div></div>
+          <div class="banner"><svg class="i"><use href="#i-lock"/></svg><div><b>Polls closed, pending verification</b>Turnout is shown. Results follow after reconciliation.</div></div>
+          <div class="banner ok"><svg class="i"><use href="#i-shield"/></svg><div><b>Certified final</b>Certified Fri 31 Oct 2025. Corrections need a recorded exception.</div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Alerts</h3><code>.banner .ok .bad</code></header><div class="demo col">
+          <div class="banner"><svg class="i"><use href="#i-info"/></svg><div><b>Configuration is locked</b>Voting is open. Changes need a documented exception.</div></div>
+          <div class="banner ok"><svg class="i"><use href="#i-check"/></svg><div><b>Roster imported</b>5,860 voters added. 12 duplicates removed.</div></div>
+          <div class="banner bad"><svg class="i"><use href="#i-alert"/></svg><div><b>2 problems to fix</b>Vice President is required. Welfare allows 2 choices.</div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Toasts</h3><code>.toast · bottom right</code></header><div class="demo"><button class="btn sm" data-toast="ok">Success toast</button><button class="btn sm danger-o" data-toast="bad">Error toast</button></div><div class="cap">Auto-dismiss after 5 s. Errors stay until closed. Always paired with an inline message for anything important.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Modal: confirm and destructive</h3><code>.modal</code></header><div class="demo"><button class="btn sm" data-modal="m1">Approve and schedule</button><button class="btn sm danger-o" data-modal="m2">Cancel election</button></div><div class="cap">Destructive modals need a reason. Focus moves in and returns on close. Escape closes.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Tooltip</h3><code>.tip</code></header><div class="demo"><span class="tip"><button class="btn icon sm" aria-label="Why disabled"><svg class="i"><use href="#i-info"/></svg></button><span role="tooltip">You submitted this. A different approver is needed.</span></span><span class="hint">Hover or focus the icon</span></div></article>
+        <article class="spec"><header class="spec-h"><h3>Progress</h3><code>.prog</code></header><div class="demo col"><div class="field"><span class="l">Turnout 41.2%</span><div class="prog"><i style="width:41.2%"></i></div></div><div class="field"><span class="l">Errors 3 of 5 allowed</span><div class="prog red"><i style="width:60%"></i></div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Empty state</h3><code>.empty</code></header><div class="demo"><div class="empty"><div class="ic"><svg class="i l"><use href="#i-ballot"/></svg></div><b>No elections yet</b><span class="hint">Create the first one from a template.</span><button class="btn primary sm"><svg class="i"><use href="#i-plus"/></svg>Create election</button></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Error state</h3><code>.empty + retry</code></header><div class="demo"><div class="empty"><div class="ic" style="border-color:var(--danger)"><svg class="i l" style="color:var(--danger)"><use href="#i-alert"/></svg></div><b>We could not load results</b><span class="hint">Your connection dropped. Nothing was changed.</span><button class="btn sm">Try again</button></div></div></article>
+      </div>
+    </section>
+
+    <!-- ================= NAVIGATION ================= -->
+    <section class="sec" id="navigation">
+      <div class="sec-h"><h2>Navigation</h2><span class="mono">desktop · tablet · mobile</span></div>
+      <p class="lead">Public and voter pages use a top bar. Officials and admins use a black sidebar that collapses to an icon rail on tablet and a drawer on phone. Phones get a bottom tab bar for voters.</p>
+      <div class="grid w2">
+        <article class="spec full"><header class="spec-h"><h3>Desktop: admin shell</h3><code>sidebar 200 to 248 + top bar + content</code></header>
+          <div class="demo pad0 sunk" style="padding:20px"><div class="dev dev-d">
+            <div class="d-side"><div class="b"><svg class="i"><use href="#i-moon"/></svg>campVote</div><span class="h">Elections</span><a href="#navigation"><svg class="i"><use href="#i-home"/></svg>Dashboard</a><a class="on" href="#navigation"><svg class="i"><use href="#i-ballot"/></svg>Elections</a><a href="#navigation"><svg class="i"><use href="#i-file"/></svg>Approvals</a><span class="h">Setup</span><a href="#navigation"><svg class="i"><use href="#i-users"/></svg>Candidates</a><a href="#navigation"><svg class="i"><use href="#i-hist"/></svg>Audit trail</a></div>
+            <div class="d-main"><div class="d-top"><span class="crumbs"><a href="#navigation">Elections</a><span>/</span><span>Guild 2026/27</span></span><span class="row"><span class="chip open">Open</span><span class="av sm">KA</span></span></div>
+              <div class="d-body"><div class="blk"><span class="skel" style="width:50%"></span><b style="font-size:22px">5,860</b></div><div class="blk"><span class="skel" style="width:50%"></span><b style="font-size:22px">2,417</b></div><div class="blk"><span class="skel" style="width:50%"></span><b style="font-size:22px">41.2%</b></div><div class="blk w2 tall"><span class="skel" style="width:30%"></span><span class="skel"></span><span class="skel" style="width:80%"></span></div><div class="blk tall"><span class="skel" style="width:60%"></span><span class="skel"></span></div></div></div>
+          </div></div><div class="cap">Sidebar is always black with a green marker on the active item. Role changes which groups appear. Top bar holds breadcrumb, state chip and user.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Tablet: icon rail</h3><code>56px rail</code></header>
+          <div class="demo sunk"><div class="dev dev-t"><div class="t-rail"><svg class="i"><use href="#i-moon"/></svg><svg class="i"><use href="#i-home"/></svg><span class="on"><svg class="i"><use href="#i-ballot"/></svg></span><svg class="i"><use href="#i-users"/></svg><svg class="i"><use href="#i-hist"/></svg></div><div class="d-main"><div class="d-top"><b>Guild 2026/27</b><svg class="i"><use href="#i-bell"/></svg></div><div class="d-body" style="grid-template-columns:1fr 1fr"><div class="blk"><span class="skel"></span></div><div class="blk"><span class="skel"></span></div><div class="blk w3 tall"><span class="skel"></span><span class="skel" style="width:70%"></span></div></div></div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Mobile: top bar + bottom tabs</h3><code>56px top · 56px tabs</code></header>
+          <div class="demo sunk"><div class="dev dev-m"><div class="m-top"><svg class="i"><use href="#i-menu"/></svg><b>campVote</b><svg class="i"><use href="#i-bell"/></svg></div><div class="m-body"><b style="font-size:20px">My elections</b><div class="blk"><span class="chip open">Open</span><b>Guild Elections 2026/27</b><span class="hint">Closes Wed 17:00 EAT</span><button class="btn primary block">Vote now</button></div><div class="blk"><span class="skel" style="width:60%"></span><span class="skel"></span></div></div><nav class="m-tabs" aria-label="Mobile"><a class="on" href="#navigation"><svg class="i"><use href="#i-ballot"/></svg>Elections</a><a href="#navigation"><svg class="i"><use href="#i-chart"/></svg>Results</a><a href="#navigation"><svg class="i"><use href="#i-bell"/></svg>Notices</a><a href="#navigation"><svg class="i"><use href="#i-user"/></svg>Account</a></nav></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Mobile: drawer menu</h3><code>78% panel + scrim</code></header>
+          <div class="demo sunk"><div class="dev dev-m"><div class="m-top"><svg class="i"><use href="#i-menu"/></svg><b>campVote</b><svg class="i"><use href="#i-bell"/></svg></div><div class="m-body"><span class="skel"></span><span class="skel" style="width:70%"></span></div><div class="m-draw"><div class="pnl"><b style="font-size:18px;padding-bottom:12px">Menu</b><a href="#navigation">Elections<svg class="i"><use href="#i-arrow"/></svg></a><a href="#navigation">Results<svg class="i"><use href="#i-arrow"/></svg></a><a href="#navigation">Notices<svg class="i"><use href="#i-arrow"/></svg></a><a href="#navigation">How voting works<svg class="i"><use href="#i-arrow"/></svg></a><a href="#navigation" style="color:var(--danger);margin-top:auto;border:0">Sign out</a></div><div class="sc"></div></div></div></div></article>
+        <article class="spec full"><header class="spec-h"><h3>Desktop: public top bar</h3><code>.pubnav</code></header>
+          <div class="demo pad0 sx"><div class="pubnav"><span class="row" style="font-weight:700;font-size:18px"><span class="mark" style="color:var(--bg)"><svg viewBox="0 0 32 32" style="width:20px;height:20px"><use href="#i-moon"/></svg></span><span>camp<span style="font-weight:400">Vote</span></span></span><nav class="lk" aria-label="Public"><a class="on" href="#navigation">Elections</a><a href="#navigation">Results</a><a href="#navigation">Notices</a><a href="#navigation">How voting works</a></nav><span style="margin-left:auto" class="row"><button class="btn primary sm">Sign in with MMU account</button></span></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Tabs</h3><code>role=tablist</code></header><div class="demo"><div class="tabs" role="tablist"><button role="tab" aria-selected="true">Overview</button><button role="tab" aria-selected="false">Ballot</button><button role="tab" aria-selected="false">Candidates<span class="count">11</span></button><button role="tab" aria-selected="false">Audit</button></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Breadcrumb and pagination</h3><code>.crumbs .pager</code></header><div class="demo col"><div class="crumbs"><a href="#navigation">Elections</a><span>/</span><a href="#navigation">Guild 2026/27</a><span>/</span><span>Candidates</span></div><div class="pager"><button aria-label="Previous"><svg class="i s" style="transform:rotate(90deg)"><use href="#i-down"/></svg></button><button>1</button><button aria-current="page">2</button><button>3</button><button>4</button><button aria-label="Next"><svg class="i s" style="transform:rotate(-90deg)"><use href="#i-down"/></svg></button></div></div></article>
+        <article class="spec full"><header class="spec-h"><h3>Stepper and lifecycle rail</h3><code>.stepper .rail</code></header><div class="demo col sx" style="gap:24px"><div class="stepper"><span class="s done"><i>1</i>Basics</span><span class="ln done"></span><span class="s done"><i>2</i>Schedule</span><span class="ln done"></span><span class="s cur"><i>3</i>Eligibility</span><span class="ln"></span><span class="s"><i>4</i>Ballot</span><span class="ln"></span><span class="s"><i>5</i>Review</span></div>
+          <div class="rail"><div class="ls done">Draft</div><div class="ls done">Registration</div><div class="ls done">Approval</div><div class="ls done">Scheduled</div><div class="ls cur">Open</div><div class="ls">Closed</div><div class="ls">Review</div><div class="ls">Finalized</div><div class="ls">Archived</div></div></div><div class="cap">Steppers are for real sequences only (wizards). The rail shows where an election is in its lifecycle.</div></article>
+      </div>
+    </section>
+
+    <!-- ================= DATA ================= -->
+    <section class="sec" id="data">
+      <div class="sec-h"><h2>Data display</h2><span class="mono">tables · charts · cards</span></div>
+      <p class="lead">Numbers are monospaced and right aligned. Percentages always name their denominator. Charts use one green, with red only for a target or limit line.</p>
+      <div class="grid w2">
+        <article class="spec full"><header class="spec-h"><h3>Stat tiles</h3><code>.kpis .kpi</code></header><div class="demo pad0"><div class="kpis"><div class="kpi"><span class="l">Eligible voters</span><span class="v">5,860</span><span class="s">roster v3</span></div><div class="kpi"><span class="l">Ballots accepted</span><span class="v">2,417</span><span class="s">10:48:12 EAT</span></div><div class="kpi"><span class="l">Turnout</span><span class="v">41.2%</span><span class="s">of 5,860 eligible</span></div><div class="kpi"><span class="l">Time remaining</span><span class="v">1d 6h</span><span class="s">closes Wed 17:00</span></div></div></div></article>
+        <article class="spec full"><header class="spec-h"><h3>Table</h3><code>.tbl</code></header><div class="demo pad0"><div class="tbl-wrap"><table class="tbl"><thead><tr><th><label class="chk" style="margin:0"><input type="checkbox" aria-label="Select all"></label></th><th>Election</th><th>Category</th><th>Status</th><th class="r">Eligible</th><th class="r">Turnout</th><th></th></tr></thead><tbody>
+          <tr class="sel"><td><label class="chk"><input type="checkbox" checked aria-label="Select Guild"></label></td><td><b>Guild Elections 2026/27</b></td><td><span class="tag">Guild</span></td><td><span class="chip open">Open</span></td><td class="r">5,860</td><td class="r">41.2%</td><td><button class="btn ghost sm icon" aria-label="More"><svg class="i"><use href="#i-down"/></svg></button></td></tr>
+          <tr><td><label class="chk"><input type="checkbox" aria-label="Select Referendum"></label></td><td><b>Constitutional Amendment Referendum</b></td><td><span class="tag">Referendum</span></td><td><span class="chip sched">Scheduled</span></td><td class="r">5,860</td><td class="r mono">n/a</td><td><button class="btn ghost sm icon" aria-label="More"><svg class="i"><use href="#i-down"/></svg></button></td></tr>
+          <tr><td><label class="chk"><input type="checkbox" aria-label="Select Health"></label></td><td><b>Health Sciences Class Reps</b></td><td><span class="tag">Faculty</span></td><td><span class="chip closed">Closed</span></td><td class="r">1,220</td><td class="r">50.1%</td><td><button class="btn ghost sm icon" aria-label="More"><svg class="i"><use href="#i-down"/></svg></button></td></tr>
+          <tr><td><label class="chk"><input type="checkbox" aria-label="Select Hall"></label></td><td><b>Hall Wardens By-election</b></td><td><span class="tag">Committee</span></td><td><span class="chip cancel">Cancelled</span></td><td class="r">640</td><td class="r mono">n/a</td><td><button class="btn ghost sm icon" aria-label="More"><svg class="i"><use href="#i-down"/></svg></button></td></tr></tbody></table></div></div>
+          <div class="cap">Header in mono caps. Selected row takes a soft green fill. Row actions are icon buttons with labels.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Tally bars</h3><code>.tally .trow</code></header><div class="demo col"><div class="tally"><div class="trow"><span><b>Kyomuhendo E.</b><span class="lead-tag">Leading</span></span><div class="bar lead"><i style="width:43.8%"></i></div><span class="vl"><b>1,012</b> · 43.8%</span></div><div class="trow"><b>Tumusiime B.</b><div class="bar"><i style="width:36%"></i></div><span class="vl"><b>831</b> · 36.0%</span></div><div class="trow"><b>Mugisha D.</b><div class="bar"><i style="width:20.3%"></i></div><span class="vl"><b>468</b> · 20.3%</span></div></div><span class="hint">Percent of 2,311 valid votes. 106 left blank. "Leading", never "Winner", until certified.</span></div></article>
+        <article class="spec"><header class="spec-h"><h3>Line chart</h3><code>svg.chart</code></header><div class="demo"><svg class="chart" viewBox="0 0 400 190" role="img" aria-label="Ballots accepted rising to 2,417"><g stroke="var(--line)"><path d="M40 20H390M40 62H390M40 104H390M40 146H390"/></g><path d="M40 146H390" stroke="var(--line-strong)"/><path d="M40 146L100 118 160 92 220 70 280 66 340 36 380 22V146H40Z" fill="var(--primary)" opacity=".12"/><path d="M40 146L100 118 160 92 220 70 280 66 340 36 380 22" fill="none" stroke="var(--primary)" stroke-width="2.5"/><path d="M40 40H390" stroke="var(--danger)" stroke-dasharray="5 4"/><rect x="376" y="18" width="8" height="8" fill="var(--primary)"/><text x="34" y="150" text-anchor="end">0</text><text x="34" y="24" text-anchor="end">2.5k</text><text x="40" y="168">Mon 08:00</text><text x="210" y="168">Tue 00:00</text><text x="340" y="168">Tue 10:48</text><text x="390" y="34" text-anchor="end" fill="var(--danger)" style="fill:var(--danger)">target</text></svg></div></article>
+        <article class="spec"><header class="spec-h"><h3>Bar chart</h3><code>svg.chart</code></header><div class="demo"><svg class="chart" viewBox="0 0 400 190" role="img" aria-label="Turnout by faculty"><g stroke="var(--line)"><path d="M40 20H390M40 62H390M40 104H390"/></g><path d="M40 146H390" stroke="var(--line-strong)"/><rect x="62" y="66" width="52" height="80" fill="var(--primary)"/><rect x="146" y="82" width="52" height="64" fill="var(--g300)"/><rect x="230" y="78" width="52" height="68" fill="var(--g300)"/><rect x="314" y="83" width="52" height="63" fill="var(--g300)"/><text x="88" y="60" text-anchor="middle">46.2</text><text x="172" y="76" text-anchor="middle">39.1</text><text x="256" y="72" text-anchor="middle">40.4</text><text x="340" y="77" text-anchor="middle">39.0</text><text x="88" y="164" text-anchor="middle">Science</text><text x="172" y="164" text-anchor="middle">Business</text><text x="256" y="164" text-anchor="middle">Education</text><text x="340" y="164" text-anchor="middle">Health</text></svg></div></article>
+        <article class="spec"><header class="spec-h"><h3>Meter and sparkline</h3><code>.prog · svg</code></header><div class="demo col"><div class="field"><span class="l">Science 702 / 1,520</span><div class="prog"><i style="width:46.2%"></i></div></div><div class="row"><svg viewBox="0 0 120 32" width="120" height="32" aria-label="Trend"><path d="M0 28L20 22 40 24 60 14 80 16 100 6 120 4" fill="none" stroke="var(--primary)" stroke-width="2"/></svg><span class="mono">+12% vs yesterday</span></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Election card</h3><code>.card</code></header><div class="demo"><div class="card"><div class="ph r31"><span>3:1 banner</span></div><div class="cb"><div class="row" style="justify-content:space-between"><span class="chip open">Open</span><span class="tag">Guild</span></div><b style="font-size:18px">Guild Elections 2026/27</b><span class="hint">Closes Wed 28 Oct, 17:00 EAT · 41.2% turnout</span><button class="btn primary block">View election</button></div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Candidate card</h3><code>.card .ph.r45</code></header><div class="demo"><div class="card" style="max-width:240px"><div class="ph r45"><span>photo 4:5</span></div><div class="cb"><b>Kyomuhendo Esther</b><span class="hint">Science · Environmental Science · Year 3</span><a href="#data">Read manifesto</a></div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Image placeholders</h3><code>.ph + ratio</code></header><div class="demo col"><div class="ph r169"><span>16:9 hero</span></div><div class="row"><div class="ph r11" style="width:96px"><span>1:1</span></div><div class="ph r45" style="width:76px"><span>4:5</span></div><div class="ph r31" style="flex:1;min-width:120px"><span>3:1</span></div></div></div><div class="cap">Hatched green placeholder with a ratio label. Replaced by real photos only after approval. No stock images.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Avatars</h3><code>.av</code></header><div class="demo"><span class="av sm">KA</span><span class="av">AT</span><span class="av g">KE</span><span class="av o">MJ</span><span class="av lg">BC</span></div></article>
+        <article class="spec"><header class="spec-h"><h3>Timeline</h3><code>.tl</code></header><div class="demo"><div class="tl"><div class="done"><i></i><span><b>Applications</b><small>5 to 12 Oct · 17:00 EAT</small></span></div><div class="done"><i></i><span><b>Review and campaign</b><small>13 to 25 Oct</small></span></div><div class="cur"><i></i><span><b>Voting</b><small>26 to 28 Oct · open now</small></span></div><div><i></i><span><b>Certification</b><small>target Fri 30 Oct</small></span></div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Key-value, hash, audit row</h3><code>.kv .hash .audit</code></header><div class="demo col" style="gap:14px"><dl class="kv"><dt>Ballot version</dt><dd>v4 · approved</dd><dt>Snapshot</dt><dd><span class="hash">9f3c1e…a71e</span></dd></dl><div style="border:1px solid var(--line)"><div class="audit"><time>10:41 EAT</time><span><b>Roster v3 locked</b> by Mwesigwa J.</span><span class="chip open nd">ok</span></div><div class="audit" style="border-bottom:0"><time>17:12 EAT</time><span><b>Ballot v4 approved</b> by Komugisha A.</span><span class="chip open nd">ok</span></div></div></div></article>
+      </div>
+    </section>
+
+    <!-- ================= BALLOT ================= -->
+    <section class="sec" id="ballot">
+      <div class="sec-h"><h2>Voting parts</h2><span class="mono">voter flow</span></div>
+      <p class="lead">Calm and large. Each option is one whole target. Selection never relies on colour alone: the control fills and the border thickens.</p>
+      <div class="grid">
+        <article class="spec"><header class="spec-h"><h3>Single choice</h3><code>.opt role=radio</code></header><div class="demo col"><button class="opt" role="radio" aria-checked="true"><span class="box rd"></span><span class="ph r11" style="width:48px;flex:none"><span style="padding:0 4px">KE</span></span><span><span class="nm">Kyomuhendo Esther</span><br><span class="mt">Science · Year 3</span></span></button><button class="opt" role="radio" aria-checked="false"><span class="box rd"></span><span class="ph r11" style="width:48px;flex:none"><span style="padding:0 4px">TB</span></span><span><span class="nm">Tumusiime Brian</span><br><span class="mt">Business · Year 4</span></span></button><button class="opt" role="radio" aria-checked="false"><span class="box rd"></span><span><span class="nm">Leave this position blank</span></span></button></div></article>
+        <article class="spec"><header class="spec-h"><h3>Multiple choice + counter</h3><code>.opt role=checkbox · .counter</code></header><div class="demo col"><div class="row" style="justify-content:space-between"><b>Welfare Committee</b><span class="counter full">2 of 2 selected</span></div><button class="opt" role="checkbox" aria-checked="true"><span class="box"><svg class="i"><use href="#i-check"/></svg></span><span class="nm">Kabagambe Sarah</span></button><button class="opt" role="checkbox" aria-checked="true"><span class="box"><svg class="i"><use href="#i-check"/></svg></span><span class="nm">Muhindo Alex</span></button><button class="opt" role="checkbox" aria-checked="false" aria-disabled="true"><span class="box"></span><span><span class="nm">Biira Patience</span><br><span class="mt">Clear one choice to select this</span></span></button></div></article>
+        <article class="spec"><header class="spec-h"><h3>Error state</h3><code>.opt.bad · .err</code></header><div class="demo col"><div class="field"><b>Vice President <span style="color:var(--danger)">required</span></b><button class="opt bad" role="radio" aria-checked="false"><span class="box rd"></span><span class="nm">Atuhaire Joan</span></button><span class="err"><svg class="i s"><use href="#i-alert"/></svg>Choose one candidate. This position cannot be left blank.</span></div><span class="counter bad">3 of 2 selected</span></div></article>
+        <article class="spec"><header class="spec-h"><h3>Time left</h3><code>.cd</code></header><div class="demo col"><div class="cd" role="timer" aria-label="1 day 6 hours 12 minutes left"><div><b>1</b><small>day</small></div><div><b>06</b><small>hrs</small></div><div><b>12</b><small>min</small></div></div><span class="hint">Server clock decides when voting closes.</span></div></article>
+        <article class="spec"><header class="spec-h"><h3>Ranked list</h3><code>.rank</code></header><div class="demo col"><div class="rank"><span class="n">1</span><b class="grow" style="flex:1">Rukundo Moses</b><button class="btn icon sm" aria-label="Move up"><svg class="i s" style="transform:rotate(180deg)"><use href="#i-down"/></svg></button><button class="btn icon sm" aria-label="Move down"><svg class="i s"><use href="#i-down"/></svg></button></div><div class="rank"><span class="n">2</span><b style="flex:1">Namara Faith</b><button class="btn icon sm" aria-label="Move up"><svg class="i s" style="transform:rotate(180deg)"><use href="#i-down"/></svg></button><button class="btn icon sm" aria-label="Move down"><svg class="i s"><use href="#i-down"/></svg></button></div></div><div class="cap">Buttons give a keyboard alternative to dragging.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Secrecy notice</h3><code>.banner</code></header><div class="demo"><div class="banner"><svg class="i"><use href="#i-lock"/></svg><div><b>Your vote is secret</b>Officials and candidates cannot see your choices. This page is not stored.</div></div></div></article>
+      </div>
+    </section>
+
+    <!-- ================= ANIMATIONS ================= -->
+    <section class="sec" id="animations">
+      <div class="sec-h"><h2>Animations</h2><span class="mono">13 patterns · replay each</span></div>
+      <p class="lead">Every animation has one job: show where something came from, confirm that it worked, or show that data changed. Enter 200 to 350 ms, exit 150 to 250 ms, nothing over 400 ms except loaders. Reduced-motion users get instant changes.</p>
+      <div class="grid">
+        <article class="spec"><header class="spec-h"><h3>Page enter</h3><code>routeIn · 350ms · --ease</code></header><div class="demo"><div class="stg go" id="an1"><div class="a-box a-route">Results</div></div></div><div class="cap"><button class="btn sm" data-replay="an1">Replay</button> Fade and 28px slide from the right on route change.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Modal open</h3><code>pop · 250ms</code></header><div class="demo"><div class="stg go" id="an2"><div class="a-box a-pop" style="width:180px;height:84px">Cancel election?</div></div></div><div class="cap"><button class="btn sm" data-replay="an2">Replay</button> Scrim fades 200 ms, panel rises 8px and scales from .98.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Drawer slide</h3><code>drIn · 350ms</code></header><div class="demo"><div class="a-dr-wrap go" id="an3"><div class="a-dr"><b>Audit event</b><span class="skel"></span><span class="skel" style="width:70%"></span></div></div></div><div class="cap"><button class="btn sm" data-replay="an3">Replay</button> Side panels and the phone menu slide from the edge.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Menu reveal</h3><code>menuIn · 180ms</code></header><div class="demo"><div class="stg go" id="an4"><div class="a-menu"><span>Edit</span><span>Duplicate</span><span style="color:var(--danger)">Delete</span></div></div></div><div class="cap"><button class="btn sm" data-replay="an4">Replay</button> Dropdowns, popovers and tooltips. Fast, 6px drop.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Toast in and out</h3><code>tin 300 · tout 250</code></header><div class="demo"><div class="stg go" id="an5"><div class="toast ok a-toast" style="width:100%"><svg class="i"><use href="#i-check"/></svg><span>Draft saved.</span></div></div></div><div class="cap"><button class="btn sm" data-replay="an5">Replay</button> Rises in, waits, slides out. Errors do not auto-leave.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Skeleton to content</h3><code>shimmer 1.4s · fade .3s</code></header><div class="demo"><div class="a-skwrap go" id="an6"><div class="a-ct"><b>Guild Elections 2026/27</b><br><span class="hint">Closes Wed 28 Oct, 17:00 EAT</span></div><div class="a-sk"><span class="skel" style="width:60%;height:18px"></span><span class="skel" style="width:45%"></span></div></div></div><div class="cap"><button class="btn sm" data-replay="an6">Replay</button> Skeleton matches the real layout, then crossfades.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Result bars and count-up</h3><code>scaleX 900ms · count 1.2s</code></header><div class="demo"><div class="stg go a-grow" id="an7" style="align-content:start"><div class="trow" style="grid-template-columns:70px 1fr 70px;width:100%"><b>Esther</b><div class="bar lead"><i style="width:43.8%"></i></div><span class="vl mono cu" data-to="1012">1,012</span></div><div class="trow" style="grid-template-columns:70px 1fr 70px;width:100%"><b>Brian</b><div class="bar"><i style="width:36%"></i></div><span class="vl mono cu" data-to="831">831</span></div><div class="trow" style="grid-template-columns:70px 1fr 70px;width:100%"><b>Daniel</b><div class="bar"><i style="width:20.3%"></i></div><span class="vl mono cu" data-to="468">468</span></div></div></div><div class="cap"><button class="btn sm" data-replay="an7">Replay</button> Bars grow from the left, staggered 100 ms. Numbers count up once.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Live update flash</h3><code>flash 1.2s · ping loop</code></header><div class="demo col"><div class="row"><span class="livedot"></span><span class="lbl">Live provisional · updates every 5 s</span></div><div class="a-live" id="lv"><b class="mono" style="font-size:32px" id="lvn">2,417</b><span class="hint">ballots accepted</span></div></div><div class="cap"><button class="btn sm" id="lvb">Simulate update</button> A changed figure gets a green wash that fades. Never animate the digits.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Error shake</h3><code>shake · 400ms</code></header><div class="demo"><div class="stg go" id="an9"><div class="field a-shake" style="width:100%"><input class="in bad" value="timothy@gmail.com" aria-label="Email"><span class="err"><svg class="i s"><use href="#i-alert"/></svg>Use your @std.must.ac.ug address.</span></div></div></div><div class="cap"><button class="btn sm" data-replay="an9">Replay</button> Once, on failed submit, together with the text error and focus move.</div></article>
+        <article class="spec"><header class="spec-h"><h3>List stagger</h3><code>routeUp · 80ms steps</code></header><div class="demo"><div class="stg go" id="an10"><div class="a-stg"><div>Guild Elections 2026/27</div><div>Referendum 2026</div><div>CSA Executive 2026</div><div>Health Sciences Reps</div></div></div></div><div class="cap"><button class="btn sm" data-replay="an10">Replay</button> Cards and rows rise in sequence on first load only.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Tick draw</h3><code>stroke-dashoffset · 450ms</code></header><div class="demo"><div class="stg go a-tick" id="an11"><div class="a-tickbox"><svg class="tick" viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></div></div></div><div class="cap"><button class="btn sm" data-replay="an11">Replay</button> Success marker for saves, imports and approvals.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Progress fill</h3><code>width 1s · --ease</code></header><div class="demo"><div class="stg go a-fill" id="an12"><div class="prog"><i style="width:41.2%"></i></div><span class="mono hint">41.2% turnout</span></div></div><div class="cap"><button class="btn sm" data-replay="an12">Replay</button> Turnout and import progress.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Selection</h3><code>background .15s</code></header><div class="demo col"><button class="opt" role="radio" aria-checked="false"><span class="box rd"></span><span class="nm">Tumusiime Brian</span></button><button class="opt" role="radio" aria-checked="true"><span class="box rd"></span><span class="nm">Mugisha Daniel</span></button></div><div class="cap">Click an option. Fill, border and control change together, with no movement.</div></article>
+      </div>
+      <div class="grid" style="margin-top:16px"><article class="spec full"><header class="spec-h"><h3>Animation rules</h3><code>tokens</code></header><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Pattern</th><th>Duration</th><th>Easing</th><th>Use for</th></tr></thead><tbody><tr><td>Hover, press</td><td class="mono">80 to 150 ms</td><td class="mono">linear / ease</td><td>buttons, rows, options</td></tr><tr><td>Enter</td><td class="mono">200 to 350 ms</td><td class="mono">--ease</td><td>modals, drawers, pages, toasts</td></tr><tr><td>Exit</td><td class="mono">150 to 250 ms</td><td class="mono">ease-in</td><td>dismissals</td></tr><tr><td>Data change</td><td class="mono">1.2 s wash</td><td class="mono">ease-out</td><td>live figures, no digit rolling</td></tr><tr><td>Loop</td><td class="mono">0.7 to 1.6 s</td><td class="mono">linear / steps</td><td>spinners, live dot only</td></tr><tr><td>Reduced motion</td><td class="mono">~0 ms</td><td>n/a</td><td>everything above</td></tr></tbody></table></div></article></div>
+    </section>
+
+    <!-- ================= INTERACTIVE ================= -->
+    <section class="sec" id="interactive">
+      <div class="sec-h"><h2>Interactive parts</h2><span class="mono">14 working controls</span></div>
+      <p class="lead">Controls the product needs beyond basic inputs. All work with the keyboard. Try them.</p>
+      <div class="grid">
+        <article class="spec"><header class="spec-h"><h3>Accordion</h3><code>aria-expanded</code></header><div class="demo"><div class="acc"><div class="acc-i open"><button aria-expanded="true">What if my connection drops?<svg class="i"><use href="#i-down"/></svg></button><div class="acc-p"><div><p>Check ballot status. It never submits again, so you cannot vote twice.</p></div></div></div><div class="acc-i"><button aria-expanded="false">Can I change my vote?<svg class="i"><use href="#i-down"/></svg></button><div class="acc-p"><div><p>No. A ballot is final once accepted.</p></div></div></div><div class="acc-i"><button aria-expanded="false">Who can see my choices?<svg class="i"><use href="#i-down"/></svg></button><div class="acc-p"><div><p>Nobody. Results are only totals.</p></div></div></div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Action menu</h3><code>.pop</code></header><div class="demo" style="min-height:220px;align-items:flex-start"><div class="pop-host"><button class="btn" data-pop="pm1">Actions<svg class="i"><use href="#i-down"/></svg></button><div class="pop" id="pm1"><a href="#interactive"><svg class="i"><use href="#i-eye"/></svg>View public page</a><a href="#interactive"><svg class="i"><use href="#i-file"/></svg>Generate report</a><a href="#interactive"><svg class="i"><use href="#i-hist"/></svg>Audit trail</a><hr><button class="mi" style="color:var(--danger)"><svg class="i"><use href="#i-x"/></svg>Cancel election</button></div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Notification bell</h3><code>.badge .pop.right</code></header><div class="demo" style="min-height:260px;align-items:flex-start;justify-content:flex-end"><div class="pop-host"><button class="btn icon" data-pop="pm2" aria-label="Notifications, 2 unread" id="bell"><svg class="i"><use href="#i-bell"/></svg><span class="badge" id="bellb">2</span></button><div class="pop right" id="pm2" style="width:300px"><div class="nt un"><span><b>Voting is open</b><br><span class="hint">Guild Elections 2026/27</span></span></div><div class="nt un"><span><b>Closes in 24 hours</b><br><span class="hint">Tue 10:48 EAT</span></span></div><div class="nt"><span><b>Candidate list approved</b></span></div><button class="mi" id="markread" style="all:unset;display:block;padding:10px;cursor:pointer;color:var(--primary);font-weight:600;font-size:14px">Mark all as read</button></div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Combobox (voter lookup)</h3><code>filter as you type</code></header><div class="demo" style="min-height:250px;align-items:flex-start"><div class="field" style="position:relative"><label for="cb">Find voter by name or reg no</label><input class="in" id="cb" autocomplete="off" placeholder="Type: nan, 2023, tus" role="combobox" aria-expanded="false" aria-controls="cbl"><div class="pop" id="cbl" role="listbox" style="top:74px;left:0;right:0"></div><span class="hint">Each lookup is logged with a reason.</span></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Date and time (EAT)</h3><code>.cal</code></header><div class="demo col"><div class="affix"><input class="in" id="dtv" value="Mon 2 Nov 2026, 08:00" aria-label="Voting opens" readonly><span class="sfx">EAT</span></div><div class="cal"><div class="cal-h"><span>November 2026</span><span class="mono" style="font-size:12px;color:var(--ink-3)">UTC+3</span></div><div class="cal-g" id="calg"></div></div><div class="field"><label for="tm">Time</label><select class="sel" id="tm"><option>08:00</option><option>12:00</option><option>17:00</option></select></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Multi-select tags</h3><code>.tagin</code></header><div class="demo col"><label class="l" for="tg" style="font-weight:600">Eligible faculties</label><div class="tagin" id="tags"><span class="t">Faculty of Science<button aria-label="Remove Faculty of Science"><svg class="i s"><use href="#i-x"/></svg></button></span><span class="t">Faculty of Business<button aria-label="Remove Faculty of Business"><svg class="i s"><use href="#i-x"/></svg></button></span><input id="tg" placeholder="Add faculty, press Enter"></div></div></article>
+        <article class="spec full"><header class="spec-h"><h3>Sortable table with bulk bar</h3><code>aria-sort · row select</code></header><div class="demo pad0 col" style="gap:0"><div class="bulk" id="bulk"><span><b id="bulkn">0</b> selected</span><span class="row"><button class="btn sm" style="background:transparent;color:var(--bg);border-color:var(--bg)">Export CSV</button></span></div><div class="tbl-wrap"><table class="tbl" id="srt"><thead><tr><th style="width:44px"></th><th class="th-s" aria-sort="none"><button data-k="0">Faculty<svg class="i s"><use href="#i-down"/></svg></button></th><th class="r th-s" aria-sort="none"><button data-k="1">Eligible<svg class="i s"><use href="#i-down"/></svg></button></th><th class="r th-s" aria-sort="none"><button data-k="2">Voted<svg class="i s"><use href="#i-down"/></svg></button></th><th class="r th-s" aria-sort="none"><button data-k="3">Turnout<svg class="i s"><use href="#i-down"/></svg></button></th></tr></thead><tbody><tr data-v="Science|1520|702|46.2"><td><label class="chk"><input type="checkbox" aria-label="Select Science"></label></td><td>Faculty of Science</td><td class="r">1,520</td><td class="r">702</td><td class="r">46.2%</td></tr><tr data-v="Business|1640|641|39.1"><td><label class="chk"><input type="checkbox" aria-label="Select Business"></label></td><td>Faculty of Business</td><td class="r">1,640</td><td class="r">641</td><td class="r">39.1%</td></tr><tr data-v="Education|1480|598|40.4"><td><label class="chk"><input type="checkbox" aria-label="Select Education"></label></td><td>Faculty of Education</td><td class="r">1,480</td><td class="r">598</td><td class="r">40.4%</td></tr><tr data-v="Health|1220|476|39.0"><td><label class="chk"><input type="checkbox" aria-label="Select Health"></label></td><td>Faculty of Health Sciences</td><td class="r">1,220</td><td class="r">476</td><td class="r">39.0%</td></tr></tbody></table></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Side drawer</h3><code>.drw</code></header><div class="demo"><button class="btn" data-modal="dr">Open audit event</button></div><div class="cap">Detail without leaving the table. Escape or the scrim closes it.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Type to confirm</h3><code>destructive gate</code></header><div class="demo col"><div class="field"><label for="tcf">Type <b class="mono">CANCEL</b> to cancel this election</label><input class="in" id="tcf" autocomplete="off"></div><button class="btn danger" id="tcb" disabled>Cancel election</button></div></article>
+        <article class="spec"><header class="spec-h"><h3>Hold to confirm</h3><code>1.2 s · mouse, touch, Space</code></header><div class="demo col"><button class="btn primary lg hold" id="hold"><span id="holdl"><svg class="i"><use href="#i-shield"/></svg>Hold to certify results</span></button><span class="hint">For irreversible steps. Release early to cancel.</span></div></article>
+        <article class="spec"><header class="spec-h"><h3>Copy value</h3><code>clipboard</code></header><div class="demo"><span class="hash" id="hv">9f3c1e7a4b2d…a71e</span><button class="btn sm" id="hcopy"><svg class="i s"><use href="#i-copy"/></svg><span>Copy</span></button></div></article>
+        <article class="spec"><header class="spec-h"><h3>Live countdown</h3><code>server time</code></header><div class="demo col"><div class="cd" role="timer"><div><b id="cdh">06</b><small>hrs</small></div><div><b id="cdm">12</b><small>min</small></div><div><b id="cds">00</b><small>sec</small></div></div><span class="hint">Turns green on the last hour? No: it turns black text on amber-free hatch under 10 minutes.</span></div></article>
+        <article class="spec"><header class="spec-h"><h3>Session timeout warning</h3><code>modal + timer</code></header><div class="demo"><button class="btn" data-modal="m3" id="sto">Preview warning</button></div><div class="cap">Shown 2 minutes before sign-out so a voter never loses a half-filled ballot silently.</div></article>
+        <article class="spec"><header class="spec-h"><h3>Upload with progress</h3><code>.fileline .prog</code></header><div class="demo col"><div class="upl" id="upl"><button class="btn" id="upb"><svg class="i"><use href="#i-up"/></svg>Upload guild_roster_v3.csv</button><div class="fileline" id="upf" hidden><svg class="i"><use href="#i-file"/></svg><span>guild_roster_v3.csv</span><span class="mono" id="upp">0%</span></div><div class="prog" id="upbar" hidden><i style="width:0"></i></div></div></div></article>
+        <article class="spec"><header class="spec-h"><h3>Live character counter</h3><code>aria-live</code></header><div class="demo col"><div class="field"><label for="cc">Short bio</label><textarea class="ta" id="cc" maxlength="600" placeholder="Up to 600 characters"></textarea><span class="hint mono" id="ccn" aria-live="polite">0 / 600</span></div></div></article>
+      </div>
+    </section>
+
+    <!-- ================= BRIEF ================= -->
+    <section class="sec" id="brief">
+      <div class="sec-h"><h2>LLM build brief</h2><span class="mono">copy into your prompt</span></div>
+      <p class="lead">Paste the token block and the rules below at the start of any build prompt so generated screens stay on system.</p>
+      <div class="grid w2">
+        <article class="spec"><header class="spec-h"><h3>Tokens</h3><button class="btn sm" id="copytok">Copy CSS</button></header><div class="demo pad0"><pre class="code" id="tok">:root{
+  --font-ui:'Space Grotesk','Segoe UI',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+  --r:0px;            /* 0 = sharp. 10px is the only alternative. */
+  --bg:#FFFFFF; --surface:#FFFFFF; --sunken:#F3F6F4;
+  --ink:#0A0F0C; --ink-2:#38423D; --ink-3:#5B6761;
+  --line:#D3D9D6; --line-strong:#0A0F0C;
+  --primary:#12783F; --primary-hover:#0D5F32; --on-primary:#FFFFFF;
+  --primary-soft:#EDF7F1; --primary-line:#AEDBC0;
+  --danger:#B42424; --danger-hover:#8F1B1B; --on-danger:#FFFFFF;
+  --danger-soft:#FDECEC; --danger-line:#E88A8A;
+  --g50:#EDF7F1; --g100:#D6EDDF; --g200:#AEDBC0; --g300:#7CC79A;
+  --g400:#3FAE72; --g500:#1B9455; --g600:#12783F; --g700:#0D5F32;
+  --g800:#0A4A27; --g900:#06301A;
+  --focus:#1B9455; --ease:cubic-bezier(.2,.7,.2,1);
+}
+/* dark: --bg #070A08, --surface #0D1310, --ink #F2F7F4,
+   --line-strong #F2F7F4, --primary #3FAE72, --on-primary #04120A,
+   --danger #F06A6A, --focus #7CC79A */</pre></div></article>
+        <article class="spec"><header class="spec-h"><h3>Rules</h3><code>do and do not</code></header><div class="demo pad0"><ul class="rules">
+          <li><svg class="i y"><use href="#i-check"/></svg><span>Use only tokens. No hex values in components.</span></li>
+          <li><svg class="i y"><use href="#i-check"/></svg><span>Corners come from <b class="mono">var(--r)</b>. Never hard-code a radius.</span></li>
+          <li><svg class="i y"><use href="#i-check"/></svg><span>Borders: 1px <b class="mono">--line</b> for hairlines, 1.5px <b class="mono">--line-strong</b> for controls and key panels.</span></li>
+          <li><svg class="i y"><use href="#i-check"/></svg><span>Symmetric padding. Equal left and right, equal columns, centered icons.</span></li>
+          <li><svg class="i y"><use href="#i-check"/></svg><span>Status = text label + shape or hatch. Provisional or under review uses the hatch.</span></li>
+          <li><svg class="i y"><use href="#i-check"/></svg><span>Real buttons, labels, focus ring, 44px mobile targets, WCAG 2.2 AA.</span></li>
+          <li><svg class="i y"><use href="#i-check"/></svg><span>Times in EAT. Percentages name their denominator. Digits tabular.</span></li>
+          <li><svg class="i n"><use href="#i-x"/></svg><span>No shadows on cards, no gradients, no emoji, no amber or blue, no rounded pills.</span></li>
+          <li><svg class="i n"><use href="#i-x"/></svg><span>Never show a voter next to a choice. Leaders are "Leading", not "Winner", until certified.</span></li>
+          <li><svg class="i n"><use href="#i-x"/></svg><span>No confetti or bouncing. Motion confirms work only.</span></li>
+        </ul></div></article>
+        <article class="spec full"><header class="spec-h"><h3>Component to class map</h3><code>what to ask for</code></header><div class="demo pad0"><div class="tbl-wrap"><table class="tbl map"><thead><tr><th>Component</th><th>Class or element</th><th>Notes</th></tr></thead><tbody>
+          <tr><td>Button</td><td>.btn .primary .danger .ghost .sm .lg .icon</td><td>data-state idle, loading, done</td></tr>
+          <tr><td>Field</td><td>.field .in .sel .ta .affix</td><td>label, hint, err required</td></tr>
+          <tr><td>Check, radio, switch</td><td>.chk input · .swt input</td><td>native inputs, appearance none</td></tr>
+          <tr><td>Status</td><td>.chip .open .sched .review .final .cancel</td><td>10 lifecycle states</td></tr>
+          <tr><td>Banner, toast, modal</td><td>.banner .ok .bad .hatch · .toast · .modal</td><td>modal needs focus trap</td></tr>
+          <tr><td>Navigation</td><td>.pubnav · .d-side · .t-rail · .m-tabs · .tabs · .stepper · .rail</td><td>role decides which shell</td></tr>
+          <tr><td>Data</td><td>.tbl · .kpis · .tally · svg.chart · .card · .tl · .kv</td><td>mono numerals</td></tr>
+          <tr><td>Placeholder</td><td>.ph .r45 .r169 .r11 .r31</td><td>hatched green, labelled</td></tr>
+          <tr><td>Ballot</td><td>.opt .counter .cd .rank</td><td>role radio or checkbox</td></tr>
+        </tbody></table></div></div></article>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="modal-wrap" id="m1" role="dialog" aria-modal="true" aria-labelledby="m1t"><div class="modal"><div class="modal-h"><h3 id="m1t">Approve and schedule?</h3><button class="btn ghost icon sm" data-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div><div class="modal-b"><p>Guild Elections 2026/27 will open automatically on Mon 26 Oct 2026, 08:00 EAT. After it opens, eligibility, ballot and candidates are locked.</p><div class="banner ok"><svg class="i"><use href="#i-check"/></svg><div>All 14 validation checks passed.</div></div></div><div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn primary" data-close>Approve and schedule</button></div></div></div>
+<div class="modal-wrap" id="dr" role="dialog" aria-modal="true" aria-labelledby="drt" style="place-items:stretch end;padding:0"><div class="drw"><div class="modal-h" style="padding-bottom:12px;border-bottom:1px solid var(--line)"><h3 id="drt">Roster v3 locked</h3><button class="btn ghost icon sm" data-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div><div class="modal-b"><dl class="kv"><dt>Time</dt><dd class="mono">Sat 24 Oct 10:41 EAT</dd><dt>Actor</dt><dd>Mwesigwa Jonathan · Election Official</dd><dt>Action</dt><dd>Roster locked</dd><dt>Before</dt><dd>v3 draft, 5,872 rows</dd><dt>After</dt><dd>v3 locked, 5,860 voters</dd><dt>Outcome</dt><dd><span class="chip open nd">ok</span></dd></dl><div class="banner"><svg class="i"><use href="#i-lock"/></svg><div>Audit records never contain ballot choices.</div></div></div></div></div>
+<div class="modal-wrap" id="m3" role="dialog" aria-modal="true" aria-labelledby="m3t"><div class="modal"><div class="modal-h"><h3 id="m3t">You will be signed out soon</h3></div><div class="modal-b"><p>For security you will be signed out in <b class="mono" id="m3c">2:00</b>. Your ballot has not been submitted.</p></div><div class="modal-f"><button class="btn" data-close>Sign out</button><button class="btn primary" data-close>Stay signed in</button></div></div></div>
+<div class="modal-wrap" id="m2" role="dialog" aria-modal="true" aria-labelledby="m2t"><div class="modal"><div class="modal-h"><h3 id="m2t">Cancel this election?</h3><button class="btn ghost icon sm" data-close aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div><div class="modal-b"><div class="banner bad"><svg class="i"><use href="#i-alert"/></svg><div><b>This cannot be undone</b>Voters are notified. The record stays in the audit trail.</div></div><div class="field"><label for="why">Reason (required)</label><textarea class="ta" id="why" placeholder="Explain why this election is cancelled"></textarea></div></div><div class="modal-f"><button class="btn" data-close>Keep election</button><button class="btn danger" data-close>Cancel election</button></div></div></div>
+
+<script>
+(function(){
+  var root=document.documentElement;
+  function seg(group,attr,fn){document.querySelectorAll('['+attr+']').forEach(function(b){b.addEventListener('click',function(){var p=b.parentNode;p.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');fn(b.getAttribute(attr))})})}
+  seg(0,'data-theme-set',function(v){root.setAttribute('data-theme',v)});
+  seg(0,'data-r',function(v){root.style.setProperty('--r',v)});
+  document.querySelectorAll('.seg button:not([data-theme-set]):not([data-r])').forEach(function(b){b.addEventListener('click',function(){b.parentNode.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true')})});
+  document.querySelectorAll('[data-demo]').forEach(function(b){b.addEventListener('click',function(){
+    if(b.getAttribute('data-state'))return;
+    var w=b.offsetWidth;b.style.minWidth=w+'px';b.setAttribute('data-state','loading');
+    setTimeout(function(){b.setAttribute('data-state','done');setTimeout(function(){b.removeAttribute('data-state');b.style.minWidth=''},1400)},1800)})});
+  var ind=document.getElementById('indet');if(ind)ind.indeterminate=true;
+  var ring=document.getElementById('ring'),rv=document.getElementById('ringv');
+  document.getElementById('ringbtn').addEventListener('click',function(){ring.style.setProperty('--p',0);rv.textContent='0%';var n=0;var t=setInterval(function(){n+=4;if(n>=100){n=100;clearInterval(t)}ring.style.setProperty('--p',n);rv.textContent=n+'%'},40)});
+  var st=document.getElementById('stamp');document.getElementById('stampbtn').addEventListener('click',function(){st.classList.remove('go');void st.offsetWidth;st.classList.add('go')});
+  try{new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting)st.classList.add('go')})}).observe(st)}catch(e){st.classList.add('go')}
+  document.querySelectorAll('.tabs [role=tab]').forEach(function(t){t.addEventListener('click',function(){t.parentNode.querySelectorAll('[role=tab]').forEach(function(x){x.setAttribute('aria-selected','false')});t.setAttribute('aria-selected','true')})});
+  document.querySelectorAll('.opt').forEach(function(o){o.addEventListener('click',function(){if(o.getAttribute('aria-disabled')==='true')return;var role=o.getAttribute('role');if(role==='radio'){o.parentNode.querySelectorAll('.opt[role=radio]').forEach(function(x){x.setAttribute('aria-checked','false')});o.setAttribute('aria-checked','true')}else{o.setAttribute('aria-checked',o.getAttribute('aria-checked')==='true'?'false':'true')}})});
+  var tc=document.getElementById('toasts');
+  document.querySelectorAll('[data-toast]').forEach(function(b){b.addEventListener('click',function(){
+    var bad=b.getAttribute('data-toast')==='bad';var t=document.createElement('div');t.className='toast '+(bad?'bad':'ok');t.setAttribute('role',bad?'alert':'status');
+    t.innerHTML='<svg class="i"><use href="#i-'+(bad?'alert':'check')+'"/></svg><span>'+(bad?'Could not save. Check your connection and try again.':'Draft saved. Tue 27 Oct, 10:48 EAT.')+'</span><button class="x" aria-label="Dismiss"><svg class="i s"><use href="#i-x"/></svg></button>';
+    function close(){t.classList.add('out');setTimeout(function(){t.remove()},250)}
+    t.querySelector('.x').addEventListener('click',close);tc.appendChild(t);if(!bad)setTimeout(close,5000)})});
+  var last=null;
+  function openM(id){last=document.activeElement;var m=document.getElementById(id);m.classList.add('on');var f=m.querySelector('button,textarea');if(f)f.focus()}
+  function closeM(){document.querySelectorAll('.modal-wrap.on').forEach(function(m){m.classList.remove('on')});if(last)last.focus()}
+  document.querySelectorAll('[data-modal]').forEach(function(b){b.addEventListener('click',function(){openM(b.getAttribute('data-modal'))})});
+  document.querySelectorAll('[data-close]').forEach(function(b){b.addEventListener('click',closeM)});
+  document.querySelectorAll('.modal-wrap').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)closeM()})});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeM()});
+  var ct=document.getElementById('copytok');ct.addEventListener('click',function(){var txt=document.getElementById('tok').textContent;
+    function done(){ct.textContent='Copied';setTimeout(function(){ct.textContent='Copy CSS'},1500)}
+    try{navigator.clipboard.writeText(txt).then(done,function(){var r=document.createRange();r.selectNodeContents(document.getElementById('tok'));var s=getSelection();s.removeAllRanges();s.addRange(r)})}catch(e){var r=document.createRange();r.selectNodeContents(document.getElementById('tok'));var s=getSelection();s.removeAllRanges();s.addRange(r)}});
+  /* animations */
+  function replay(el){el.classList.remove('go');void el.offsetWidth;el.classList.add('go');if(el.querySelector('.cu'))countUp(el)}
+  function countUp(scope){scope.querySelectorAll('.cu').forEach(function(s){var to=+s.getAttribute('data-to'),t0=null;function f(t){if(!t0)t0=t;var k=Math.min(1,(t-t0)/1200);s.textContent=Math.round(to*(1-Math.pow(1-k,3))).toLocaleString('en-US');if(k<1)requestAnimationFrame(f)}requestAnimationFrame(f)})}
+  document.querySelectorAll('[data-replay]').forEach(function(b){b.addEventListener('click',function(){replay(document.getElementById(b.getAttribute('data-replay')))})});
+  var lv=document.getElementById('lv'),lvn=document.getElementById('lvn'),lvc=2417;
+  document.getElementById('lvb').addEventListener('click',function(){lvc+=3+Math.floor(Math.random()*7);lvn.textContent=lvc.toLocaleString('en-US');lv.classList.remove('fl');void lv.offsetWidth;lv.classList.add('fl')});
+  /* interactive */
+  document.querySelectorAll('.acc-i>button').forEach(function(b){b.addEventListener('click',function(){var i=b.parentNode,o=!i.classList.contains('open');i.classList.toggle('open',o);b.setAttribute('aria-expanded',o)})});
+  function closePops(except){document.querySelectorAll('.pop.on').forEach(function(p){if(p!==except)p.classList.remove('on')})}
+  document.querySelectorAll('[data-pop]').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();var p=document.getElementById(b.getAttribute('data-pop'));closePops(p);p.classList.toggle('on')})});
+  document.addEventListener('click',function(e){if(!e.target.closest('.pop'))closePops()});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closePops()});
+  document.getElementById('markread').addEventListener('click',function(){document.querySelectorAll('#pm2 .nt.un').forEach(function(n){n.classList.remove('un')});var b=document.getElementById('bellb');if(b)b.remove();document.getElementById('bell').setAttribute('aria-label','Notifications, none unread')});
+  var people=[['Nankunda Gloria','2022/BBA/041'],['Nakato Prossy','2023/BED/208'],['Asiimwe Timothy','2023/BSC/114'],['Tusiime Kenneth','2021/BSN/077'],['Nuwagaba Isaac','2024/BSC/302']];
+  var cb=document.getElementById('cb'),cbl=document.getElementById('cbl');
+  cb.addEventListener('input',function(){var q=cb.value.trim().toLowerCase();if(!q){cbl.classList.remove('on');cb.setAttribute('aria-expanded','false');return}var m=people.filter(function(p){return (p[0]+' '+p[1]).toLowerCase().indexOf(q)>-1});cbl.innerHTML=m.length?m.map(function(p,i){return '<button class="mi'+(i===0?' hl':'')+'" role="option" data-n="'+p[0]+'"><b>'+p[0]+'</b><span class="mono" style="margin-left:auto;color:var(--ink-3);font-size:12px">'+p[1]+'</span></button>'}).join(''):'<div class="nt">No voter matches "'+q.replace(/[<>&"]/g,'')+'"</div>';cbl.classList.add('on');cb.setAttribute('aria-expanded','true');cbl.querySelectorAll('button').forEach(function(x){x.addEventListener('click',function(){cb.value=x.getAttribute('data-n');cbl.classList.remove('on')})})});
+  var cg=document.getElementById('calg'),dtv=document.getElementById('dtv'),tm=document.getElementById('tm'),day=2;
+  var days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],h='';days.forEach(function(d){h+='<span>'+d+'</span>'});for(var i=0;i<6;i++)h+='<button class="mut" disabled aria-hidden="true"></button>';for(var d=1;d<=30;d++)h+='<button data-d="'+d+'" aria-pressed="'+(d===2)+'">'+d+'</button>';cg.innerHTML=h;
+  function setDt(){var wd=days[(day+5)%7];dtv.value=wd+' '+day+' Nov 2026, '+tm.value}
+  cg.querySelectorAll('[data-d]').forEach(function(b){b.addEventListener('click',function(){cg.querySelectorAll('[data-d]').forEach(function(x){x.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');day=+b.getAttribute('data-d');setDt()})});tm.addEventListener('change',setDt);
+  var tags=document.getElementById('tags'),tg=document.getElementById('tg');
+  function wireTag(t){t.querySelector('button').addEventListener('click',function(){t.remove();tg.focus()})}
+  tags.querySelectorAll('.t').forEach(wireTag);
+  tg.addEventListener('keydown',function(e){if(e.key==='Enter'&&tg.value.trim()){e.preventDefault();var t=document.createElement('span');t.className='t';t.appendChild(document.createTextNode(tg.value.trim()));var b=document.createElement('button');b.setAttribute('aria-label','Remove '+tg.value.trim());b.innerHTML='<svg class="i s"><use href="#i-x"/></svg>';t.appendChild(b);tags.insertBefore(t,tg);wireTag(t);tg.value=''}else if(e.key==='Backspace'&&!tg.value){var l=tags.querySelectorAll('.t');if(l.length)l[l.length-1].remove()}});
+  var srt=document.getElementById('srt'),sd={};
+  srt.querySelectorAll('thead button').forEach(function(b){b.addEventListener('click',function(){var k=+b.getAttribute('data-k'),asc=sd[k]!==true;sd={};sd[k]=asc;var tb=srt.tBodies[0],rows=[].slice.call(tb.rows);rows.sort(function(a,c){var x=a.getAttribute('data-v').split('|')[k],y=c.getAttribute('data-v').split('|')[k];var r=k===0?x.localeCompare(y):(+x)-(+y);return asc?r:-r});rows.forEach(function(r){tb.appendChild(r)});srt.querySelectorAll('th').forEach(function(t){t.setAttribute('aria-sort','none')});b.parentNode.setAttribute('aria-sort',asc?'ascending':'descending')})});
+  srt.addEventListener('change',function(){var n=srt.querySelectorAll('tbody input:checked').length;srt.querySelectorAll('tbody tr').forEach(function(r){r.classList.toggle('sel',r.querySelector('input').checked)});document.getElementById('bulkn').textContent=n;document.getElementById('bulk').classList.toggle('on',n>0)});
+  var tcf=document.getElementById('tcf'),tcb=document.getElementById('tcb');tcf.addEventListener('input',function(){tcb.disabled=tcf.value!=='CANCEL'});
+  var hold=document.getElementById('hold'),hl=document.getElementById('holdl'),hp=0,ht=null,hs=0;
+  function hstart(){if(hold.classList.contains('done'))return;hs=performance.now();cancelAnimationFrame(ht);(function f(t){hp=Math.min(1,(performance.now()-hs)/1200);hold.style.setProperty('--p',hp);if(hp>=1){hold.classList.add('done');hl.innerHTML='<svg class="i"><use href="#i-check"/></svg>Certified';setTimeout(function(){hold.classList.remove('done');hold.style.setProperty('--p',0);hl.innerHTML='<svg class="i"><use href="#i-shield"/></svg>Hold to certify results'},1800);return}ht=requestAnimationFrame(f)})()}
+  function hend(){if(hold.classList.contains('done'))return;cancelAnimationFrame(ht);hold.style.setProperty('--p',0)}
+  hold.addEventListener('pointerdown',hstart);['pointerup','pointerleave','pointercancel'].forEach(function(n){hold.addEventListener(n,hend)});
+  hold.addEventListener('keydown',function(e){if((e.key===' '||e.key==='Enter')&&!e.repeat){e.preventDefault();hstart()}});hold.addEventListener('keyup',function(e){if(e.key===' '||e.key==='Enter')hend()});
+  var hc=document.getElementById('hcopy');hc.addEventListener('click',function(){var s=hc.querySelector('span');function ok(){s.textContent='Copied';setTimeout(function(){s.textContent='Copy'},1500)}try{navigator.clipboard.writeText('9f3c1e7a4b2d…a71e').then(ok,function(){s.textContent='Select and copy'})}catch(e){s.textContent='Select and copy'}});
+  var cs=6*3600+12*60;setInterval(function(){cs=cs>0?cs-1:0;var hh=Math.floor(cs/3600),mm=Math.floor(cs%3600/60),ss=cs%60;function p(n){return (n<10?'0':'')+n}document.getElementById('cdh').textContent=p(hh);document.getElementById('cdm').textContent=p(mm);document.getElementById('cds').textContent=p(ss)},1000);
+  var m3t=null;document.getElementById('sto').addEventListener('click',function(){var s=120,c=document.getElementById('m3c');clearInterval(m3t);c.textContent='2:00';m3t=setInterval(function(){s--;c.textContent=Math.floor(s/60)+':'+(s%60<10?'0':'')+(s%60);if(s<=0)clearInterval(m3t)},1000)});
+  var upb=document.getElementById('upb'),upf=document.getElementById('upf'),upbar=document.getElementById('upbar'),upp=document.getElementById('upp'),upi=null;
+  upb.addEventListener('click',function(){clearInterval(upi);upf.hidden=false;upbar.hidden=false;var n=0;upi=setInterval(function(){n+=Math.ceil(Math.random()*9);if(n>=100){n=100;clearInterval(upi)}upbar.firstChild.style.width=n+'%';upp.textContent=n===100?'Uploaded':n+'%'},120)});
+  var cc=document.getElementById('cc');cc.addEventListener('input',function(){document.getElementById('ccn').textContent=cc.value.length+' / 600'});
+  document.querySelectorAll('.stg.go,.a-skwrap.go').forEach(function(e){if(e.querySelector('.cu'))countUp(e)});
+  var links=[].slice.call(document.querySelectorAll('.index nav a'));
+  try{var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){links.forEach(function(a){a.classList.toggle('on',a.getAttribute('href')==='#'+e.target.id)})}})},{rootMargin:'-20% 0px -70% 0px'});document.querySelectorAll('.sec').forEach(function(s){io.observe(s)})}catch(e){}
+})();
+</script>
+
+</body></html>

@@ -1341,6 +1341,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.GET("/elections/:id/eligibility", eligibilityHandler.Mine)
 		protected.GET("/elections/:id/lifecycle", electionLifecycleHandler.Phase)
 		protected.GET("/elections/:id/ballot", ballotHandler.View)
+		protected.GET("/elections/:id/my-vote-status", ballotHandler.VoteStatus)
 		protected.POST("/elections/:id/ballot/start", ballotHandler.Start)
 		protected.POST("/elections/:id/ballot/submit", ballotHandler.Submit)
 

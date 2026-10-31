@@ -5,8 +5,10 @@ import type {
   EligibilityDecision,
   EligibilityReport,
   Results,
+  SubmitOptions,
   SubmitResult,
   User,
+  VoteStatus,
 } from "./types";
 
 export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").replace(/\/$/, "");
@@ -82,15 +84,22 @@ export const elections = {
     }),
   ballot: (id: string) => api<Ballot>(`/elections/${id}/ballot`),
   startBallot: (id: string) =>
-    api<{ eligible: boolean; starts_at: string; ends_at: string }>(
-      `/elections/${id}/ballot/start`,
-      { method: "POST" }
-    ),
-  submitBallot: (id: string, selections: Array<Record<string, unknown>>) =>
+    api<{
+      eligible: boolean;
+      starts_at: string;
+      ends_at: string;
+      ballot_version_id?: string | null;
+    }>(`/elections/${id}/ballot/start`, { method: "POST" }),
+  submitBallot: (id: string, selections: Array<Record<string, unknown>>, options: SubmitOptions) =>
     api<SubmitResult>(`/elections/${id}/ballot/submit`, {
       method: "POST",
-      body: { selections },
+      body: {
+        selections,
+        ballot_version_id: options.ballotVersionId ?? undefined,
+        idempotency_key: options.idempotencyKey,
+      },
     }),
+  voteStatus: (id: string) => api<VoteStatus>(`/elections/${id}/my-vote-status`),
   results: (id: string) => api<Results>(`/elections/${id}/results`),
   certify: (id: string) => api<{ status: string }>(`/elections/${id}/certify`, { method: "POST" }),
 };

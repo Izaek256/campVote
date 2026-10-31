@@ -3,8 +3,8 @@ package models
 import (
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/ids"
+	"gorm.io/gorm"
 )
 
 // Ballot status constants (FR-TALLY-08)
@@ -20,10 +20,13 @@ const (
 // 2. It is impossible to join this table to the users or voter_participations table.
 // 3. CastAt is stored with second precision and not correlated with access logs.
 type AnonymousBallot struct {
-	ID         string            `gorm:"primarykey;size:36" json:"id"`
-	ElectionID string            `gorm:"size:36;not null;index" json:"election_id"`
-	Status     string            `gorm:"size:20;not null;default:'VALID';index" json:"status"`
-	CastAt     time.Time         `gorm:"not null;index" json:"cast_at"`
+	ID         string `gorm:"primarykey;size:36" json:"id"`
+	ElectionID string `gorm:"size:36;not null;index" json:"election_id"`
+	// BallotVersionID is the published definition this ballot was cast
+	// against (ISSUE-06/08). It names a ballot, never a voter.
+	BallotVersionID *string   `gorm:"size:36;index" json:"ballot_version_id,omitempty"`
+	Status          string    `gorm:"size:20;not null;default:'VALID';index" json:"status"`
+	CastAt          time.Time `gorm:"not null;index" json:"cast_at"`
 
 	// Selections for the ballot
 	Selections []BallotSelection `gorm:"foreignKey:BallotID;constraint:OnDelete:CASCADE" json:"selections,omitempty"`

@@ -1,23 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { BallotVersion, BallotContent } from "@campvote/shared/types/ballot_version";
+import type { BallotVersion } from "@campvote/shared/types/ballot_version";
 
 export default function BallotBuilderPage() {
   const params = useParams();
   const electionId = params.id;
   const [versions, setVersions] = useState<BallotVersion[]>([]);
   const [currentVersion, setCurrentVersion] = useState<BallotVersion | null>(null);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  // Placeholder until the publish-validation endpoint is wired up.
+  const [validationErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
 
-  useEffect(() => {
-    fetchVersions();
-  }, [electionId]);
-
-  const fetchVersions = async () => {
+  const fetchVersions = useCallback(async () => {
     try {
       const response = await fetch(`/api/v1/staff/elections/${electionId}/ballot/versions`);
       if (!response.ok) throw new Error("Failed to fetch versions");
@@ -31,7 +28,11 @@ export default function BallotBuilderPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [electionId]);
+
+  useEffect(() => {
+    fetchVersions();
+  }, [fetchVersions]);
 
   const handlePublish = async () => {
     if (validationErrors.length > 0) {
@@ -39,7 +40,9 @@ export default function BallotBuilderPage() {
       return;
     }
 
-    if (!confirm("Publish this ballot? This action is irreversible and will create a new version.")) {
+    if (
+      !confirm("Publish this ballot? This action is irreversible and will create a new version.")
+    ) {
       return;
     }
 
@@ -58,16 +61,6 @@ export default function BallotBuilderPage() {
     } finally {
       setPublishing(false);
     }
-  };
-
-  const validateBallot = () => {
-    const errors: string[] = [];
-    // This would call the validation API in a real implementation
-    // For now, we'll simulate validation
-    if (versions.length === 0) {
-      errors.push("Ballot must have at least one version");
-    }
-    setValidationErrors(errors);
   };
 
   if (loading) return <div className="p-8">Loading...</div>;

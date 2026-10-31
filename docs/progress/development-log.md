@@ -221,3 +221,50 @@ Chronological record of completed work, verified test results, architecture deci
 2. Run the suite against PostgreSQL (`GRIT_TEST_DATABASE_URL`), especially the conditional status update and the optimistic version update.
 3. ISSUE-06/08: position, candidate and roster edit endpoints must call the same freeze rule; ballot versioning, tallies and results publication remain.
 4. No UI consumes the lifecycle endpoints yet.
+
+---
+
+## [2026-10-30] ISSUE-08: Atomic, Idempotent Vote Submission and the Voter Flow
+
+**Branch:** `feat/issue-08-atomic-vote-submission` (from `develop` at `2b26360`), not yet merged.
+**Goal:** a voter votes exactly once per election; the submission is one transaction bound to the ballot version the voter saw; a lost response can be recovered from without risking a second ballot.
+
+### Activities Completed
+1. **Models (`apps/api/internal/models/`):**
+   - `VoterParticipation.IdempotencyKey` plus two unique indexes: `(election_id, user_id)` and `(election_id, idempotency_key)`; random key generated in `BeforeCreate` when the client sends none.
+   - `AnonymousBallot.BallotVersionID` so a ballot is always interpretable against one published definition.
+   - `ElectionAuditLog` action `VOTE_CAST`.
+2. **Submission (`apps/api/internal/handlers/ballot.go`):**
+   - `Submit` validates the whole payload against the current `BallotVersion` before the transaction, then re-checks eligibility, open status and the single-participation rule inside it, and writes participation + anonymous ballot + audit row together or not at all.
+   - Idempotent replay: the same `idempotency_key` returns the original outcome and confirmation token with `200`; a new key after a ballot exists returns `409`; a stale `ballot_version_id` returns `409` and records nothing.
+   - Closing-time race rule: acceptance is decided at commit time inside the transaction by the server clock; a request that started before `ends_at` but commits after it is refused.
+   - Centralised `validateSelectionsAgainst` shared by the published-version path and the legacy live-definition path.
+   - `VoteStatus` returns `{voted, recorded_at (15-minute bucket), phase, server_time}` — participation only.
+3. **Routes:** `GET /api/v1/elections/:id/my-vote-status`; policy entry updated.
+4. **Election list:** `my_vote_status` per election so `/elections` shows `Vote` vs `View status` without N+1 requests.
+5. **Web:**
+   - `lib/api.ts` `submitBallot(id, selections, {ballotVersionId, idempotencyKey})` and `voteStatus(id)`; `lib/types.ts` `VoteStatus`, ballot-version fields.
+   - `/elections/[id]/ballot` rewritten: inline review step, confirm checkbox, in-memory idempotency key reused on retry, unknown-outcome banner with **Check status**, stale-version reload banner, already-voted banner, session-expired banner.
+   - New `/elections/[id]/status`: voted / no vote / closed / session-expired, no re-vote path.
+   - `/elections` cards and `/elections/[id]` use `my_vote_status`.
+   - `VoteRecordedNotice` rewritten in the app's CSS vocabulary (it was using Tailwind classes that do not exist in this project).
+6. **Design reference committed:** `docs/ui-kit/campVote-UI-Kit.html` (A0).
+7. **Baseline fixes carried on this branch (not ISSUE-08 scope, but required to build/lint):**
+   - `candidate.go` `Update()` declared an unused `userID` — the API did not compile on `develop`.
+   - `apps/web/tsconfig.json` mapped `@campvote/shared/*` and `@campvote/web/*`; ISSSE-06/07 files imported them and the type check failed on `develop`.
+   - `packages/shared/types/ballot_version.ts` rewritten as plain interfaces (the file imported `zod`, which is not a dependency of any workspace package).
+   - Repo formatted with Biome and the ISSUE-06/07 staff pages converted to `useCallback` fetchers so lint passes; the golangci-lint CI step pinned to v2 (the workflow used a v1 binary against a v2 config, so the backend job failed on `develop`).
+
+### Checks Run
+- `go test ./internal/handlers/ -run 'Vote|Ballot|Submission' -count=1` — PASS (idempotency, parallel submit, rejected ballot writes nothing, closing-time race, vote status).
+- `pnpm --filter @campvote/web type-check`, `lint`, `test`, `build` — PASS (build emits the new `/elections/[id]/status` route).
+- `pnpm exec biome check .` — PASS.
+
+### Documentation
+- Created `docs/vote-submission.md`.
+- Added the ISSUE-08 view table to `docs/ui-views.md`.
+- Updated `docs/README.md` (index + new UI section).
+
+### Deferred / Blocked
+- Browser (Playwright) evidence: no Playwright suite exists and no Docker/browser environment was available locally. The API tests above are the evidence for the same rules; ISSUE-11 owns the browser pass.
+- No fault-injection test forcing a mid-transaction failure; the transaction and the DB constraints are the guarantee, and the duplicate path is covered by the constraint test.
