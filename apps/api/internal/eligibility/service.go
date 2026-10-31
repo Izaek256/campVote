@@ -91,25 +91,95 @@ func CheckElection(db *gorm.DB, election *models.Election, user *models.User, at
 
 // domainAllowed implements the SRS domain prerequisite. An empty list does not
 // grant access; it simply leaves the roster as the only evidence.
+//
+// Supports:
+// - Simple domain suffixes: "@std.must.ac.ug" matches any @std.must.ac.ug email
+// - Class patterns: "*.bse@std.must.ac.ug" matches any year for BSE program
+// - Specific class: "2026.bse@std.must.ac.ug" matches exactly that class
+// - Wildcard patterns: "*@std.must.ac.ug" matches any @std.must.ac.ug email
 func domainAllowed(allowed, email string) bool {
 	email = strings.ToLower(strings.TrimSpace(email))
-	allowed = strings.TrimSpace(allowed)
+	allowed = strings.ToLower(strings.TrimSpace(allowed))
 	if allowed == "" {
 		return true
 	}
-	for _, domain := range strings.Split(allowed, ",") {
-		domain = strings.ToLower(strings.TrimSpace(domain))
-		if domain == "" {
+	for _, pattern := range strings.Split(allowed, ",") {
+		pattern = strings.ToLower(strings.TrimSpace(pattern))
+		if pattern == "" {
 			continue
 		}
-		if !strings.HasPrefix(domain, "@") {
-			domain = "@" + domain
-		}
-		if strings.HasSuffix(email, domain) {
+		if matchesPattern(pattern, email) {
 			return true
 		}
 	}
 	return false
+}
+
+// matchesPattern checks if an email matches a domain pattern.
+// Both pattern and email are assumed to be already lowercased by domainAllowed.
+// Patterns can be:
+// - Simple domain: "@std.must.ac.ug" or "std.must.ac.ug"
+// - Class pattern: "*.bse@std.must.ac.ug" (wildcard for year)
+// - Specific class: "2026.bse@std.must.ac.ug" (exact match)
+// - Wildcard: "*@std.must.ac.ug" (matches anything at that domain)
+func matchesPattern(pattern, email string) bool {
+	pattern = strings.TrimSpace(pattern)
+	email = strings.TrimSpace(email)
+
+	// Simple domain suffix match (no wildcard)
+	if !strings.Contains(pattern, "*") {
+		// If pattern is just a domain (no @), add @ for suffix matching
+		if !strings.Contains(pattern, "@") {
+			pattern = "@" + pattern
+		}
+		// If pattern starts with @ and has no local part, it's a domain suffix
+		if strings.HasPrefix(pattern, "@") && pattern[0] == '@' && strings.Count(pattern, "@") == 1 {
+			return strings.HasSuffix(email, pattern)
+		}
+		// If pattern is a full email without wildcards, it's an exact match
+		if strings.Contains(pattern, "@") {
+			return email == pattern
+		}
+		// Pattern is just a domain part
+		return strings.HasSuffix(email, "@"+pattern)
+	}
+
+	// Handle wildcard patterns
+	// Extract the domain part after @
+	atIndex := strings.LastIndex(pattern, "@")
+	if atIndex == -1 {
+		return false
+	}
+
+	domain := pattern[atIndex:]  // @std.must.ac.ug
+	localPart := pattern[:atIndex] // *.bse or 2026.bse or *
+
+	// Extract email parts
+	emailAtIndex := strings.LastIndex(email, "@")
+	if emailAtIndex == -1 {
+		return false
+	}
+	emailDomain := email[emailAtIndex:]    // @std.must.ac.ug
+	emailLocal := email[:emailAtIndex]     // 2026.bse
+
+	// Domain must match exactly
+	if emailDomain != domain {
+		return false
+	}
+
+	// Match local part pattern
+	if localPart == "*" {
+		return true // Wildcard matches anything
+	}
+
+	if strings.HasPrefix(localPart, "*.") {
+		// Pattern like *.bse - matches anything ending with .bse
+		suffix := strings.TrimPrefix(localPart, "*.")
+		return strings.HasSuffix(emailLocal, suffix)
+	}
+
+	// Exact match for specific class
+	return emailLocal == localPart
 }
 
 // Freeze snapshots the eligible count when an election opens. After it, new
