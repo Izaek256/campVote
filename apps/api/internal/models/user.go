@@ -185,6 +185,8 @@ func Models() []interface{} {
 		&BallotSelection{},
 		&BallotVersion{},
 		&ElectionTally{},
+		&ResultSnapshot{},
+		&ResultRecount{},
 		&ElectionAuditLog{},
 		// grit:models
 	}
