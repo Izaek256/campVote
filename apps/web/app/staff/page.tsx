@@ -15,11 +15,11 @@ const emptyForm = {
   title: "",
   description: "",
   category: "GUILD",
-  organizing_unit: "MMU Electoral Commission",
+  organizing_unit: "",
   starts_at: "",
   ends_at: "",
   result_policy: "AFTER_CLOSE",
-  allowed_domains: "@std.must.ac.ug,@must.ac.ug",
+  allowed_domains: "",
 };
 
 /** datetime-local is rendered as EAT; the API stores UTC. */
@@ -85,8 +85,7 @@ function StaffHome() {
           <span className="lbl">Officials</span>
           <h1>Elections</h1>
           <p>
-            Create an election, then move it through its audited lifecycle. Drafts stay private to
-            you.
+            Create an election quickly with minimal info, then add details later. Drafts stay private to you.
           </p>
         </div>
         <div className="row">
@@ -129,7 +128,7 @@ function StaffHome() {
           </div>
           <div className="form-grid">
             <div className="field full">
-              <label htmlFor="title">Election title</label>
+              <label htmlFor="title">Election title *</label>
               <input
                 id="title"
                 className={`in${fields.title ? " bad" : ""}`}
@@ -141,7 +140,7 @@ function StaffHome() {
               {fields.title ? <span className="err">{fields.title}</span> : null}
             </div>
             <div className="field full">
-              <label htmlFor="description">Description</label>
+              <label htmlFor="description">Description (optional)</label>
               <textarea
                 id="description"
                 className="ta"
@@ -176,12 +175,13 @@ function StaffHome() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="unit">Organising unit</label>
+              <label htmlFor="unit">Organising unit (optional)</label>
               <input
                 id="unit"
                 className="in"
                 value={form.organizing_unit}
                 onChange={(event) => setForm({ ...form, organizing_unit: event.target.value })}
+                placeholder="MMU Electoral Commission"
               />
             </div>
             <div className="field">
@@ -192,7 +192,6 @@ function StaffHome() {
                 type="datetime-local"
                 value={form.starts_at}
                 onChange={(event) => setForm({ ...form, starts_at: event.target.value })}
-                required
               />
               {fields.starts_at ? <span className="err">{fields.starts_at}</span> : null}
             </div>
@@ -204,7 +203,6 @@ function StaffHome() {
                 type="datetime-local"
                 value={form.ends_at}
                 onChange={(event) => setForm({ ...form, ends_at: event.target.value })}
-                required
               />
               {fields.ends_at ? <span className="err">{fields.ends_at}</span> : null}
             </div>
@@ -222,12 +220,13 @@ function StaffHome() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="domains">Allowed domains</label>
+              <label htmlFor="domains">Allowed domains (optional)</label>
               <input
                 id="domains"
                 className={`in${fields.allowed_domains ? " bad" : ""}`}
                 value={form.allowed_domains}
                 onChange={(event) => setForm({ ...form, allowed_domains: event.target.value })}
+                placeholder="@std.must.ac.ug,@must.ac.ug"
               />
               {fields.allowed_domains ? (
                 <span className="err">{fields.allowed_domains}</span>
