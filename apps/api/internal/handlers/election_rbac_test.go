@@ -77,8 +77,14 @@ func rbacEngine(t *testing.T, db *gorm.DB) *gin.Engine {
 	protected.GET("/api/v1/elections/:id/roles", h.ListRoles)
 	protected.PUT("/api/v1/elections/:id/roles/:userId", h.AssignRole)
 	protected.DELETE("/api/v1/elections/:id/roles/:userId/:role", h.RemoveRole)
-	protected.GET("/api/v1/elections/:id/results", h.Results)
-	protected.POST("/api/v1/elections/:id/certify", h.Certify)
+	// Results routes (ISSUE-09), served from the protected group so a voter
+	// reaches the same endpoint an officer does.
+	results := handlers.NewResultsHandler(db)
+	protected.GET("/api/v1/elections/:id/results", results.Read)
+	protected.GET("/api/v1/elections/:id/results/history", results.History)
+	protected.POST("/api/v1/elections/:id/results/tally", results.RunTally)
+	protected.POST("/api/v1/elections/:id/results/recount", results.Recount)
+	protected.POST("/api/v1/elections/:id/results/certify", results.Certify)
 	// An admin endpoint, to prove a voter token cannot reach it.
 	protected.GET("/api/v1/users", func(c *gin.Context) { c.Status(http.StatusOK) })
 	return r
@@ -131,8 +137,8 @@ func TestRoutePolicyMatrixForElectionEndpoints(t *testing.T) {
 		{"candidate cannot list roles", candidateToken, http.MethodGet, "/api/v1/elections/e-a/roles", http.StatusForbidden},
 		{"official cannot assign roles", officialToken, http.MethodPut, "/api/v1/elections/e-a/roles/" + voter.ID, http.StatusForbidden},
 		{"admin cannot read certified-only before certification", adminToken, http.MethodGet, "/api/v1/elections/e-d/results", http.StatusForbidden},
-		{"official cannot certify", officialToken, http.MethodPost, "/api/v1/elections/e-d/certify", http.StatusForbidden},
-		{"admin certifies after review", adminToken, http.MethodPost, "/api/v1/elections/e-d/certify", http.StatusOK},
+		{"official cannot certify", officialToken, http.MethodPost, "/api/v1/elections/e-d/results/certify", http.StatusForbidden},
+		{"certify requires a snapshot id", adminToken, http.MethodPost, "/api/v1/elections/e-d/results/certify", http.StatusNotFound},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -144,17 +150,56 @@ func TestRoutePolicyMatrixForElectionEndpoints(t *testing.T) {
 			if tc.method == http.MethodPut {
 				body = map[string]string{"role": models.RoleElectionOfficial}
 			}
+			if tc.path == "/api/v1/elections/e-d/results/certify" {
+				// Certification names a snapshot and always states a reason.
+				body = map[string]string{"snapshot_id": "does-not-exist", "reason": "checked the count"}
+			}
 			c.Do(tc.method, tc.path, body).AssertStatus(tc.status)
 		})
 	}
 
+	// Certification pins a specific snapshot, so a tally runs first. The
+	// snapshot is what the certifier's decision is recorded against.
+	client.As(adminToken).Post("/api/v1/elections/e-d/results/tally", nil).AssertCreated()
+	var history struct {
+		Snapshots []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"snapshots"`
+	}
+	client.As(adminToken).Get("/api/v1/elections/e-d/results/history").
+		AssertOK().BindData(&history)
+	if len(history.Snapshots) == 0 || history.Snapshots[0].ID == "" {
+		t.Fatal("expected a tally snapshot on the results history")
+	}
+	if history.Snapshots[0].Status != models.ResultStatusProvisional {
+		t.Errorf("first snapshot status = %q, want PROVISIONAL", history.Snapshots[0].Status)
+	}
+
+	// Certified-only: still forbidden before certification, for everyone.
+	client.As(adminToken).Get("/api/v1/elections/e-d/results").
+		AssertStatus(http.StatusForbidden)
+
+	client.As(adminToken).Post("/api/v1/elections/e-d/results/certify", map[string]string{
+		"snapshot_id": history.Snapshots[0].ID,
+		"reason":      "count checked against the roster",
+	}).AssertOK()
+
 	// Once certified, the same election is readable and labelled CERTIFIED.
 	var certified struct {
-		Label string `json:"label"`
+		Label    string `json:"label"`
+		Snapshot struct {
+			Status        string `json:"status"`
+			CertifyReason string `json:"certify_reason"`
+			ContentHash   string `json:"content_hash"`
+		} `json:"snapshot"`
 	}
 	client.As(adminToken).Get("/api/v1/elections/e-d/results").AssertOK().BindData(&certified)
 	if certified.Label != "CERTIFIED" {
 		t.Errorf("certified results label = %q, want CERTIFIED", certified.Label)
+	}
+	if certified.Snapshot.Status != models.ResultStatusCertified || certified.Snapshot.ContentHash == "" {
+		t.Errorf("certified snapshot = %+v, want CERTIFIED status with a content hash", certified.Snapshot)
 	}
 
 	// Denials are auditable, with the actor and the route, never a ballot.
