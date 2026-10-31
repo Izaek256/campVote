@@ -1520,6 +1520,11 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.POST("/elections/:id/eligibility/freeze", eligibilityHandler.Freeze)
 		staff.GET("/elections/:id/eligibility/report", eligibilityHandler.Report)
 
+		// ISSUE-10: Audit evidence reports
+		reportsHandler := handlers.NewReportsHandler(db)
+		staff.GET("/elections/:id/reports/summary.pdf", reportsHandler.ElectionSummaryPDF)
+		staff.GET("/elections/:id/reports/verification.pdf", reportsHandler.ResultsVerificationPDF)
+
 		// ISSUE-06: Ballot versioning and candidate workflow
 		// Position management
 		staff.GET("/elections/:id/positions", positionHandler.List)
