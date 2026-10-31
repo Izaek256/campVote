@@ -630,6 +630,8 @@ func mountAuthRoutes(v1 *gin.RouterGroup, authHandler *handlers.AuthHandler, sso
 	auth := v1.Group("/auth")
 	{
 		auth.POST("/register", authHandler.Register)
+		auth.POST("/signup/initiate", authHandler.SignupInitiate)
+		auth.POST("/signup/complete", authHandler.SignupComplete)
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.Refresh)
 		auth.POST("/forgot-password", authHandler.ForgotPassword)
@@ -1519,6 +1521,11 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.POST("/elections/:id/roster/:rosterId/status", eligibilityHandler.SetStatus)
 		staff.POST("/elections/:id/eligibility/freeze", eligibilityHandler.Freeze)
 		staff.GET("/elections/:id/eligibility/report", eligibilityHandler.Report)
+
+		// ISSUE-10: Audit evidence reports
+		reportsHandler := handlers.NewReportsHandler(db)
+		staff.GET("/elections/:id/reports/summary.pdf", reportsHandler.ElectionSummaryPDF)
+		staff.GET("/elections/:id/reports/verification.pdf", reportsHandler.ResultsVerificationPDF)
 
 		// ISSUE-06: Ballot versioning and candidate workflow
 		// Position management

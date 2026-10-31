@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth, isStaff } from "./auth-provider";
 import { Icon } from "./icon";
+import { ThemeToggle } from "./theme-toggle";
 
 function initials(first: string, last: string) {
   return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
@@ -43,6 +44,7 @@ export function SiteHeader() {
           </Link>
         </nav>
         <span className="row" style={{ marginLeft: "auto" }}>
+          <ThemeToggle />
           {user ? (
             <>
               <Link className="av sm" href="/account" aria-label="Your account">

@@ -1,8 +1,12 @@
 package handlers
 
 import (
+	"context"
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"sync"
 	"time"
@@ -119,6 +123,19 @@ type RegisterRequest struct {
 	MACAddress string `json:"mac_address"` // optional — provided by client if available
 }
 
+type SignupInitiateRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type SignupCompleteRequest struct {
+	Email            string `json:"email" binding:"required,email"`
+	VerificationCode string `json:"verification_code" binding:"required,len=6"`
+	FirstName        string `json:"first_name" binding:"required,min=2"`
+	LastName         string `json:"last_name" binding:"required,min=2"`
+	Password         string `json:"password" binding:"required,min=8"`
+	MACAddress       string `json:"mac_address"`
+}
+
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
@@ -229,6 +246,246 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	})
 }
 
+// SignupInitiate starts the signup process by sending a verification code to the email.
+// POST /api/v1/auth/signup/initiate
+func (h *AuthHandler) SignupInitiate(c *gin.Context) {
+	var req SignupInitiateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respond.Fail(c, respond.CodeValidationError, err.Error())
+		return
+	}
+
+	// Check if email already exists
+	var existingUser models.User
+	if err := h.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": gin.H{
+				"code":    "EMAIL_EXISTS",
+				"message": "An account with this email already exists",
+			},
+		})
+		return
+	}
+
+	// Generate verification code
+	code, err := generateRandomCode(6)
+	if err != nil {
+		log.Printf("auth: failed to generate verification code: %v", err)
+		respond.Fail(c, respond.CodeInternalError, "Failed to generate verification code")
+		return
+	}
+	token := req.Email + ":" + code
+
+	// Store the code with 10 minute expiry
+	signupCodesMutex.Lock()
+	signupCodes[token] = signupCodeEntry{
+		code:      code,
+		email:     req.Email,
+		expiresAt: time.Now().UTC().Add(10 * time.Minute),
+	}
+	signupCodesMutex.Unlock()
+
+	// In production, send email. In development, expose the code in response.
+	if h.Config.AppEnv == "production" {
+		if err := h.deliverSignupVerificationEmail(c.Request.Context(), req.Email, code); err != nil {
+			log.Printf("auth: failed to send signup verification email to %s: %v", req.Email, err)
+			// Don't fail the request - the user can request a new code
+		}
+	}
+
+	response := gin.H{
+		"message": "Verification code sent to your email",
+	}
+
+	// In development, include the code for testing
+	if h.Config.AppEnv != "production" {
+		response["verification_code"] = code
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// SignupComplete completes the signup process using the verification code.
+// POST /api/v1/auth/signup/complete
+func (h *AuthHandler) SignupComplete(c *gin.Context) {
+	var req SignupCompleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respond.Fail(c, respond.CodeValidationError, err.Error())
+		return
+	}
+
+	// Verify the code
+	token := req.Email + ":" + req.VerificationCode
+	signupCodesMutex.RLock()
+	entry, exists := signupCodes[token]
+	signupCodesMutex.RUnlock()
+
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"code":    "INVALID_CODE",
+				"message": "Invalid or expired verification code",
+			},
+		})
+		return
+	}
+
+	if time.Now().UTC().After(entry.expiresAt) {
+		signupCodesMutex.Lock()
+		delete(signupCodes, token)
+		signupCodesMutex.Unlock()
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"code":    "CODE_EXPIRED",
+				"message": "Verification code has expired",
+			},
+		})
+		return
+	}
+
+	// Verify email matches
+	if entry.email != req.Email {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"code":    "EMAIL_MISMATCH",
+				"message": "Email does not match the one that requested the code",
+			},
+		})
+		return
+	}
+
+	// Password strength check
+	if failed := password.Check(req.Password, req.Email, req.FirstName, req.LastName); len(failed) > 0 {
+		respond.Fail(c, respond.CodeValidationError, password.Message(failed))
+		return
+	}
+
+	if password.Breached(c.Request.Context(), req.Password) {
+		respond.Fail(c, respond.CodeValidationError, password.BreachMessage)
+		return
+	}
+
+	user := models.User{
+		FirstName:  req.FirstName,
+		LastName:   req.LastName,
+		Email:      req.Email,
+		Password:   req.Password,
+		Role:       models.RoleUser,
+		Active:     true,
+		IPAddress:  c.ClientIP(),
+		MACAddress: req.MACAddress,
+		EmailVerifiedAt: func() *time.Time { t := time.Now().UTC(); return &t }(),
+	}
+
+	if err := services.CreateUser(c.Request.Context(), h.DB, &user); err != nil {
+		if errors.Is(err, services.ErrEmailExists) {
+			c.JSON(http.StatusConflict, gin.H{
+				"error": gin.H{
+					"code":    "EMAIL_EXISTS",
+					"message": "A user with this email already exists",
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"code":    "INTERNAL_ERROR",
+				"message": "Failed to create user",
+			},
+		})
+		return
+	}
+
+	// Remove the used code
+	signupCodesMutex.Lock()
+	delete(signupCodes, token)
+	signupCodesMutex.Unlock()
+
+	tokens, err := h.AuthService.GenerateTokenPair(user.ID, user.Email, user.Role)
+	if err != nil {
+		respond.Fail(c, respond.CodeTokenError, "Failed to generate tokens")
+		return
+	}
+
+	if _, err := services.CreateSession(h.DB, c, user.ID, tokens.RefreshToken); err != nil {
+		log.Printf("auth: failed to record session for %s: %v", user.ID, err)
+	}
+
+	h.AuthService.SetAuthCookies(c, tokens)
+	services.LogRegister(h.DB, c, user.ID, user.Email)
+
+	c.JSON(http.StatusCreated, gin.H{
+		"data": gin.H{
+			"user":   user,
+			"tokens": tokens,
+		},
+		"message": "Account created successfully",
+	})
+}
+
+// deliverSignupVerificationEmail sends a verification code email for signup.
+func (h *AuthHandler) deliverSignupVerificationEmail(ctx context.Context, email, code string) error {
+	if h.Mailer == nil {
+		log.Printf("auth: no mailer configured, verification code for %s: %s", email, code)
+		return nil
+	}
+
+	templateData := map[string]interface{}{
+		"Code":      code,
+		"AppName":   "campVote",
+		"ExpiresIn": "10 minutes",
+	}
+
+	return h.Mailer.SendMessage(ctx, &mail.Message{
+		To:      []string{email},
+		Subject: "Verify your email for campVote",
+		HTML:    signupVerificationEmailTemplate(templateData),
+		Text:    plainTextSignupVerification(code),
+	})
+}
+
+func signupVerificationEmailTemplate(data map[string]interface{}) string {
+	return `
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>Verify Your Email</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+	<div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+		<h2 style="color: #12783f;">Verify Your Email Address</h2>
+		<p>Thank you for signing up for campVote. Please use the following verification code to complete your registration:</p>
+		<div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
+			{{.Code}}
+		</div>
+		<p>This code will expire in {{.ExpiresIn}}.</p>
+		<p>If you did not request this code, please ignore this email.</p>
+		<p style="color: #666; font-size: 12px;">MMU Electoral Commission</p>
+	</div>
+</body>
+</html>
+`
+}
+
+func plainTextSignupVerification(code string) string {
+	return fmt.Sprintf("Your campVote verification code is: %s\n\nThis code will expire in 10 minutes.\n\nIf you did not request this code, please ignore this email.", code)
+}
+
+// generateRandomCode generates a random numeric code of specified length
+func generateRandomCode(length int) (string, error) {
+	const digits = "0123456789"
+	result := make([]byte, length)
+	for i := range result {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
+		if err != nil {
+			return "", err
+		}
+		result[i] = digits[n.Int64()]
+	}
+	return string(result), nil
+}
+
 // invalidCredentials is the one answer a sign-in gets until its password has
 // been checked and found right. An unknown address, a wrong password, a locked
 // account and an account with no password all get it, with the same status,
@@ -241,7 +498,17 @@ func invalidCredentials(c *gin.Context) {
 var (
 	timingHashOnce sync.Once
 	timingHash     []byte
+	// Simple in-memory storage for signup verification codes (MVP)
+	// TODO: Replace with Redis or database storage for production
+	signupCodes     = make(map[string]signupCodeEntry)
+	signupCodesMutex sync.RWMutex
 )
+
+type signupCodeEntry struct {
+	code      string
+	email     string
+	expiresAt time.Time
+}
 
 // spendPasswordCheck does the bcrypt work of a password comparison when there is
 // no hash to compare against. Without it an unknown address answered in a
