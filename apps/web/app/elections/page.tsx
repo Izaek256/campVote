@@ -128,7 +128,13 @@ function ElectionsView() {
                 <div className="cb">
                   <div className="row-between">
                     <StatusChip status={election.status} />
-                    <span className="tag">{categoryLabel(election.category)}</span>
+                    {election.my_vote_status?.voted ? (
+                      <span className="chip nd final">
+                        <Icon name="check" size="s" /> Voted
+                      </span>
+                    ) : (
+                      <span className="tag">{categoryLabel(election.category)}</span>
+                    )}
                   </div>
                   <b style={{ fontSize: 18, lineHeight: 1.3 }}>{election.title}</b>
                   <span className="hint">
@@ -138,8 +144,19 @@ function ElectionsView() {
                   </span>
                   <span className="hint">{election.organizing_unit}</span>
                   <div style={{ marginTop: "auto", paddingTop: 8 }}>
-                    <Link className="btn primary block" href={`/elections/${election.id}`}>
-                      {election.accepting_votes ? "Vote now" : "View election"}
+                    <Link
+                      className={`btn block${election.accepting_votes && !election.my_vote_status?.voted ? " primary" : ""}`}
+                      href={
+                        election.my_vote_status?.voted
+                          ? `/elections/${election.id}/status`
+                          : `/elections/${election.id}`
+                      }
+                    >
+                      {election.my_vote_status?.voted
+                        ? "View vote status"
+                        : election.accepting_votes
+                          ? "Vote now"
+                          : "View election"}
                     </Link>
                   </div>
                 </div>

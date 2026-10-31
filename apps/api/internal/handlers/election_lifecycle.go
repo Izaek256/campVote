@@ -36,11 +36,19 @@ func (h *ElectionLifecycleHandler) now() time.Time {
 
 type electionView struct {
 	models.Election
-	Phase              string    `json:"phase"`
-	ServerTime         time.Time `json:"server_time"`
-	AcceptingVotes     bool      `json:"accepting_votes"`
-	DisplayTimezone    string    `json:"display_timezone"`
-	AllowedTransitions []string  `json:"allowed_transitions"`
+	Phase              string          `json:"phase"`
+	ServerTime         time.Time       `json:"server_time"`
+	AcceptingVotes     bool            `json:"accepting_votes"`
+	DisplayTimezone    string          `json:"display_timezone"`
+	AllowedTransitions []string        `json:"allowed_transitions"`
+	MyVoteStatus       *voteStatusView `json:"my_vote_status,omitempty"`
+}
+
+// voteStatusView is the caller's own participation state for one election. It
+// is display data only: the server still enforces every rule.
+type voteStatusView struct {
+	Voted      bool       `json:"voted"`
+	RecordedAt *time.Time `json:"recorded_at,omitempty"`
 }
 
 func (h *ElectionLifecycleHandler) view(e *models.Election, now time.Time) electionView {
@@ -161,7 +169,38 @@ func (h *ElectionLifecycleHandler) List(c *gin.Context) {
 		}
 		out = append(out, h.view(&elections[i], now))
 	}
+	h.attachVoteStatus(c, out)
 	respond.OK(c, out)
+}
+
+// attachVoteStatus adds the caller's own participation flag to the list. It is
+// the only identity-linked field in the response and carries no choice data.
+func (h *ElectionLifecycleHandler) attachVoteStatus(c *gin.Context, elections []electionView) {
+	userID := c.GetString("user_id")
+	if userID == "" || len(elections) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(elections))
+	for _, election := range elections {
+		ids = append(ids, election.ID)
+	}
+	var rows []models.VoterParticipation
+	if err := h.DB.Where("user_id = ? AND election_id IN ?", userID, ids).Find(&rows).Error; err != nil {
+		return
+	}
+	byElection := make(map[string]models.VoterParticipation, len(rows))
+	for _, row := range rows {
+		byElection[row.ElectionID] = row
+	}
+	for i := range elections {
+		status := &voteStatusView{}
+		if row, ok := byElection[elections[i].ID]; ok {
+			status.Voted = true
+			coarse := row.VotedAt.UTC().Truncate(15 * time.Minute)
+			status.RecordedAt = &coarse
+		}
+		elections[i].MyVoteStatus = status
+	}
 }
 
 // Get returns one election and its display-only phase.

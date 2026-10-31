@@ -30,7 +30,8 @@ export function PrivacyNotice({ onAcknowledge, showAcknowledge = false }: Privac
         <div className="flex-1">
           <p className="font-medium text-sm">Your Ballot Privacy</p>
           <p className="text-xs mt-1">
-            Your choices are stored anonymously. Election officers can see turnout counts but not individual choices.{" "}
+            Your choices are stored anonymously. Election officers can see turnout counts but not
+            individual choices.{" "}
             <a href="/privacy/ballot-secrecy" className="underline hover:text-blue-700">
               Read full privacy statement
             </a>

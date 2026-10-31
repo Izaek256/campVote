@@ -22,7 +22,8 @@ export function PreVoteNotice({ onContinue }: PreVoteNoticeProps) {
           <div className="flex-1">
             <p className="font-medium text-sm">Before You Vote</p>
             <p className="text-xs mt-1">
-              Once you submit your ballot, you cannot change it. Make sure you are satisfied with your selections before continuing.
+              Once you submit your ballot, you cannot change it. Make sure you are satisfied with
+              your selections before continuing.
             </p>
           </div>
         </div>

@@ -20,17 +20,23 @@
 - [`rbac.md`](rbac.md) — ISSUE-03 server-side RBAC: SRS role matrix, route policies, per-election scoping, results visibility, certification and test evidence.
 - [`eligibility.md`](eligibility.md) — ISSUE-04 per-election eligibility: roster evidence, verified-email identity, CSV import, freeze/revocation, audit and open policy questions.
 - [`election-lifecycle.md`](election-lifecycle.md) — ISSUE-05 election states, transition matrix, schedule boundaries, server clock, configuration validation/freeze, audited exceptions and test evidence.
+- [`vote-submission.md`](vote-submission.md) — ISSUE-08 atomic, idempotent, concurrency-safe ballot submission, ballot-version binding, vote-status endpoint, voter views and test evidence.
 - [`implementation/ROADMAP.md`](implementation/ROADMAP.md) — Phased milestone delivery order.
 - [`implementation/OPEN_QUESTIONS.md`](implementation/OPEN_QUESTIONS.md) — Unresolved domain and institutional questions.
 - [`implementation/SETUP_LOG.md`](implementation/SETUP_LOG.md) — Verified toolchain versions and scaffold facts.
 - [`maintenance/repository-cleanup.md`](maintenance/repository-cleanup.md) — Repository audit and file hygiene log.
 
-## 4. Audit & Traceability
+## 4. UI
+
+- [`ui-views.md`](ui-views.md) — Registry of every UI view: route, roles, API, states, owning issue.
+- [`ui-kit/campVote-UI-Kit.html`](ui-kit/campVote-UI-Kit.html) — Design reference (A0): components, tokens and layout patterns every view follows.
+
+## 5. Audit & Traceability
 
 - [`traceability.md`](traceability.md) — SRS v1.1 → implementation traceability matrix (per-requirement status, code & test locations).
 - [`audit/issue-00-audit.md`](audit/issue-00-audit.md) — ISSUE-00 full implementation audit: source of truth, stack, tables, seeds, routes, tests, re-scoped plan.
 
-## 5. Templates & Quality
+## 6. Templates & Quality
 
 - [`debugging/BUG_REPORT_TEMPLATE.md`](debugging/BUG_REPORT_TEMPLATE.md) — Systematic defect investigation template.
 - [`reviews/REVIEW_TEMPLATE.md`](reviews/REVIEW_TEMPLATE.md) — Structured code review checklist.

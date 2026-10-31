@@ -112,7 +112,8 @@ function ElectionView({ id }: { id: string }) {
     );
   }
 
-  const canVote = Boolean(eligibility?.eligible) && election.accepting_votes;
+  const voted = Boolean(election.my_vote_status?.voted);
+  const canVote = Boolean(eligibility?.eligible) && election.accepting_votes && !voted;
 
   return (
     <main className="app-wrap">
@@ -191,7 +192,12 @@ function ElectionView({ id }: { id: string }) {
                   {eligibility.reason ?? "You are not eligible for this election."}
                 </span>
               )}
-              {canVote ? (
+              {voted ? (
+                <Link className="btn block lg" href={`/elections/${election.id}/status`}>
+                  <Icon name="check" />
+                  View vote status
+                </Link>
+              ) : canVote ? (
                 <Link className="btn primary block lg" href={`/elections/${election.id}/ballot`}>
                   <Icon name="ballot" />
                   Open ballot

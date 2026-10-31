@@ -14,25 +14,29 @@ export const BallotVersionSchema = z.object({
 });
 
 export const BallotContentSchema = z.object({
-  positions: z.array(z.object({
-    id: z.string(),
-    title: z.string(),
-    description: z.string(),
-    question_type: z.string(),
-    min_selections: z.number().int(),
-    max_selections: z.number().int(),
-    seats: z.number().int(),
-    allow_blank: z.boolean(),
-    display_order: z.number().int(),
-    candidates: z.array(z.object({
+  positions: z.array(
+    z.object({
       id: z.string(),
-      full_name: z.string(),
-      photo_url: z.string(),
-      manifesto: z.string(),
-      bio: z.string(),
-      ballot_number: z.number().int(),
-    })),
-  })),
+      title: z.string(),
+      description: z.string(),
+      question_type: z.string(),
+      min_selections: z.number().int(),
+      max_selections: z.number().int(),
+      seats: z.number().int(),
+      allow_blank: z.boolean(),
+      display_order: z.number().int(),
+      candidates: z.array(
+        z.object({
+          id: z.string(),
+          full_name: z.string(),
+          photo_url: z.string(),
+          manifesto: z.string(),
+          bio: z.string(),
+          ballot_number: z.number().int(),
+        })
+      ),
+    })
+  ),
 });
 
 export type BallotVersion = z.infer<typeof BallotVersionSchema>;

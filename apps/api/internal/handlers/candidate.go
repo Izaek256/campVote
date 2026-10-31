@@ -109,7 +109,6 @@ func (h *CandidateHandler) Create(c *gin.Context) {
 func (h *CandidateHandler) Update(c *gin.Context) {
 	electionID := c.Param("id")
 	candidateID := c.Param("candidate_id")
-	userID := c.GetString("user_id")
 
 	var candidate models.Candidate
 	if err := h.DB.Where("id = ? AND election_id = ?", candidateID, electionID).First(&candidate).Error; err != nil {

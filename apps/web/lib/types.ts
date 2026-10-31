@@ -59,6 +59,15 @@ export interface Election {
   accepting_votes: boolean;
   display_timezone: string;
   allowed_transitions: ElectionStatus[];
+  my_vote_status?: VoteStatus;
+}
+
+export interface VoteStatus {
+  election_id: string;
+  voted: boolean;
+  recorded_at?: string;
+  phase?: ElectionStatus;
+  server_time?: string;
 }
 
 export interface EligibilityDecision {
@@ -70,6 +79,8 @@ export interface BallotCandidate {
   id: string;
   full_name: string;
   manifesto: string;
+  photo_url?: string;
+  bio?: string;
   ballot_number: number;
 }
 
@@ -80,6 +91,7 @@ export interface BallotPosition {
   question_type: "SINGLE_CHOICE" | "MULTI_CHOICE" | "REFERENDUM" | string;
   min_selections: number;
   max_selections: number;
+  seats?: number;
   allow_blank: boolean;
   display_order: number;
   candidates: BallotCandidate[];
@@ -90,6 +102,8 @@ export interface Ballot {
   title: string;
   starts_at: string;
   ends_at: string;
+  ballot_version_id?: string | null;
+  ballot_version?: number | null;
   positions: BallotPosition[];
 }
 
@@ -97,6 +111,11 @@ export interface SubmitResult {
   election_id: string;
   confirmation_token: string;
   message: string;
+}
+
+export interface SubmitOptions {
+  ballotVersionId?: string | null;
+  idempotencyKey: string;
 }
 
 export interface Tally {
@@ -114,11 +133,120 @@ export interface Tally {
   position_title?: string;
 }
 
+// ISSUE-09 results. Every share, outcome and turnout figure is computed by the
+// server and stored on the snapshot; the client renders it and never re-derives
+// it. A leading candidate is not a winner unless `outcome` says so.
+export type ResultOutcome = "WINNER" | "TIE_UNRESOLVED" | "QUORUM_NOT_MET" | "NO_VOTES";
+export type ResultStatus = "PROVISIONAL" | "CERTIFIED" | "SUPERSEDED";
+
+export interface ResultRow {
+  candidate_id: string;
+  name: string;
+  votes: number;
+  share_percent: number;
+  is_winner: boolean;
+  is_tie: boolean;
+}
+
+export interface PositionResult {
+  position_id: string;
+  title: string;
+  question_type: string;
+  seats: number;
+  rows: ResultRow[];
+  valid_votes: number;
+  blank_count: number;
+  abstain_count: number;
+  ballots_answered: number;
+  quorum_percent: number;
+  quorum_met: boolean;
+  outcome: ResultOutcome;
+  winners: string[];
+  tied_candidates?: string[];
+}
+
+export interface Turnout {
+  eligible_voters: number;
+  ballots_cast: number;
+  percent: number;
+  known: boolean;
+}
+
+export interface ResultSnapshot {
+  id: string;
+  version: number;
+  status: ResultStatus;
+  content_hash: string;
+  computed_at: string;
+  computed_by_id: string;
+  certified_by_id?: string;
+  certified_at?: string;
+  certify_reason?: string;
+  supersedes_id?: string;
+  superseded_by_id?: string;
+  eligible_voters: number;
+  ballots_cast: number;
+  turnout_percent: number;
+  turnout: Turnout;
+  positions: PositionResult[];
+  ballots_spoiled: number;
+}
+
 export interface Results {
   election_id: string;
-  status: ElectionStatus;
-  label: "PROVISIONAL" | "CERTIFIED";
-  tallies: Tally[];
+  election_status?: ElectionStatus;
+  available: boolean;
+  label: ResultStatus | "UNAVAILABLE";
+  reason?: string;
+  snapshot?: ResultSnapshot;
+}
+
+export interface ResultsHistory {
+  election_id: string;
+  snapshots: ResultSnapshot[];
+  recounts: ResultRecount[];
+}
+
+export interface CandidateDiff {
+  candidate_id: string;
+  name: string;
+  before: number;
+  after: number;
+  delta: number;
+}
+
+export interface PositionDiff {
+  position_id: string;
+  title: string;
+  outcome_before: ResultOutcome;
+  outcome_after: ResultOutcome;
+  candidates?: CandidateDiff[];
+}
+
+export interface ResultDifferences {
+  identical: boolean;
+  position_diffs?: PositionDiff[];
+  turnout_diff?: { before: number; after: number };
+}
+
+export interface ResultRecount {
+  id: string;
+  election_id: string;
+  compared_snapshot_id: string;
+  recomputed_hash: string;
+  identical: boolean;
+  differences?: string;
+  reason: string;
+  run_by_id: string;
+  run_at: string;
+}
+
+export interface RecountResult {
+  recount: ResultRecount;
+  comparison_version: number;
+  identical: boolean;
+  differences: ResultDifferences;
+  ballots_unchanged: boolean;
 }
 
 export interface EligibilityReport {
