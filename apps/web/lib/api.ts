@@ -4,7 +4,10 @@ import type {
   Election,
   EligibilityDecision,
   EligibilityReport,
+  RecountResult,
+  ResultSnapshot,
   Results,
+  ResultsHistory,
   SubmitOptions,
   SubmitResult,
   User,
@@ -101,5 +104,20 @@ export const elections = {
     }),
   voteStatus: (id: string) => api<VoteStatus>(`/elections/${id}/my-vote-status`),
   results: (id: string) => api<Results>(`/elections/${id}/results`),
-  certify: (id: string) => api<{ status: string }>(`/elections/${id}/certify`, { method: "POST" }),
+  resultsHistory: (id: string) => api<ResultsHistory>(`/elections/${id}/results/history`),
+  runTally: (id: string, reason?: string) =>
+    api<{ election_id: string; snapshot: ResultSnapshot; correction: boolean }>(
+      `/elections/${id}/results/tally`,
+      { method: "POST", body: reason ? { reason } : {} }
+    ),
+  recount: (id: string, snapshotId: string, reason: string) =>
+    api<RecountResult>(`/elections/${id}/results/recount`, {
+      method: "POST",
+      body: { snapshot_id: snapshotId, reason },
+    }),
+  certify: (id: string, snapshotId: string, reason: string) =>
+    api<{ election_id: string; status: string; snapshot: ResultSnapshot }>(
+      `/elections/${id}/results/certify`,
+      { method: "POST", body: { snapshot_id: snapshotId, reason } }
+    ),
 };
