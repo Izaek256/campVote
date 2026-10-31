@@ -436,7 +436,7 @@ func (h *AuthHandler) deliverSignupVerificationEmail(ctx context.Context, email,
 		"ExpiresIn": "10 minutes",
 	}
 
-	return h.Mailer.Send(ctx, mail.Message{
+	return h.Mailer.SendMessage(ctx, &mail.Message{
 		To:      []string{email},
 		Subject: "Verify your email for campVote",
 		HTML:    signupVerificationEmailTemplate(templateData),
