@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -150,115 +149,6 @@ func (h *ElectionRBACHandler) RemoveRole(c *gin.Context) {
 	h.audit(c, authority.Election.ID, "election.role_removed",
 		"Removed "+role+" for "+authority.Election.Title)
 	respond.OK(c, gin.H{"removed": true})
-}
-
-type tallyView struct {
-	models.ElectionTally
-	CandidateName string `json:"candidate_name,omitempty"`
-	PositionTitle string `json:"position_title,omitempty"`
-}
-
-// Results returns aggregate tallies only when the actor may see them and the
-// election's publication policy allows it. There is no voter identity in
-// ElectionTally, by design.
-func (h *ElectionRBACHandler) Results(c *gin.Context) {
-	actor := policy.ActorFrom(c)
-	authority, err := policy.AuthorityFor(h.DB, actor, c.Param("id"))
-	if err != nil {
-		respond.NotFound(c, "Election not found")
-		return
-	}
-	allowed, reason := authority.CanReadResults(time.Now().UTC())
-	if !allowed {
-		policy.LogDenial(h.DB, c, reason, authority.Election.ID)
-		respond.Forbidden(c, reason)
-		return
-	}
-
-	var tallies []models.ElectionTally
-	if err := h.DB.Where("election_id = ?", authority.Election.ID).
-		Order("position_id ASC, votes DESC").Find(&tallies).Error; err != nil {
-		respond.Internal(c, err)
-		return
-	}
-	// Names are display metadata, not part of the tally: attach them so the
-	// results screen does not have to guess from a UUID.
-	var candidates []models.Candidate
-	if err := h.DB.Where("election_id = ?", authority.Election.ID).
-		Find(&candidates).Error; err != nil {
-		respond.Internal(c, err)
-		return
-	}
-	var positions []models.Position
-	if err := h.DB.Where("election_id = ?", authority.Election.ID).
-		Find(&positions).Error; err != nil {
-		respond.Internal(c, err)
-		return
-	}
-	candidateNames := make(map[string]string, len(candidates))
-	for _, candidate := range candidates {
-		candidateNames[candidate.ID] = candidate.FullName
-	}
-	positionTitles := make(map[string]string, len(positions))
-	for _, position := range positions {
-		positionTitles[position.ID] = position.Title
-	}
-	out := make([]tallyView, 0, len(tallies))
-	for _, tally := range tallies {
-		view := tallyView{ElectionTally: tally, PositionTitle: positionTitles[tally.PositionID]}
-		if tally.CandidateID != nil {
-			view.CandidateName = candidateNames[*tally.CandidateID]
-		}
-		out = append(out, view)
-	}
-	label := "PROVISIONAL"
-	if authority.Election.Status == models.ElectionStatusFinalized ||
-		authority.Election.Status == models.ElectionStatusArchived {
-		label = "CERTIFIED"
-	}
-	respond.OK(c, gin.H{
-		"election_id": authority.Election.ID,
-		"status":      authority.Election.Status,
-		"label":       label,
-		"tallies":     out,
-	})
-}
-
-// Certify finalises results under the separation-of-duties rule in
-// policy.CertifyDecision.
-func (h *ElectionRBACHandler) Certify(c *gin.Context) {
-	actor := policy.ActorFrom(c)
-	authority, err := policy.AuthorityFor(h.DB, actor, c.Param("id"))
-	if err != nil {
-		respond.NotFound(c, "Election not found")
-		return
-	}
-	allowed, reason := policy.CertifyDecision(h.DB, authority, actor)
-	if !allowed {
-		policy.LogDenial(h.DB, c, reason, authority.Election.ID)
-		respond.Forbidden(c, reason)
-		return
-	}
-
-	details, _ := json.Marshal(map[string]string{"certified_by": actor.UserID})
-	err = h.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&models.Election{}).Where("id = ?", authority.Election.ID).
-			Update("status", models.ElectionStatusFinalized).Error; err != nil {
-			return err
-		}
-		return tx.Create(&models.ElectionAuditLog{
-			ElectionID: authority.Election.ID,
-			ActorID:    actor.UserID,
-			Action:     models.AuditActionResultsCertified,
-			Details:    string(details),
-			IPAddress:  c.ClientIP(),
-		}).Error
-	})
-	if err != nil {
-		respond.Internal(c, err)
-		return
-	}
-	respond.OK(c, gin.H{"election_id": authority.Election.ID, "status": models.ElectionStatusFinalized})
 }
 
 // authority resolves the election and the permission, writing the refusal.
