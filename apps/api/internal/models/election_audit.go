@@ -26,13 +26,15 @@ const (
 	AuditActionCandidateRejected   = "CANDIDATE_REJECTED"
 	AuditActionCandidateNominated  = "CANDIDATE_NOMINATED"
 	AuditActionCandidateWithdrawn  = "CANDIDATE_WITHDRAWN"
-	AuditActionPositionCreated    = "POSITION_CREATED"
-	AuditActionPositionUpdated    = "POSITION_UPDATED"
-	AuditActionPositionDeleted    = "POSITION_DELETED"
+	AuditActionPositionCreated     = "POSITION_CREATED"
+	AuditActionPositionUpdated     = "POSITION_UPDATED"
+	AuditActionPositionDeleted     = "POSITION_DELETED"
 	AuditActionBallotPublished     = "BALLOT_PUBLISHED"
 	AuditActionVoteCast            = "VOTE_CAST"
 	AuditActionRecountTriggered    = "RECOUNT_TRIGGERED"
+	AuditActionTallyRun            = "TALLY_RUN"
 	AuditActionResultsCertified    = "RESULTS_CERTIFIED"
+	AuditActionResultsCorrected    = "RESULTS_CORRECTED"
 )
 
 // ElectionAuditLog tracks tamper-evident administrative events for an election.

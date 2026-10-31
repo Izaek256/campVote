@@ -130,8 +130,19 @@ func init() {
 	permitted("elections.roles", "GET", "/api/v1/elections/:id/roles")
 	permitted("elections.roles", "PUT", "/api/v1/elections/:id/roles/:userId")
 	permitted("elections.roles", "DELETE", "/api/v1/elections/:id/roles/:userId/:role")
-	permitted("results.view", "GET", "/api/v1/elections/:id/results")
-	permitted("elections.certify", "POST", "/api/v1/elections/:id/certify")
+
+	// Results (ISSUE-09). Reading is authenticated rather than permission-
+	// gated: the election's publication policy decides whether this caller may
+	// see anything, and the handler answers with no result data at all until
+	// it does. Officers and voters reach the same endpoint; only the snapshot
+	// they are shown differs.
+	authenticated("GET", "/api/v1/elections/:id/results")
+	// Everything that writes a result record is officer-level and checked
+	// again inside the handler against this specific election.
+	permitted("elections.edit", "POST", "/api/v1/elections/:id/results/tally",
+		"/api/v1/elections/:id/results/recount")
+	permitted("elections.certify", "POST", "/api/v1/elections/:id/results/certify")
+	permitted("results.view", "GET", "/api/v1/elections/:id/results/history")
 
 	// The voter's own eligibility and ballot. Any signed-in caller may ask;
 	// the handler returns the ballot only when the server-side eligibility

@@ -1345,6 +1345,18 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.POST("/elections/:id/ballot/start", ballotHandler.Start)
 		protected.POST("/elections/:id/ballot/submit", ballotHandler.Submit)
 
+		// Results, recounts and certification (ISSUE-09). Reading is served
+		// here rather than the staff group so a voter reaches the same
+		// endpoint an officer does; the publication policy inside decides what
+		// this caller is shown. Writing a tally or a recount is officer-level,
+		// and certification is checked again by separation of duties.
+		resultsHandler := handlers.NewResultsHandler(db)
+		protected.GET("/elections/:id/results", resultsHandler.Read)
+		protected.GET("/elections/:id/results/history", resultsHandler.History)
+		protected.POST("/elections/:id/results/tally", resultsHandler.RunTally)
+		protected.POST("/elections/:id/results/recount", resultsHandler.Recount)
+		protected.POST("/elections/:id/results/certify", resultsHandler.Certify)
+
 		// ISSUE-06: My candidacies
 		protected.GET("/candidates/my", candidateHandler.GetMyCandidacies)
 
@@ -1498,8 +1510,6 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.GET("/elections/:id/roles", electionRBACHandler.ListRoles)
 		staff.PUT("/elections/:id/roles/:userId", electionRBACHandler.AssignRole)
 		staff.DELETE("/elections/:id/roles/:userId/:role", electionRBACHandler.RemoveRole)
-		staff.GET("/elections/:id/results", electionRBACHandler.Results)
-		staff.POST("/elections/:id/certify", electionRBACHandler.Certify)
 
 		// Eligibility evidence. Preview and import are separate calls so an
 		// officer sees every bad row before anything is written; commit is
