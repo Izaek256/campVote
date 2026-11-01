@@ -1,6 +1,7 @@
 "use client";
 
-import type { BallotContent } from "@campvote/shared/types/ballot_version";
+import type { BallotContent } from "@/lib/types";
+import { Icon } from "./icon";
 
 interface BallotViewProps {
   content: BallotContent;
@@ -16,20 +17,17 @@ export function BallotView({ content, mode, onSelectionChange, selections = {} }
     if (isPreview || !onSelectionChange) return;
 
     const current = selections[positionId] || [];
-    let newSelections: string[];
+    let next: string[];
 
     if (questionType === "SINGLE_CHOICE" || questionType === "YES_NO") {
-      newSelections = [candidateId];
+      next = [candidateId];
+    } else if (current.includes(candidateId)) {
+      next = current.filter((id) => id !== candidateId);
     } else {
-      // Multi-choice
-      if (current.includes(candidateId)) {
-        newSelections = current.filter((id) => id !== candidateId);
-      } else {
-        newSelections = [...current, candidateId];
-      }
+      next = [...current, candidateId];
     }
 
-    onSelectionChange(positionId, newSelections);
+    onSelectionChange(positionId, next);
   };
 
   const handleAbstain = (positionId: string) => {
@@ -38,121 +36,99 @@ export function BallotView({ content, mode, onSelectionChange, selections = {} }
   };
 
   return (
-    <div className="space-y-8">
-      {isPreview && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
-          <p className="font-medium">Preview Mode</p>
-          <p className="text-sm">
-            No vote or participation is recorded. This is a ballot preview only.
-          </p>
-        </div>
-      )}
-
+    <div className="stack">
       {content.positions.map((position) => {
         const selected = selections[position.id] || [];
         const count = selected.length;
         const isFull = count >= position.max_selections;
         const isAbstained = selected.includes("ABSTAIN");
+        const multi = position.question_type === "MULTI_CHOICE";
+        const blocked = isPreview;
 
         return (
-          <div key={position.id} className="border rounded-lg p-6">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold">{position.title}</h3>
-              {position.description && <p className="text-gray-600 mt-1">{position.description}</p>}
-              <div className="mt-2 flex items-center gap-4 text-sm text-gray-500">
-                <span>Seats: {position.seats}</span>
-                <span>
-                  Selections: {count} / {position.max_selections}
-                  {position.min_selections > 0 && ` (min: ${position.min_selections})`}
+          <section className="ballot-position" key={position.id}>
+            <div className="row-between">
+              <div>
+                <span className="lbl">
+                  {position.min_selections > 0 ? "Required" : "Optional"}
+                  {position.seats && position.seats > 1 ? ` · ${position.seats} seats` : ""}
                 </span>
+                <h2 style={{ fontSize: 24, marginTop: 4 }}>{position.title}</h2>
+                {position.description ? <p className="hint">{position.description}</p> : null}
               </div>
+              {multi ? (
+                <span className={`counter${count === position.max_selections ? " full" : ""}`}>
+                  {count} of {position.max_selections} selected
+                </span>
+              ) : null}
             </div>
 
-            <div className="space-y-3">
+            {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: role is group or radiogroup; both support aria-label. */}
+            <div
+              className="ballot-list"
+              role={multi ? "group" : "radiogroup"}
+              aria-label={position.title}
+            >
               {position.candidates.map((candidate) => {
                 const isSelected = selected.includes(candidate.id);
-                const isDisabled = isPreview || (isFull && !isSelected) || isAbstained;
-
+                const isDisabled = blocked || (isFull && !isSelected) || isAbstained;
                 return (
+                  // biome-ignore lint/a11y/useAriaPropsSupportedByRole: role is a literal radio or checkbox; both support aria-checked.
                   <button
+                    type="button"
+                    className="opt"
                     key={candidate.id}
+                    role={multi ? "checkbox" : "radio"}
+                    aria-checked={isSelected}
+                    aria-disabled={isDisabled}
+                    disabled={isDisabled}
                     onClick={() =>
                       handleSelection(position.id, candidate.id, position.question_type)
                     }
-                    disabled={isDisabled}
-                    className={`w-full text-left p-4 border-2 rounded-lg transition-all ${
-                      isSelected
-                        ? "border-green-600 bg-green-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    } ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
-                    aria-pressed={isSelected}
-                    aria-disabled={isDisabled}
                   >
-                    <div className="flex items-start gap-4">
-                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-medium">
-                        {candidate.ballot_number}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium">{candidate.full_name}</div>
-                        {candidate.manifesto && (
-                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                            {candidate.manifesto}
-                          </p>
-                        )}
-                      </div>
-                      {isSelected && (
-                        <div className="flex-shrink-0 text-green-600">
-                          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                            <path
-                              fillRule="evenodd"
-                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
+                    <span className={`box${multi ? "" : " rd"}`}>
+                      {multi ? <Icon name="check" size="s" /> : null}
+                    </span>
+                    <span className="ph r11" style={{ width: 48, flex: "none" }} aria-hidden="true">
+                      <span style={{ padding: "0 4px" }}>{candidate.ballot_number}</span>
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                      <span className="nm">{candidate.full_name}</span>
+                      {candidate.manifesto ? (
+                        <span className="candidate-meta">{candidate.manifesto}</span>
+                      ) : null}
+                    </span>
                   </button>
                 );
               })}
 
-              {position.allow_blank && !isPreview && (
+              {position.allow_blank ? (
+                // biome-ignore lint/a11y/useAriaPropsSupportedByRole: role is a literal radio or checkbox; both support aria-checked.
                 <button
+                  type="button"
+                  className="opt"
+                  role={multi ? "checkbox" : "radio"}
+                  aria-checked={isAbstained}
+                  aria-disabled={blocked}
+                  disabled={blocked}
                   onClick={() => handleAbstain(position.id)}
-                  disabled={isAbstained}
-                  className={`w-full text-left p-4 border-2 rounded-lg transition-all ${
-                    isAbstained
-                      ? "border-gray-400 bg-gray-100"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">Abstain</span>
-                    {isAbstained && (
-                      <svg
-                        className="w-5 h-5 text-gray-600"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    )}
-                  </div>
+                  <span className={`box${multi ? "" : " rd"}`}>
+                    {multi ? <Icon name="check" size="s" /> : null}
+                  </span>
+                  <span className="nm">Leave this position blank</span>
                 </button>
-              )}
+              ) : null}
             </div>
 
-            {count < position.min_selections && !isPreview && (
-              <p className="mt-3 text-sm text-red-600">
-                Minimum {position.min_selections} selection{position.min_selections > 1 ? "s" : ""}{" "}
-                required
-              </p>
-            )}
-          </div>
+            {!isPreview && count < position.min_selections ? (
+              <span className="err" style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                <Icon name="alert" size="s" />
+                Choose at least {position.min_selections} option
+                {position.min_selections > 1 ? "s" : ""}.
+              </span>
+            ) : null}
+          </section>
         );
       })}
     </div>

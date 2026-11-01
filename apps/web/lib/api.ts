@@ -1,15 +1,21 @@
 import type {
   AuthPayload,
   Ballot,
+  BallotContent,
+  Candidate,
+  CandidateApplicationView,
   Election,
   EligibilityDecision,
   EligibilityReport,
+  MyCandidate,
+  Position,
   RecountResult,
   ResultSnapshot,
   Results,
   ResultsHistory,
   SubmitOptions,
   SubmitResult,
+  UploadRef,
   User,
   VoteStatus,
 } from "./types";
@@ -92,6 +98,116 @@ export const auth = {
   /** Re-send the email verification link to the signed-in user. */
   resendVerification: () =>
     api<{ message: string }>("/auth/verify-email/resend", { method: "POST" }),
+};
+
+/** Multipart upload. The API sniffs the real type and enforces accepts/max_size. */
+export async function upload(
+  file: File,
+  options: { accepts?: string; maxSize?: number } = {}
+): Promise<UploadRef> {
+  const query = new URLSearchParams();
+  if (options.accepts) query.set("accepts", options.accepts);
+  if (options.maxSize) query.set("max_size", String(options.maxSize));
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = { Accept: "application/json" };
+  const token = csrfToken();
+  if (token) headers["X-CSRF-Token"] = token;
+  const response = await fetch(`${API}/api/v1/uploads?${query.toString()}`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: form,
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = payload?.error?.message ?? `Upload failed (${response.status})`;
+    throw new ApiError(message, response.status);
+  }
+  return payload?.data as UploadRef;
+}
+
+export const candidates = {
+  application: (electionId: string) =>
+    api<CandidateApplicationView>(`/elections/${electionId}/candidate-application`),
+  apply: (electionId: string, body: Record<string, unknown>) =>
+    api<Candidate>(`/elections/${electionId}/candidates/apply`, { method: "POST", body }),
+  mine: () => api<{ candidates: MyCandidate[] }>("/candidates/my"),
+  withdraw: (candidateId: string, reason: string) =>
+    api<Candidate>(`/candidates/my/${candidateId}/withdraw`, { method: "POST", body: { reason } }),
+  list: (electionId: string, status?: string) =>
+    api<{ candidates: Candidate[] }>(
+      `/elections/${electionId}/candidates${status ? `?status=${status}` : ""}`
+    ),
+  approve: (electionId: string, candidateId: string, reason: string) =>
+    api<Candidate>(`/elections/${electionId}/candidates/${candidateId}/approve`, {
+      method: "POST",
+      body: { reason },
+    }),
+  reject: (electionId: string, candidateId: string, reason: string) =>
+    api<Candidate>(`/elections/${electionId}/candidates/${candidateId}/reject`, {
+      method: "POST",
+      body: { reason },
+    }),
+};
+
+export const positions = {
+  list: (electionId: string) =>
+    api<{ positions: Position[] }>(`/elections/${electionId}/positions`),
+  create: (electionId: string, body: Record<string, unknown>) =>
+    api<Position>(`/elections/${electionId}/positions`, { method: "POST", body }),
+  update: (electionId: string, positionId: string, body: Record<string, unknown>) =>
+    api<Position>(`/elections/${electionId}/positions/${positionId}`, { method: "PUT", body }),
+  remove: (electionId: string, positionId: string) =>
+    api<unknown>(`/elections/${electionId}/positions/${positionId}`, { method: "DELETE" }),
+};
+
+export const staff = {
+  turnout: (electionId: string) =>
+    api<{
+      eligible: number;
+      voted: number;
+      percent: number;
+      suppressed: boolean;
+      last_refresh: string;
+    }>(`/elections/${electionId}/turnout`),
+  versions: (electionId: string) =>
+    api<{
+      versions: Array<{
+        id: string;
+        version: number;
+        content_hash: string;
+        status: string;
+        published_by: string;
+        published_at: string;
+      }>;
+    }>(`/elections/${electionId}/ballot/versions`),
+  version: (electionId: string, versionId: string) =>
+    api<{ content: BallotContent }>(`/elections/${electionId}/ballot/versions/${versionId}`),
+  compare: (electionId: string, v1: string, v2: string) =>
+    api<{
+      same_hash: boolean;
+      v1: {
+        id: string;
+        version: number;
+        content_hash: string;
+        status: string;
+        published_by: string;
+        published_at: string;
+      };
+      v2: {
+        id: string;
+        version: number;
+        content_hash: string;
+        status: string;
+        published_by: string;
+        published_at: string;
+      };
+    }>(`/elections/${electionId}/ballot/versions/compare?v1=${v1}&v2=${v2}`),
+  publish: (electionId: string) =>
+    api<{ version: number; content_hash: string }>(`/elections/${electionId}/ballot/publish`, {
+      method: "POST",
+    }),
 };
 
 export const elections = {

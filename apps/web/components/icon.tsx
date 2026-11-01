@@ -57,12 +57,7 @@ const paths: Record<string, React.ReactNode> = {
   edit: <path d="M4 20h4L20 8l-4-4L4 16zM14 6l4 4" />,
   shield: <path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5zM9 12l2 2 4-4" />,
   hist: <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2" />,
-  moon: (
-    <>
-      <path d="M2 27 11 10l6 10 3-5 10 12z" fill="currentColor" stroke="none" />
-      <circle cx="24" cy="8" r="4" fill="currentColor" stroke="none" />
-    </>
-  ),
+  moon: <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />,
 };
 
 export type IconName = keyof typeof paths;
@@ -78,7 +73,11 @@ export function Icon({
 }) {
   const sizeClass = size === "md" ? "" : ` ${size}`;
   return (
-    <svg className={`i${sizeClass}${className ? ` ${className}` : ""}`} aria-hidden="true">
+    <svg
+      className={`i${sizeClass}${className ? ` ${className}` : ""}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
       {paths[name]}
     </svg>
   );

@@ -67,8 +67,10 @@ type BallotPositionContent struct {
 type BallotCandidateContent struct {
 	ID           string `json:"id"`
 	FullName     string `json:"full_name"`
+	Slogan       string `json:"slogan,omitempty"`
 	PhotoURL     string `json:"photo_url"`
 	Manifesto    string `json:"manifesto"`
+	ManifestoURL string `json:"manifesto_url,omitempty"`
 	Bio          string `json:"bio"`
 	BallotNumber int    `json:"ballot_number"`
 }

@@ -1359,8 +1359,12 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.POST("/elections/:id/results/recount", resultsHandler.Recount)
 		protected.POST("/elections/:id/results/certify", resultsHandler.Certify)
 
-		// ISSUE-06: My candidacies
+		// Candidate self-service. Applications are allowed before polls open,
+		// so the handler checks the roster directly rather than the ballot gate.
 		protected.GET("/candidates/my", candidateHandler.GetMyCandidacies)
+		protected.GET("/elections/:id/candidate-application", candidateHandler.Application)
+		protected.POST("/elections/:id/candidates/apply", candidateHandler.Apply)
+		protected.POST("/candidates/my/:candidate_id/withdraw", candidateHandler.WithdrawMine)
 
 		// grit:routes:protected
 	}
