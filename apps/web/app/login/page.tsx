@@ -87,6 +87,13 @@ export default function LoginPage() {
           </button>
         </form>
 
+        <p style={{ marginTop: 16, fontSize: 14, textAlign: "center", color: "var(--ink-3)" }}>
+          Don&apos;t have an account?{" "}
+          <Link href="/register" style={{ color: "var(--primary)" }}>
+            Create one
+          </Link>
+        </p>
+
         <div className="banner" style={{ marginTop: 20 }}>
           <Icon name="lock" />
           <div>
