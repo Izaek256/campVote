@@ -69,6 +69,29 @@ export const auth = {
   login: (email: string, password: string) =>
     api<AuthPayload>("/auth/login", { method: "POST", body: { email, password } }),
   logout: () => api<unknown>("/auth/logout", { method: "POST" }),
+  /** Direct registration: create account and get tokens immediately. */
+  register: (body: { first_name: string; last_name: string; email: string; password: string }) =>
+    api<AuthPayload>("/auth/register", { method: "POST", body }),
+  /** Two-step sign-up: step 1 — send a 6-digit verification code to the email. */
+  signupInitiate: (email: string) =>
+    api<{ message: string; verification_code?: string }>("/auth/signup/initiate", {
+      method: "POST",
+      body: { email },
+    }),
+  /** Two-step sign-up: step 2 — complete with the code and account details. */
+  signupComplete: (body: {
+    email: string;
+    verification_code: string;
+    first_name: string;
+    last_name: string;
+    password: string;
+  }) => api<AuthPayload>("/auth/signup/complete", { method: "POST", body }),
+  /** Verify email for an already-registered user using a code. */
+  verifyEmail: (code: string) =>
+    api<{ message: string }>("/auth/verify-email", { method: "POST", body: { code } }),
+  /** Re-send the email verification link to the signed-in user. */
+  resendVerification: () =>
+    api<{ message: string }>("/auth/verify-email/resend", { method: "POST" }),
 };
 
 export const elections = {

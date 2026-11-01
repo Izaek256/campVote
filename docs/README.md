@@ -30,6 +30,8 @@
 
 - [`ui-views.md`](ui-views.md) — Registry of every UI view: route, roles, API, states, owning issue.
 - [`ui-kit/campVote-UI-Kit.html`](ui-kit/campVote-UI-Kit.html) — Design reference (A0): components, tokens and layout patterns every view follows.
+- [`features/user-registration.md`](features/user-registration.md) — ISSUE-20 voter self-registration flow (FR-AUTH-01, FR-AUTH-07).
+- [`features/admin-user-management.md`](features/admin-user-management.md) — ISSUE-20 admin user management UI + missing admin infrastructure (FR-AUTH-06, FR-AUTH-07).
 
 ## 5. Audit & Traceability
 
