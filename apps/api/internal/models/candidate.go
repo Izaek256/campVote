@@ -36,6 +36,13 @@ type Candidate struct {
 	WithdrawnAt    *time.Time     `json:"withdrawn_at,omitempty"`
 	WithdrawalReason string       `gorm:"type:text" json:"withdrawal_reason,omitempty"`
 	
+	// Application details for candidate screening
+	DateOfBirth    *time.Time     `json:"date_of_birth,omitempty"`
+	RegistrationNumber string     `gorm:"size:100" json:"registration_number,omitempty"`
+	CampusResidence string        `gorm:"size:255" json:"campus_residence,omitempty"`
+	IDDocumentURL  string         `gorm:"size:500" json:"id_document_url,omitempty"`
+	PassportPhotoURL string        `gorm:"size:500" json:"passport_photo_url,omitempty"`
+	
 	CreatedAt      time.Time      `gorm:"index" json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`

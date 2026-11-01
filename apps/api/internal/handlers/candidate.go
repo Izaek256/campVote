@@ -47,17 +47,22 @@ func (h *CandidateHandler) List(c *gin.Context) {
 	respond.OK(c, gin.H{"candidates": candidates})
 }
 
-// Create adds a new candidate nomination.
+// Create adds a new candidate nomination with application details.
 func (h *CandidateHandler) Create(c *gin.Context) {
 	electionID := c.Param("id")
 	userID := c.GetString("user_id")
 
 	var input struct {
-		PositionID string `json:"position_id" binding:"required"`
-		FullName   string `json:"full_name" binding:"required"`
-		PhotoURL   string `json:"photo_url"`
-		Manifesto  string `json:"manifesto"`
-		Bio        string `json:"bio"`
+		PositionID         string `json:"position_id" binding:"required"`
+		FullName           string `json:"full_name" binding:"required"`
+		PhotoURL           string `json:"photo_url"`
+		Manifesto          string `json:"manifesto"`
+		Bio                string `json:"bio"`
+		DateOfBirth        string `json:"date_of_birth"`
+		RegistrationNumber string `json:"registration_number"`
+		CampusResidence    string `json:"campus_residence"`
+		IDDocumentURL      string `json:"id_document_url"`
+		PassportPhotoURL   string `json:"passport_photo_url"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -77,14 +82,28 @@ func (h *CandidateHandler) Create(c *gin.Context) {
 	}
 
 	candidate := models.Candidate{
-		ElectionID:     electionID,
-		PositionID:     input.PositionID,
-		FullName:       input.FullName,
-		PhotoURL:       input.PhotoURL,
-		Manifesto:      input.Manifesto,
-		Bio:            input.Bio,
-		ApprovalStatus: models.CandidateStatusNominated,
-		NominatedBy:    userID,
+		ElectionID:          electionID,
+		PositionID:          input.PositionID,
+		FullName:            input.FullName,
+		PhotoURL:            input.PhotoURL,
+		Manifesto:           input.Manifesto,
+		Bio:                 input.Bio,
+		ApprovalStatus:      models.CandidateStatusNominated,
+		NominatedBy:         userID,
+		RegistrationNumber:  input.RegistrationNumber,
+		CampusResidence:     input.CampusResidence,
+		IDDocumentURL:       input.IDDocumentURL,
+		PassportPhotoURL:    input.PassportPhotoURL,
+	}
+
+	// Parse date of birth if provided
+	if input.DateOfBirth != "" {
+		dob, err := time.Parse("2006-01-02", input.DateOfBirth)
+		if err != nil {
+			respond.BadRequest(c, "Invalid date of birth format. Use YYYY-MM-DD")
+			return
+		}
+		candidate.DateOfBirth = &dob
 	}
 
 	if err := h.DB.Create(&candidate).Error; err != nil {
@@ -102,7 +121,7 @@ func (h *CandidateHandler) Create(c *gin.Context) {
 	}
 	h.DB.Create(&audit)
 
-	respond.Created(c, candidate, "Candidate nominated")
+	respond.Created(c, candidate, "Candidate application submitted")
 }
 
 // Update allows a candidate to edit their own profile.
@@ -125,10 +144,15 @@ func (h *CandidateHandler) Update(c *gin.Context) {
 	// TODO: Add proper role check for officer access
 
 	var input struct {
-		FullName  string `json:"full_name"`
-		PhotoURL  string `json:"photo_url"`
-		Manifesto string `json:"manifesto"`
-		Bio       string `json:"bio"`
+		FullName           string `json:"full_name"`
+		PhotoURL           string `json:"photo_url"`
+		Manifesto          string `json:"manifesto"`
+		Bio                string `json:"bio"`
+		DateOfBirth        string `json:"date_of_birth"`
+		RegistrationNumber string `json:"registration_number"`
+		CampusResidence    string `json:"campus_residence"`
+		IDDocumentURL      string `json:"id_document_url"`
+		PassportPhotoURL   string `json:"passport_photo_url"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -148,6 +172,26 @@ func (h *CandidateHandler) Update(c *gin.Context) {
 	}
 	if input.Bio != "" {
 		updates["bio"] = input.Bio
+	}
+	if input.RegistrationNumber != "" {
+		updates["registration_number"] = input.RegistrationNumber
+	}
+	if input.CampusResidence != "" {
+		updates["campus_residence"] = input.CampusResidence
+	}
+	if input.IDDocumentURL != "" {
+		updates["id_document_url"] = input.IDDocumentURL
+	}
+	if input.PassportPhotoURL != "" {
+		updates["passport_photo_url"] = input.PassportPhotoURL
+	}
+	if input.DateOfBirth != "" {
+		dob, err := time.Parse("2006-01-02", input.DateOfBirth)
+		if err != nil {
+			respond.BadRequest(c, "Invalid date of birth format. Use YYYY-MM-DD")
+			return
+		}
+		updates["date_of_birth"] = dob
 	}
 
 	if len(updates) > 0 {
