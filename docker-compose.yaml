@@ -1,5 +1,12 @@
+# campVote compose — all services, no profiles.
+# Run: docker compose up --build -d
+# First-run bootstrap (after up):
+#   docker compose run --rm -e BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
+#     -e BOOTSTRAP_ADMIN_PASSWORD=yourpassword api ./bootstrap
+# Verification codes visible at: http://localhost:8025 (Mailpit)
+
 services:
-  # Containerized PostgreSQL (for non-WSL or fully containerized setup)
+  # ── Database ────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -16,103 +23,101 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    profiles:
-      - container
-
-  # API for WSL setup (uses local PostgreSQL on Windows host)
-  api:
-    build:
-      # Workaround: bridge network has no outbound internet in WSL; remove once Docker networking (MTU/iptables) is fixed
-      network: host
-      context: .
-      dockerfile: ./apps/api/Dockerfile
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      - APP_ENV=${APP_ENV:-development}
-      - DATABASE_URL=postgres://campvote_dev:${POSTGRES_PASSWORD:-campvote_dev_password}@host.docker.internal:5432/campvote_dev?sslmode=disable
-      - SESSION_SECRET=${SESSION_SECRET:-dev-session-secret-change-in-production}
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-production}
-      - REQUIRE_EMAIL_VERIFICATION=${REQUIRE_EMAIL_VERIFICATION:-false}
-      - LOGIN_MAX_ATTEMPTS=${LOGIN_MAX_ATTEMPTS:-10}
-      - LOGIN_LOCKOUT_MINUTES=${LOGIN_LOCKOUT_MINUTES:-15}
-      - PASSWORD_BREACH_CHECK=${PASSWORD_BREACH_CHECK:-false}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    profiles:
-      - wsl
     networks:
       - campvote
 
-  # API for containerized setup (uses containerized PostgreSQL)
-  api-container:
+  # ── Redis (scheduler, caching, job queue) ────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - campvote
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Mailpit (dev SMTP + web UI) ─────────────────────────────────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"  # Web UI: http://localhost:8025
+      - "127.0.0.1:1025:1025"  # SMTP
+    networks:
+      - campvote
+
+  # ── API ─────────────────────────────────────────────────────────────────────
+  api:
     build:
-      # Workaround: bridge network has no outbound internet in WSL; remove once Docker networking (MTU/iptables) is fixed
-      network: host
-      context: .
-      dockerfile: ./apps/api/Dockerfile
+      context: ./apps/api
+      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
-    environment:
-      - APP_ENV=${APP_ENV:-development}
-      - DATABASE_URL=postgres://campvote_dev:${POSTGRES_PASSWORD:-campvote_dev_password}@postgres:5432/campvote_dev?sslmode=disable
-      - SESSION_SECRET=${SESSION_SECRET:-dev-session-secret-change-in-production}
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-production}
-      - REQUIRE_EMAIL_VERIFICATION=${REQUIRE_EMAIL_VERIFICATION:-false}
-      - LOGIN_MAX_ATTEMPTS=${LOGIN_MAX_ATTEMPTS:-10}
-      - LOGIN_LOCKOUT_MINUTES=${LOGIN_LOCKOUT_MINUTES:-15}
-      - PASSWORD_BREACH_CHECK=${PASSWORD_BREACH_CHECK:-false}
     depends_on:
       postgres:
         condition: service_healthy
-    profiles:
-      - container
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      APP_URL: http://localhost:8080
+      DATABASE_URL: postgres://campvote_dev:${POSTGRES_PASSWORD:-campvote_dev_password}@postgres:5432/campvote_dev?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production-must-be-32-chars}
+      CORS_ORIGINS: http://localhost:3000
+      REQUIRE_EMAIL_VERIFICATION: "false"
+      LOGIN_MAX_ATTEMPTS: "10"
+      LOGIN_LOCKOUT_MINUTES: "15"
+      PASSWORD_BREACH_CHECK: "false"
+      REDIS_URL: redis://redis:6379/0
+      # Mail → Mailpit (dev SMTP)
+      MAIL_MAILER: smtp
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      MAIL_FROM: noreply@campvote.local
+      MAIL_FROM_NAME: campVote
+      # Local file storage on a named volume
+      STORAGE_DRIVER: local
+      STORAGE_LOCAL_ROOT: /app/uploads
+      ALLOW_LOCAL_STORAGE_IN_PRODUCTION: "true"
+      # Demo seed: set SEED_DEMO_DATA=true in your .env to seed demo accounts
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+    volumes:
+      - campvote_uploads:/app/uploads
     networks:
       - campvote
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
-  # Web frontend (includes both voter portal and admin dashboard under /staff routes)
+  # ── Web (student portal + staff pages) ─────────────────────────────────────
   web:
     build:
-      # Workaround: bridge network has no outbound internet in WSL; remove once Docker networking (MTU/iptables) is fixed
-      network: host
       context: .
       dockerfile: ./apps/web/Dockerfile
+      # NEXT_PUBLIC_API_URL must be the URL a BROWSER can reach.
+      # In compose with published port 8080, that is http://localhost:8080.
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
-    environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://api:8080
     depends_on:
-      - api
-    profiles:
-      - wsl
-    networks:
-      - campvote
-
-  web-container:
-    build:
-      # Workaround: bridge network has no outbound internet in WSL; remove once Docker networking (MTU/iptables) is fixed
-      network: host
-      context: .
-      dockerfile: ./apps/web/Dockerfile
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3000:3000"
+      api:
+        condition: service_healthy
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://api-container:8080
-    depends_on:
-      - api-container
-    profiles:
-      - container
+      NODE_ENV: production
     networks:
       - campvote
 
 volumes:
   campvote_postgres_data:
+  campvote_uploads:
 
 networks:
   campvote:

@@ -8,6 +8,8 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -255,6 +257,32 @@ func (h *AuthHandler) SignupInitiate(c *gin.Context) {
 		return
 	}
 
+	// Enforce signup domain allowlist. Default is the student domain; staff
+	// accounts are created via the bootstrap command or admin role assignment.
+	// SIGNUP_ALLOWED_DOMAINS is a comma-separated list of email domains (no @).
+	allowedDomains := strings.Split(
+		getenvDefault("SIGNUP_ALLOWED_DOMAINS", "std.mast.ac.ug"),
+		",",
+	)
+	emailLower := strings.ToLower(strings.TrimSpace(req.Email))
+	domainOK := false
+	for _, d := range allowedDomains {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if d != "" && strings.HasSuffix(emailLower, "@"+d) {
+			domainOK = true
+			break
+		}
+	}
+	if !domainOK {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": gin.H{
+				"code":    "DOMAIN_NOT_ALLOWED",
+				"message": "Self-service registration is only available for institutional student email addresses. Contact your administrator to create a staff account.",
+			},
+		})
+		return
+	}
+
 	// Check if email already exists
 	var existingUser models.User
 	if err := h.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
@@ -304,6 +332,7 @@ func (h *AuthHandler) SignupInitiate(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
 
 // SignupComplete completes the signup process using the verification code.
 // POST /api/v1/auth/signup/complete
@@ -485,6 +514,15 @@ func generateRandomCode(length int) (string, error) {
 	}
 	return string(result), nil
 }
+
+// getenvDefault returns the environment variable value or a fallback.
+func getenvDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
 
 // invalidCredentials is the one answer a sign-in gets until its password has
 // been checked and found right. An unknown address, a wrong password, a locked

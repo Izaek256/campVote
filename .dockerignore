@@ -1,0 +1,48 @@
+# Dependency directories — never needed in the build context
+**/node_modules
+**/.pnpm-store
+
+# Next.js build output
+**/.next
+**/dist
+**/out
+
+# Go build cache and binaries
+apps/api/tmp
+**/testdata
+**/*.test
+
+# VCS
+.git
+.gitignore
+
+# Documentation
+docs
+*.md
+README*
+CONTRIBUTING*
+ADR*
+STACK*
+
+# Tests (keep apps/api tests out of Docker build; go test runs locally)
+tests
+**/playwright*
+**/__tests__
+
+# Editor and OS
+.vscode
+.idea
+**/.DS_Store
+**/*.swp
+
+# Local environment files — NEVER sent to Docker
+.env
+.env.*
+!.env.example
+
+# Grit tooling
+grit.config.ts
+grit.json
+
+# Scripts only needed on the host
+scripts

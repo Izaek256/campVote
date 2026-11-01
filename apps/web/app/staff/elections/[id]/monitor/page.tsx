@@ -8,11 +8,12 @@ import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
 import { ApiError, elections } from "@/lib/api";
 import { formatEAT, formatNumber, formatPercent } from "@/lib/format";
-import type { Election, Results } from "@/lib/types";
+import type { Election, PositionResult, Results } from "@/lib/types";
 
 export default function ElectionMonitorPage() {
   const params = useParams();
-  const electionId = params.id;
+  // params.id may be string | string[] | undefined in Next.js 13+
+  const electionId = String(params.id ?? "");
   const [election, setElection] = useState<Election | null>(null);
   const [results, setResults] = useState<Results | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +51,10 @@ export default function ElectionMonitorPage() {
   }, [autoRefresh, loadData]);
 
   if (loading) return <div className="p-8">Loading...</div>;
+
+  // Positions come from the snapshot, not directly from results
+  const snapshotPositions: PositionResult[] = results?.snapshot?.positions ?? [];
+  const isOpen = election?.status === "OPEN";
 
   return (
     <StaffShell>
@@ -99,52 +104,59 @@ export default function ElectionMonitorPage() {
               </p>
             </div>
             <div className="bg-white border rounded-lg p-4">
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Phase</h3>
-              <p className="text-sm font-semibold">{election.status}</p>
+              <h3 className="text-sm font-medium text-gray-500 mb-2">Turnout</h3>
+              <p className="text-sm font-semibold">
+                {results?.snapshot
+                  ? `${formatNumber(results.snapshot.ballots_cast)} / ${formatNumber(results.snapshot.eligible_voters)} (${formatPercent(results.snapshot.turnout_percent)})`
+                  : "—"}
+              </p>
             </div>
           </div>
         )}
 
-        {results && results.positions ? (
+        {/* Participation per position — never show per-candidate counts while OPEN */}
+        {snapshotPositions.length > 0 ? (
           <div className="space-y-6">
-            <h2 className="text-lg font-semibold">Live Results</h2>
-            {results.positions.map((position: any) => (
-              <div key={position.id} className="bg-white border rounded-lg p-4">
+            <h2 className="text-lg font-semibold">
+              {isOpen ? "Participation by Position" : "Results by Position"}
+            </h2>
+            {snapshotPositions.map((position: PositionResult) => (
+              <div key={position.position_id} className="bg-white border rounded-lg p-4">
                 <h3 className="font-semibold mb-4">{position.title}</h3>
-                <div className="space-y-4">
-                  {position.candidates?.map((candidate: any) => (
-                    <div key={candidate.id} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          {candidate.photo_url && (
-                            <img
-                              src={candidate.photo_url}
-                              alt={candidate.full_name}
-                              className="w-10 h-10 rounded-full object-cover"
-                            />
-                          )}
-                          <div>
-                            <p className="font-medium">{candidate.full_name}</p>
-                            <p className="text-sm text-gray-500">
-                              {formatNumber(candidate.votes || 0)} votes
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">
-                            {formatPercent(candidate.percentage || 0)}
-                          </p>
-                        </div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Ballots answered: {formatNumber(position.ballots_answered)}
+                  {" · "}Blank: {formatNumber(position.blank_count)}
+                </p>
+                {/* Only show per-candidate breakdown when election is NOT open */}
+                {!isOpen && position.rows.map((row) => (
+                  <div key={row.candidate_id} className="space-y-2 mt-2">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        {row.is_winner && (
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">
+                            Winner
+                          </span>
+                        )}
+                        <p className="font-medium">{row.name}</p>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                          style={{ width: `${candidate.percentage || 0}%` }}
-                        />
+                      <div className="text-right">
+                        <p className="font-semibold">{formatPercent(row.share_percent)}</p>
+                        <p className="text-sm text-gray-500">{formatNumber(row.votes)} votes</p>
                       </div>
                     </div>
-                  ))}
-                </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-green-600 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${row.share_percent}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {isOpen && (
+                  <p className="text-sm text-amber-600 mt-2">
+                    ⚠️ Candidate vote counts are hidden while the election is open.
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -152,7 +164,9 @@ export default function ElectionMonitorPage() {
           <div className="bg-white border rounded-lg p-8 text-center text-gray-500">
             <p>No results available yet.</p>
             <p className="text-sm mt-2">
-              Results will appear here once voting begins and ballots are cast.
+              {isOpen
+                ? "Results will be published automatically when the election closes."
+                : "Results will appear here once ballots are cast."}
             </p>
           </div>
         )}

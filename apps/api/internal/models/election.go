@@ -47,7 +47,7 @@ type Election struct {
 	Title          string `gorm:"size:255;not null" json:"title" binding:"required"`
 	Description    string `gorm:"type:text" json:"description"`
 	Category       string `gorm:"size:50;not null;default:'GUILD'" json:"category"`
-	OrganizingUnit string `gorm:"size:255;not null;default:'MMU Electoral Commission'" json:"organizing_unit"`
+	OrganizingUnit string `gorm:"size:255;not null;default:'Electoral Commission'" json:"organizing_unit"`
 	Status         string `gorm:"size:50;not null;default:'DRAFT';index" json:"status"`
 
 	// Server-enforced schedule (UTC stored; displayed in EAT UTC+3)
@@ -56,11 +56,21 @@ type Election struct {
 
 	// Policies and access rules
 	ResultPolicy   string `gorm:"size:50;not null;default:'AFTER_CLOSE'" json:"result_policy"`
-	AllowedDomains string `gorm:"size:255;default:'@std.must.ac.ug,@must.ac.ug'" json:"allowed_domains"`
-	// Deprecated: eligibility always requires a roster entry (ISSUE-04). The
-	// column is kept so existing rows and clients do not need a destructive
-	// migration; it no longer grants access on its own.
-	RequireRoster bool `gorm:"default:false" json:"require_roster"`
+
+	// AllowedDomain is the student email domain for this election,
+	// e.g. "std.mast.ac.ug". Leading "@" is accepted and stripped.
+	AllowedDomain  string `gorm:"size:255;default:'std.mast.ac.ug'" json:"allowed_domain"`
+	// AllowedYears is a comma-separated list of enrolment years, e.g. "2024,2025".
+	// Empty means any year.
+	AllowedYears   string `gorm:"size:255" json:"allowed_years"`
+	// AllowedCourses is a comma-separated list of course codes, e.g. "bse,bcs".
+	// Empty means any course.
+	AllowedCourses string `gorm:"size:255" json:"allowed_courses"`
+
+	// AllowedDomains is kept for backward compatibility with existing rows.
+	// New code uses AllowedDomain + AllowedYears + AllowedCourses.
+	AllowedDomains string `gorm:"size:255" json:"allowed_domains,omitempty"`
+	RequireRoster  bool   `gorm:"default:false" json:"require_roster"`
 
 	// EligibilityFrozenAt is set when voting opens. The roster is the evidence
 	// of who may vote; after this point new entries are refused and only
