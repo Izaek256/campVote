@@ -167,7 +167,7 @@ function Manage({ id }: { id: string }) {
     );
   }
 
-  const transitions = election.allowed_transitions.filter(
+  const transitions = (election.allowed_transitions ?? []).filter(
     (to) => to !== "OPEN" && to !== "FINALIZED"
   );
   const frozen = Boolean(election.eligibility_frozen_at);

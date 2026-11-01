@@ -21,11 +21,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </span>
         </div>
         <nav className="flex flex-col gap-0.5 p-3" aria-label="Dashboard navigation">
-          <NavLink href="/dashboard/account">Account</NavLink>
-          <NavLink href="/dashboard/resources/users">Users</NavLink>
+          <NavLink href="/account">Account</NavLink>
+          <NavLink href="/resources/users">Users</NavLink>
           <div className="my-1 border-t border-border" />
-          <NavLink href="/dashboard/system/deleted-accounts">Deleted accounts</NavLink>
-          <NavLink href="/dashboard/system/trash">Trash</NavLink>
+          <NavLink href="/system/deleted-accounts">Deleted accounts</NavLink>
+          <NavLink href="/system/trash">Trash</NavLink>
         </nav>
       </aside>
 

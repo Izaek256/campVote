@@ -58,7 +58,7 @@ export interface Election {
   server_time: string;
   accepting_votes: boolean;
   display_timezone: string;
-  allowed_transitions: ElectionStatus[];
+  allowed_transitions: ElectionStatus[] | null;
   my_vote_status?: VoteStatus;
 }
 
