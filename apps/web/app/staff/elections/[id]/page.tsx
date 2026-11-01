@@ -447,6 +447,31 @@ function Manage({ id }: { id: string }) {
 
         <aside className="stack">
           <div className="panel stack">
+            <span className="lbl">Quick Actions</span>
+            <div className="stack">
+              <Link className="btn sm" href={`/staff/elections/${id}/positions`}>
+                <Icon name="list" size="s" />
+                Manage Positions
+              </Link>
+              <Link className="btn sm" href={`/staff/elections/${id}/candidates`}>
+                <Icon name="users" size="s" />
+                Manage Candidates
+              </Link>
+              <Link className="btn sm" href={`/staff/elections/${id}/ballot`}>
+                <Icon name="file" size="s" />
+                Build Ballot
+              </Link>
+              <Link className="btn sm" href={`/staff/elections/${id}/monitor`}>
+                <Icon name="chart" size="s" />
+                Live Monitor
+              </Link>
+              <Link className="btn sm" href={`/staff/elections/${id}/turnout`}>
+                <Icon name="activity" size="s" />
+                Turnout
+              </Link>
+            </div>
+          </div>
+          <div className="panel stack">
             <span className="lbl">Audit</span>
             <dl className="kv">
               <dt>Created</dt>

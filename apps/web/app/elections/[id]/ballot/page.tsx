@@ -188,6 +188,42 @@ function BallotForm({ id }: { id: string }) {
     );
   }
 
+  // Post-vote state: if already voted, show access to results only after election ends
+  if (alreadyVoted && ballot) {
+    const electionEnded = new Date(ballot.ends_at) < new Date();
+    return (
+      <main className="app-wrap narrow">
+        <div className="panel stack" style={{ marginTop: 20 }}>
+          <div className="text-center">
+            <Icon name="check" size="l" className="mx-auto mb-4 text-green-600" />
+            <h2 className="text-xl font-bold mb-2">You have already voted</h2>
+            <p className="text-gray-600 mb-4">
+              Your ballot has been recorded and cannot be changed.
+            </p>
+            {electionEnded ? (
+              <Link className="btn primary" href={`/elections/${id}/results`}>
+                <Icon name="chart" size="s" />
+                View Official Results
+              </Link>
+            ) : (
+              <div className="text-sm text-gray-500">
+                <p>Results will be available after the election ends.</p>
+                <p className="mt-2">
+                  Election closes: <strong>{formatEAT(ballot.ends_at)}</strong>
+                </p>
+              </div>
+            )}
+            <div className="mt-4">
+              <Link className="btn ghost" href="/elections">
+                Back to my elections
+              </Link>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const blocked = Boolean(loadError) || alreadyVoted || stale;
 
   return (
@@ -244,8 +280,8 @@ function BallotForm({ id }: { id: string }) {
         <div className="banner ok" style={{ marginBottom: 18 }}>
           <Icon name="check" />
           <div>
-            <b>You have already voted</b>A ballot is final once accepted, so this page will not
-            submit another one. <Link href={`/elections/${id}/status`}>Check your status</Link>.
+            <b>You have already voted</b>
+            <Link href={`/elections/${id}/status`}>Check your status</Link> or view results after the election ends.
           </div>
         </div>
       ) : null}

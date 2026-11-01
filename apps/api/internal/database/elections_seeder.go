@@ -10,9 +10,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// SeedElections populates synthetic demo elections, positions, candidates, and rosters
-// for local testing and demonstration at Mountains of the Moon University (MMU).
+// SeedElections is DISABLED for production use.
+// All mock/demo data has been removed to prepare the system for real production data.
+// To re-enable demo data for local development only, set SEED_DEMO_DATA=true in .env
 func SeedElections(db *gorm.DB) error {
+	// Demo data is now disabled by default. Only seed if explicitly enabled
+	// via SEED_DEMO_DATA=true environment variable for local development.
+	if os.Getenv("SEED_DEMO_DATA") != "true" {
+		log.Println("Skipping demo elections: SEED_DEMO_DATA is not set to 'true'. System is ready for production data.")
+		return nil
+	}
+
 	// Demo elections include demo voter accounts with a shared password. They
 	// are development fixtures, never production data, so they follow the same
 	// APP_ENV=development gate as the demo users.
