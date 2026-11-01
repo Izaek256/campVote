@@ -1,85 +1,130 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import Link from "next/link";
+import { use, useCallback, useEffect, useState } from "react";
+import { ElectionTabs } from "@/components/election-tabs";
+import { Icon } from "@/components/icon";
+import { RequireAuth } from "@/components/require-auth";
+import { StaffShell } from "@/components/staff-shell";
+import { ApiError, staff } from "@/lib/api";
+import { formatEAT, formatNumber, formatPercent } from "@/lib/format";
 
-interface TurnoutData {
+type Turnout = {
   eligible: number;
   voted: number;
   percent: number;
-  suppressed?: boolean;
+  suppressed: boolean;
   last_refresh: string;
-}
+};
 
-export default function TurnoutPage() {
-  const params = useParams();
-  const electionId = params.id;
-  const [turnout, setTurnout] = useState<TurnoutData | null>(null);
-  const [loading, setLoading] = useState(true);
+function Panel({ id }: { id: string }) {
+  const [turnout, setTurnout] = useState<Turnout | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const fetchTurnout = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      const response = await fetch(`/api/v1/staff/elections/${electionId}/turnout`);
-      if (!response.ok) throw new Error("Failed to fetch turnout");
-      const data = await response.json();
-      setTurnout(data);
+      setTurnout(await staff.turnout(id));
+      setError("");
     } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+      setError(err instanceof ApiError ? err.message : "Turnout could not be loaded.");
     }
-  }, [electionId]);
+  }, [id]);
 
   useEffect(() => {
-    fetchTurnout();
-  }, [fetchTurnout]);
+    load();
+  }, [load]);
 
-  if (loading) return <div className="p-8">Loading...</div>;
-
-  if (!turnout) return <div className="p-8 text-red-600">Failed to load turnout data</div>;
+  async function refresh() {
+    setBusy(true);
+    await load();
+    setBusy(false);
+  }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">Participation & Turnout</h1>
-
-      {turnout.suppressed ? (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-6 rounded-lg">
-          <h2 className="text-lg font-semibold mb-2">Hidden to Protect Privacy</h2>
-          <p className="text-sm">
-            Turnout counts for this election are not displayed because the number of eligible voters
-            is below the configured privacy threshold. This prevents the identification of
-            individual voters through turnout data.
-          </p>
+    <StaffShell title="Turnout">
+      <div className="page-head">
+        <div>
+          <span className="lbl">Participation</span>
+          <h1>Turnout</h1>
+          <p>Counts only. This page never shows who voted or how anybody voted.</p>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="bg-white border rounded-lg p-6">
-            <p className="text-sm text-gray-500 mb-1">Eligible Voters</p>
-            <p className="text-3xl font-bold">{turnout.eligible}</p>
-          </div>
-          <div className="bg-white border rounded-lg p-6">
-            <p className="text-sm text-gray-500 mb-1">Votes Cast</p>
-            <p className="text-3xl font-bold">{turnout.voted}</p>
-          </div>
-          <div className="bg-white border rounded-lg p-6">
-            <p className="text-sm text-gray-500 mb-1">Turnout</p>
-            <p className="text-3xl font-bold">{turnout.percent.toFixed(1)}%</p>
-          </div>
+        <div className="row">
+          <Link className="btn" href={`/staff/elections/${id}`}>
+            Back to election
+          </Link>
+          <button type="button" className="btn" onClick={refresh} disabled={busy}>
+            {busy ? "Refreshing…" : "Refresh"}
+          </button>
         </div>
-      )}
-
-      <div className="text-sm text-gray-500">
-        Last refreshed: {new Date(turnout.last_refresh).toLocaleString()}
       </div>
 
-      <div className="mt-6 bg-blue-50 border border-blue-200 text-blue-900 p-4 rounded">
-        <p className="font-medium text-sm">Privacy Note</p>
-        <p className="text-xs mt-1">
-          This panel shows counts only. It does not show a list of who voted or any ballot choices.
-          Individual voter participation records are stored separately from ballot selections to
-          protect privacy.
-        </p>
+      <ElectionTabs id={id} />
+
+      {error ? (
+        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
+          <Icon name="alert" />
+          <div>
+            <b>Something needs attention</b>
+            {error}
+          </div>
+        </div>
+      ) : null}
+
+      {!turnout && !error ? (
+        <div className="panel stack" aria-busy="true">
+          <span className="skel" style={{ height: 18, width: "30%" }} />
+          <span className="skel" style={{ height: 14 }} />
+        </div>
+      ) : null}
+
+      {turnout?.suppressed ? (
+        <div className="banner hatch" role="status">
+          <Icon name="lock" />
+          <div>
+            <b>Turnout is hidden to protect privacy</b>
+            The number of eligible voters is below the configured privacy threshold, so turnout
+            counts are withheld. This prevents identifying individual voters.
+          </div>
+        </div>
+      ) : null}
+
+      {turnout && !turnout.suppressed ? (
+        <div className="kpis" style={{ marginBottom: 20 }}>
+          <div className="kpi">
+            <span className="l">Eligible voters</span>
+            <span className="v">{formatNumber(turnout.eligible)}</span>
+          </div>
+          <div className="kpi">
+            <span className="l">Ballots cast</span>
+            <span className="v">{formatNumber(turnout.voted)}</span>
+          </div>
+          <div className="kpi">
+            <span className="l">Turnout</span>
+            <span className="v">{formatPercent(turnout.percent)}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {turnout ? <p className="hint">Last refreshed {formatEAT(turnout.last_refresh)}</p> : null}
+
+      <div className="banner" style={{ marginTop: 20 }}>
+        <Icon name="shield" />
+        <div>
+          <b>Participation is separate from the ballot</b>
+          The record that somebody voted is stored separately from their choices, so turnout cannot
+          be linked to a ballot.
+        </div>
       </div>
-    </div>
+    </StaffShell>
+  );
+}
+
+export default function TurnoutPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return (
+    <RequireAuth>
+      <Panel id={id} />
+    </RequireAuth>
   );
 }

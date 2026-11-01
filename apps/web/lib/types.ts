@@ -78,7 +78,9 @@ export interface EligibilityDecision {
 export interface BallotCandidate {
   id: string;
   full_name: string;
+  slogan?: string;
   manifesto: string;
+  manifesto_url?: string;
   photo_url?: string;
   bio?: string;
   ballot_number: number;
@@ -95,6 +97,10 @@ export interface BallotPosition {
   allow_blank: boolean;
   display_order: number;
   candidates: BallotCandidate[];
+}
+
+export interface BallotContent {
+  positions: BallotPosition[];
 }
 
 export interface Ballot {
@@ -247,6 +253,75 @@ export interface RecountResult {
   identical: boolean;
   differences: ResultDifferences;
   ballots_unchanged: boolean;
+}
+
+export type CandidateStatus = "NOMINATED" | "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+
+export interface Candidate {
+  id: string;
+  election_id: string;
+  position_id: string;
+  full_name: string;
+  slogan?: string;
+  photo_url?: string;
+  manifesto?: string;
+  manifesto_url?: string;
+  bio?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  ballot_number: number;
+  approval_status: CandidateStatus | string;
+  review_notes?: string;
+  nominated_by?: string;
+  reviewed_at?: string | null;
+  withdrawn_at?: string | null;
+  withdrawal_reason?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MyCandidate {
+  candidate: Candidate;
+  election_title: string;
+  position_title: string;
+}
+
+export interface Position {
+  id: string;
+  election_id: string;
+  title: string;
+  description: string;
+  question_type: string;
+  min_selections: number;
+  max_selections: number;
+  seats: number;
+  allow_blank: boolean;
+  display_order: number;
+}
+
+export interface CandidateApplicationView {
+  election: {
+    id: string;
+    title: string;
+    status: ElectionStatus;
+    starts_at: string;
+    ends_at: string;
+    category: string;
+    unit: string;
+  };
+  positions: Position[];
+  eligible: boolean;
+  eligibility_reason?: string;
+  accepting_applications: boolean;
+  application_reason?: string;
+}
+
+export interface UploadRef {
+  url: string;
+  key: string;
+  name: string;
+  mime: string;
+  size: number;
 }
 
 export interface EligibilityReport {

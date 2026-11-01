@@ -22,9 +22,15 @@ type Candidate struct {
 	ElectionID     string         `gorm:"size:36;not null;index" json:"election_id"`
 	PositionID     string         `gorm:"size:36;not null;index" json:"position_id"`
 	FullName       string         `gorm:"size:255;not null" json:"full_name" binding:"required"`
+	Slogan         string         `gorm:"size:200" json:"slogan,omitempty"`
 	PhotoURL       string         `gorm:"size:500" json:"photo_url"`
 	Manifesto      string         `gorm:"type:text" json:"manifesto"`
+	// ManifestoURL is the uploaded PDF, kept beside the short manifesto text
+	// voters read on the ballot.
+	ManifestoURL   string         `gorm:"size:500" json:"manifesto_url,omitempty"`
 	Bio            string         `gorm:"type:text" json:"bio"`
+	ContactEmail   string         `gorm:"size:255" json:"contact_email,omitempty"`
+	ContactPhone   string         `gorm:"size:50" json:"contact_phone,omitempty"`
 	BallotNumber   int            `gorm:"not null;default:0" json:"ballot_number"`
 	ApprovalStatus string         `gorm:"size:50;not null;default:'NOMINATED';index" json:"approval_status"`
 	ReviewNotes    string         `gorm:"type:text" json:"review_notes,omitempty"`

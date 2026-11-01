@@ -114,6 +114,12 @@ function ElectionView({ id }: { id: string }) {
 
   const voted = Boolean(election.my_vote_status?.voted);
   const canVote = Boolean(eligibility?.eligible) && election.accepting_votes && !voted;
+  const applicationsOpen =
+    Boolean(eligibility?.eligible) &&
+    !["DRAFT", "CLOSED", "RESULTS_UNDER_REVIEW", "FINALIZED", "ARCHIVED", "CANCELLED"].includes(
+      election.status
+    ) &&
+    new Date(election.starts_at).getTime() > Date.now();
 
   return (
     <main className="app-wrap">
@@ -237,6 +243,12 @@ function ElectionView({ id }: { id: string }) {
               {formatNumber(election.eligibility_frozen_count)} voters were on the frozen roster
               when voting opened.
             </span>
+            {applicationsOpen ? (
+              <Link className="btn block" href={`/elections/${election.id}/candidate/apply`}>
+                <Icon name="user" />
+                Become a candidate
+              </Link>
+            ) : null}
           </div>
         </aside>
       </div>

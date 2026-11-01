@@ -80,8 +80,10 @@ func BallotContentFor(db *gorm.DB, electionID string) (models.BallotContent, err
 			posContent.Candidates = append(posContent.Candidates, models.BallotCandidateContent{
 				ID:           candidate.ID,
 				FullName:     candidate.FullName,
+				Slogan:       candidate.Slogan,
 				PhotoURL:     candidate.PhotoURL,
 				Manifesto:    candidate.Manifesto,
+				ManifestoURL: candidate.ManifestoURL,
 				Bio:          candidate.Bio,
 				BallotNumber: candidate.BallotNumber,
 			})

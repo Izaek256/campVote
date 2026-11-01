@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ElectionTabs } from "@/components/election-tabs";
 import { Icon } from "@/components/icon";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
@@ -48,6 +49,7 @@ function Manage({ id }: { id: string }) {
   const [pendingTo, setPendingTo] = useState("");
   const [reason, setReason] = useState("");
   const [confirmCertify, setConfirmCertify] = useState(false);
+  const [certifyReason, setCertifyReason] = useState("");
   const [form, setForm] = useState({ title: "", starts_at: "", ends_at: "", reason: "" });
   const [fields, setFields] = useState<Record<string, string>>({});
 
@@ -135,8 +137,23 @@ function Manage({ id }: { id: string }) {
   }
 
   async function certify() {
-    const ok = await run(() => elections.certify(id), "Results certified.");
-    if (ok) setConfirmCertify(false);
+    const snapshotId = results?.snapshot?.id;
+    if (!snapshotId) {
+      setError("Run the tally before certifying these results.");
+      return;
+    }
+    if (!certifyReason.trim()) {
+      setError("Add a reason before certifying.");
+      return;
+    }
+    const ok = await run(
+      () => elections.certify(id, snapshotId, certifyReason.trim()),
+      "Results certified."
+    );
+    if (ok) {
+      setConfirmCertify(false);
+      setCertifyReason("");
+    }
   }
 
   if (!election) {
@@ -191,6 +208,8 @@ function Manage({ id }: { id: string }) {
           Voter view
         </Link>
       </div>
+
+      <ElectionTabs id={election.id} />
 
       {error ? (
         <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
@@ -380,43 +399,41 @@ function Manage({ id }: { id: string }) {
               <h2>Results</h2>
               {results ? <span className="lbl">{results.label}</span> : null}
             </div>
-            {!results ? (
-              <p className="hint">Results are not available to you for this election yet.</p>
-            ) : results.tallies.length === 0 ? (
+            {!results?.snapshot ? (
+              <p className="hint">
+                {results?.reason ?? "Results are not available to you for this election yet."}
+              </p>
+            ) : results.snapshot.positions.length === 0 ? (
               <p className="hint">No tally rows have been computed.</p>
             ) : (
               <div className="stack">
-                {Object.entries(
-                  results.tallies.reduce<Record<string, typeof results.tallies>>(
-                    (groups, tally) => {
-                      const key = tally.position_title || tally.position_id;
-                      groups[key] = [...(groups[key] ?? []), tally];
-                      return groups;
-                    },
-                    {}
-                  )
-                ).map(([position, tallies]) => (
-                  <div key={position}>
-                    <b>{position}</b>
+                {results.snapshot.positions.map((position) => (
+                  <div key={position.position_id}>
+                    <div className="row-between">
+                      <b>{position.title}</b>
+                      <span className="mono">
+                        {position.outcome.replaceAll("_", " ").toLowerCase()}
+                      </span>
+                    </div>
                     <div className="tally" style={{ marginTop: 10 }}>
-                      {tallies
+                      {position.rows
                         .slice()
                         .sort((a, b) => b.votes - a.votes)
-                        .map((tally) => (
-                          <div className="trow" key={`${tally.position_id}-${tally.choice}`}>
+                        .map((row) => (
+                          <div className="trow" key={row.candidate_id}>
                             <span>
-                              <b>{tally.candidate_name || tally.choice}</b>
-                              {tally.is_winner ? <span className="lead-tag">Leading</span> : null}
+                              <b>{row.name}</b>
+                              {row.is_winner ? <span className="lead-tag">Leading</span> : null}
                             </span>
-                            <div className={`bar${tally.is_winner ? " lead" : ""}`}>
+                            <div className={`bar${row.is_winner ? " lead" : ""}`}>
                               <i
                                 style={{
-                                  width: `${Math.min(100, Math.max(0, tally.percentage))}%`,
+                                  width: `${Math.min(100, Math.max(0, row.share_percent))}%`,
                                 }}
                               />
                             </div>
                             <span className="vl">
-                              <b>{formatNumber(tally.votes)}</b> · {formatPercent(tally.percentage)}
+                              <b>{formatNumber(row.votes)}</b> · {formatPercent(row.share_percent)}
                             </span>
                           </div>
                         ))}
@@ -526,6 +543,16 @@ function Manage({ id }: { id: string }) {
           Certification finalises the result. The election creator cannot certify, and the change is
           recorded in the audit trail.
         </p>
+        <div className="field">
+          <label htmlFor="certify-reason">Reason (required)</label>
+          <textarea
+            id="certify-reason"
+            className="ta"
+            value={certifyReason}
+            onChange={(event) => setCertifyReason(event.target.value)}
+            placeholder="Why are these results being certified?"
+          />
+        </div>
       </ConfirmDialog>
     </StaffShell>
   );

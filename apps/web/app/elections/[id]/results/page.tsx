@@ -1,14 +1,55 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useState } from "react";
+import { EmptyState } from "@/components/empty-state";
 import { Icon } from "@/components/icon";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
 import { StatusChip } from "@/components/status-chip";
 import { ApiError, elections } from "@/lib/api";
 import { formatNumber, formatPercent } from "@/lib/format";
-import type { Results, Tally } from "@/lib/types";
+import type { PositionResult, Results } from "@/lib/types";
+
+function PositionTally({ position, certified }: { position: PositionResult; certified: boolean }) {
+  return (
+    <section className="panel" style={{ marginBottom: 16 }}>
+      <div className="section-h" style={{ marginTop: 0 }}>
+        <h2>{position.title}</h2>
+        <span className="mono">
+          {position.outcome.replaceAll("_", " ").toLowerCase()} ·{" "}
+          {formatNumber(position.valid_votes)} valid votes
+        </span>
+      </div>
+      <div className="tally">
+        {position.rows
+          .slice()
+          .sort((a, b) => b.votes - a.votes)
+          .map((row) => (
+            <div className="trow" key={row.candidate_id}>
+              <span>
+                <b>{row.name}</b>
+                {row.is_winner ? (
+                  <span className="lead-tag">{certified ? "Elected" : "Leading"}</span>
+                ) : null}
+                {row.is_tie ? <span className="lead-tag">Tie</span> : null}
+              </span>
+              <div className={`bar${row.is_winner ? " lead" : ""}`}>
+                <i style={{ width: `${Math.min(100, Math.max(0, row.share_percent))}%` }} />
+              </div>
+              <span className="vl">
+                <b>{formatNumber(row.votes)}</b> · {formatPercent(row.share_percent)}
+              </span>
+            </div>
+          ))}
+      </div>
+      <p className="hint" style={{ marginTop: 10 }}>
+        Share of {formatNumber(position.valid_votes)} valid votes. Blank or abstaining selections
+        are not counted for a candidate.
+      </p>
+    </section>
+  );
+}
 
 function ResultsView({ id }: { id: string }) {
   const [results, setResults] = useState<Results | null>(null);
@@ -36,20 +77,8 @@ function ResultsView({ id }: { id: string }) {
     };
   }, [id]);
 
-  const groups = useMemo(() => {
-    if (!results) return [];
-    const map = new Map<string, Tally[]>();
-    for (const tally of results.tallies) {
-      const list = map.get(tally.position_id) ?? [];
-      list.push(tally);
-      map.set(tally.position_id, list);
-    }
-    return [...map.entries()].map(([positionID, tallies]) => ({
-      positionID,
-      title: tallies[0]?.position_title || "Position",
-      tallies: [...tallies].sort((a, b) => b.votes - a.votes),
-    }));
-  }, [results]);
+  const snapshot = results?.snapshot;
+  const certified = snapshot?.status === "CERTIFIED";
 
   return (
     <main className="app-wrap">
@@ -70,7 +99,7 @@ function ResultsView({ id }: { id: string }) {
             certified.
           </p>
         </div>
-        {results ? <StatusChip status={results.status} /> : null}
+        {results?.election_status ? <StatusChip status={results.election_status} /> : null}
       </div>
 
       {error ? (
@@ -91,55 +120,53 @@ function ResultsView({ id }: { id: string }) {
         </div>
       ) : null}
 
-      {results ? (
+      {results && !snapshot ? (
+        <EmptyState title="No results published yet">
+          {results.reason ?? "The count has not produced a published snapshot."}
+        </EmptyState>
+      ) : null}
+
+      {results && snapshot ? (
         <>
-          <div className="banner ok" style={{ marginBottom: 20 }}>
-            <Icon name="shield" />
+          <div className={`banner ${certified ? "ok" : ""}`} style={{ marginBottom: 20 }}>
+            <Icon name={certified ? "shield" : "clock"} />
             <div>
-              <b>{results.label === "CERTIFIED" ? "Certified final" : "Live provisional"}</b>
-              {results.label === "CERTIFIED"
+              <b>{certified ? "Certified final" : "Provisional result"}</b>
+              {certified
                 ? "The result has been certified. Corrections need a recorded exception."
                 : "Not a final result. A leader is not a winner until certified."}
             </div>
           </div>
 
-          {groups.length === 0 ? (
-            <div className="empty">
-              <b>No tallies yet</b>
-              <span className="hint">The count has not produced any published tally rows.</span>
+          <div className="kpis" style={{ marginBottom: 20 }}>
+            <div className="kpi">
+              <span className="l">Eligible voters</span>
+              <span className="v">{formatNumber(snapshot.eligible_voters)}</span>
             </div>
+            <div className="kpi">
+              <span className="l">Ballots cast</span>
+              <span className="v">{formatNumber(snapshot.ballots_cast)}</span>
+            </div>
+            <div className="kpi">
+              <span className="l">Turnout</span>
+              <span className="v">{formatPercent(snapshot.turnout_percent)}</span>
+            </div>
+          </div>
+
+          {snapshot.positions.length === 0 ? (
+            <EmptyState title="No tallies yet">
+              The count has not produced any published tally rows.
+            </EmptyState>
           ) : (
-            groups.map((group) => (
-              <section className="tally-group" key={group.positionID}>
-                <h3>{group.title}</h3>
-                <div className="tally">
-                  {group.tallies.map((tally) => (
-                    <div className="trow" key={`${tally.position_id}-${tally.choice}`}>
-                      <span>
-                        <b>{tally.candidate_name || tally.choice}</b>
-                        {tally.is_winner && results.label === "PROVISIONAL" ? (
-                          <span className="lead-tag">Leading</span>
-                        ) : null}
-                        {tally.is_winner && results.label === "CERTIFIED" ? (
-                          <span className="lead-tag">Elected</span>
-                        ) : null}
-                      </span>
-                      <div className={`bar${tally.is_winner ? " lead" : ""}`}>
-                        <i style={{ width: `${Math.min(100, Math.max(0, tally.percentage))}%` }} />
-                      </div>
-                      <span className="vl">
-                        <b>{formatNumber(tally.votes)}</b> · {formatPercent(tally.percentage)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <p className="hint" style={{ marginTop: 10 }}>
-                  Percent of {formatNumber(group.tallies[0]?.valid_votes_total ?? 0)} valid votes.
-                  Blank or abstaining selections are not counted for a candidate.
-                </p>
-              </section>
+            snapshot.positions.map((position) => (
+              <PositionTally key={position.position_id} position={position} certified={certified} />
             ))
           )}
+
+          <p className="hint">
+            Snapshot version {snapshot.version} · computed{" "}
+            {new Date(snapshot.computed_at).toLocaleString()}
+          </p>
         </>
       ) : null}
     </main>

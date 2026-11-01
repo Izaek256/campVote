@@ -57,6 +57,17 @@ func CheckElection(db *gorm.DB, election *models.Election, user *models.User, at
 	if !election.IsOpen(at) {
 		return Decision{Reason: "Voting is not open for this election"}, nil
 	}
+	return CheckRoster(db, election, user)
+}
+
+// CheckRoster answers whether this account is on the election's eligibility
+// roster, without requiring the voting window to be open. Candidate
+// applications happen before polls open, so they need the roster evidence but
+// not the ballot gate.
+func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Decision, error) {
+	if election == nil {
+		return Decision{Reason: "Election not found"}, nil
+	}
 	if user == nil || strings.TrimSpace(user.Email) == "" {
 		return Decision{Reason: "Sign in with your institutional email to vote"}, nil
 	}

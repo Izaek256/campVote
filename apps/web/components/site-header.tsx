@@ -39,6 +39,11 @@ export function SiteHeader() {
             Elections
           </Link>
           {isStaff(user) ? <Link href="/staff">Staff console</Link> : null}
+          {user ? (
+            <Link className={pathname === "/candidate" ? "on" : ""} href="/candidate">
+              My candidacy
+            </Link>
+          ) : null}
           <Link className={pathname === "/how-voting-works" ? "on" : ""} href="/how-voting-works">
             How voting works
           </Link>

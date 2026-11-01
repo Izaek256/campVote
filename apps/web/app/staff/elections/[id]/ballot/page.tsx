@@ -1,159 +1,232 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import type { BallotVersion } from "@campvote/shared/types/ballot_version";
+import Link from "next/link";
+import { use, useCallback, useEffect, useState } from "react";
+import { BallotView } from "@/components/ballot-view";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ElectionTabs } from "@/components/election-tabs";
+import { EmptyState } from "@/components/empty-state";
+import { Icon } from "@/components/icon";
+import { RequireAuth } from "@/components/require-auth";
+import { StaffShell } from "@/components/staff-shell";
+import { ApiError, elections, staff } from "@/lib/api";
+import { formatEAT } from "@/lib/format";
+import type { BallotContent, Election } from "@/lib/types";
 
-export default function BallotBuilderPage() {
-  const params = useParams();
-  const electionId = params.id;
-  const [versions, setVersions] = useState<BallotVersion[]>([]);
-  const [currentVersion, setCurrentVersion] = useState<BallotVersion | null>(null);
-  // Placeholder until the publish-validation endpoint is wired up.
-  const [validationErrors] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [publishing, setPublishing] = useState(false);
+type Version = {
+  id: string;
+  version: number;
+  content_hash: string;
+  status: string;
+  published_by: string;
+  published_at: string;
+};
 
-  const fetchVersions = useCallback(async () => {
+function Builder({ id }: { id: string }) {
+  const [versions, setVersions] = useState<Version[] | null>(null);
+  const [selected, setSelected] = useState<Version | null>(null);
+  const [content, setContent] = useState<BallotContent | null>(null);
+  const [election, setElection] = useState<Election | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  const load = useCallback(async () => {
     try {
-      const response = await fetch(`/api/v1/staff/elections/${electionId}/ballot/versions`);
-      if (!response.ok) throw new Error("Failed to fetch versions");
-      const data = await response.json();
-      setVersions(data.versions || []);
-      if (data.versions.length > 0) {
-        setCurrentVersion(data.versions[0]);
-      }
+      const [list, current] = await Promise.all([staff.versions(id), elections.get(id)]);
+      setVersions(list.versions ?? []);
+      setElection(current);
+      const latest = list.versions?.[0];
+      setSelected((previous) => previous ?? latest ?? null);
+      setError("");
     } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+      setError(err instanceof ApiError ? err.message : "Ballot versions could not be loaded.");
     }
-  }, [electionId]);
+  }, [id]);
 
   useEffect(() => {
-    fetchVersions();
-  }, [fetchVersions]);
+    load();
+  }, [load]);
 
-  const handlePublish = async () => {
-    if (validationErrors.length > 0) {
-      alert("Fix validation errors before publishing");
+  useEffect(() => {
+    if (!selected) {
+      setContent(null);
       return;
     }
-
-    if (
-      !confirm("Publish this ballot? This action is irreversible and will create a new version.")
-    ) {
-      return;
-    }
-
-    setPublishing(true);
-    try {
-      const response = await fetch(`/api/v1/staff/elections/${electionId}/ballot/publish`, {
-        method: "POST",
+    let active = true;
+    staff
+      .version(id, selected.id)
+      .then((data) => {
+        if (active) setContent(data.content);
+      })
+      .catch((err) => {
+        if (active)
+          setError(
+            err instanceof ApiError ? err.message : "The ballot preview could not be loaded."
+          );
       });
-      if (!response.ok) throw new Error("Failed to publish");
-      const data = await response.json();
-      alert(`Ballot published!\nVersion: ${data.version}\nHash: ${data.content_hash}`);
-      fetchVersions();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to publish ballot");
-    } finally {
-      setPublishing(false);
-    }
-  };
+    return () => {
+      active = false;
+    };
+  }, [id, selected]);
 
-  if (loading) return <div className="p-8">Loading...</div>;
+  async function publish() {
+    setBusy(true);
+    setError("");
+    try {
+      const published = await staff.publish(id);
+      setNotice(`Ballot version ${published.version} published.`);
+      setConfirming(false);
+      setSelected(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "The ballot could not be published.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Ballot Builder</h1>
-        <button
-          onClick={handlePublish}
-          disabled={publishing || validationErrors.length > 0}
-          className={`px-4 py-2 rounded ${
-            publishing || validationErrors.length > 0
-              ? "bg-gray-300 cursor-not-allowed"
-              : "bg-green-600 text-white hover:bg-green-700"
-          }`}
+    <StaffShell title="Ballot">
+      <div className="page-head">
+        <div>
+          <span className="lbl">Ballot</span>
+          <h1>Ballot builder</h1>
+          <p>
+            Publishing freezes the ballot content and creates a new version. Voters always see the
+            latest published version.
+          </p>
+        </div>
+        <div className="row">
+          <Link className="btn" href={`/staff/elections/${id}/ballot/versions`}>
+            <Icon name="hist" size="s" />
+            Versions
+          </Link>
+          <Link className="btn" href={`/staff/elections/${id}/ballot/preview`}>
+            <Icon name="eye" size="s" />
+            Preview
+          </Link>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => setConfirming(true)}
+            disabled={busy || !election}
+          >
+            {busy ? "Publishing…" : "Publish ballot"}
+          </button>
+        </div>
+      </div>
+
+      <ElectionTabs id={id} />
+
+      {error ? (
+        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
+          <Icon name="alert" />
+          <div>
+            <b>Something needs attention</b>
+            {error}
+          </div>
+        </div>
+      ) : null}
+      {notice ? (
+        <div className="banner ok" role="status" style={{ marginBottom: 16 }}>
+          <Icon name="check" />
+          <div>{notice}</div>
+        </div>
+      ) : null}
+
+      {!versions && !error ? (
+        <div className="panel stack" aria-busy="true">
+          <span className="skel" style={{ height: 18, width: "30%" }} />
+          <span className="skel" style={{ height: 14 }} />
+        </div>
+      ) : null}
+
+      {versions && versions.length === 0 ? (
+        <EmptyState
+          title="No ballot published yet"
+          action={
+            <button type="button" className="btn primary" onClick={() => setConfirming(true)}>
+              Publish the first version
+            </button>
+          }
         >
-          {publishing ? "Publishing..." : "Publish Ballot"}
-        </button>
-      </div>
+          Add positions and approved candidates first, then publish. Publishing is audited.
+        </EmptyState>
+      ) : null}
 
-      {validationErrors.length > 0 && (
-        <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded mb-6">
-          <h3 className="font-semibold mb-2">Validation Errors</h3>
-          <ul className="list-disc list-inside space-y-1">
-            {validationErrors.map((error, idx) => (
-              <li key={idx}>{error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <h2 className="text-lg font-semibold mb-4">Ballot Versions</h2>
-          {versions.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 border rounded">
-              No versions published yet
+      {versions && versions.length > 0 ? (
+        <div className="split">
+          <div className="panel stack">
+            <div className="section-h" style={{ marginTop: 0 }}>
+              <h2>Preview</h2>
+              {selected ? <span className="mono">v{selected.version}</span> : null}
             </div>
-          ) : (
-            <div className="space-y-2">
-              {versions.map((version) => (
-                <div
-                  key={version.id}
-                  className={`p-4 border rounded cursor-pointer ${
-                    currentVersion?.id === version.id ? "border-green-600 bg-green-50" : ""
-                  }`}
-                  onClick={() => setCurrentVersion(version)}
-                >
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <span className="font-medium">Version {version.version}</span>
-                      {version.status === "CURRENT" && (
-                        <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                          Current
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-sm text-gray-500">
-                      {new Date(version.published_at).toLocaleDateString()}
+            {content ? (
+              <BallotView content={content} mode="preview" />
+            ) : (
+              <p className="hint">Choose a version to see its ballot content.</p>
+            )}
+          </div>
+
+          <aside className="stack">
+            <div className="panel stack">
+              <span className="lbl">Versions</span>
+              <div className="stack" role="radiogroup" aria-label="Ballot versions">
+                {versions.map((version) => (
+                  <button
+                    key={version.id}
+                    type="button"
+                    className="opt"
+                    role="radio"
+                    aria-checked={selected?.id === version.id}
+                    onClick={() => setSelected(version)}
+                  >
+                    <span className="box rd" />
+                    <span>
+                      <span className="nm">Version {version.version}</span>
+                      <span className="candidate-meta">
+                        {version.status} · {formatEAT(version.published_at)}
+                      </span>
                     </span>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-600 font-mono">
-                    Hash: {version.content_hash.slice(0, 16)}...
-                  </div>
-                </div>
-              ))}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
+            {selected ? (
+              <div className="panel stack">
+                <span className="lbl">Content hash</span>
+                <span className="hash">{selected.content_hash}</span>
+                <span className="hint">Published by {selected.published_by}</span>
+              </div>
+            ) : null}
+          </aside>
         </div>
+      ) : null}
 
-        <div>
-          <h2 className="text-lg font-semibold mb-4">Preview</h2>
-          {currentVersion ? (
-            <div className="border rounded p-4">
-              <div className="text-sm text-gray-600 mb-4">
-                Version {currentVersion.version} • Hash: {currentVersion.content_hash}
-              </div>
-              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-4">
-                <p className="font-medium">Preview Mode</p>
-                <p className="text-sm">No vote or participation is recorded.</p>
-              </div>
-              <div className="text-sm text-gray-500">
-                Ballot content would render here with the BallotView component.
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500 border rounded">
-              Select a version to preview
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+      <ConfirmDialog
+        open={confirming}
+        title="Publish this ballot?"
+        confirmLabel="Publish"
+        busy={busy}
+        onClose={() => setConfirming(false)}
+        onConfirm={publish}
+      >
+        <p>
+          A new immutable version will be created from the current positions and approved
+          candidates. Voters will see it immediately.
+        </p>
+      </ConfirmDialog>
+    </StaffShell>
+  );
+}
+
+export default function BallotBuilderPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return (
+    <RequireAuth>
+      <Builder id={id} />
+    </RequireAuth>
   );
 }

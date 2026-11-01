@@ -1,44 +1,36 @@
 "use client";
 
 import Link from "next/link";
+import { Icon } from "./icon";
 
 export function StaffShell({ children, title }: { children: React.ReactNode; title?: string }) {
   return (
     <div className="admin-shell">
       <aside className="admin-side">
         <Link className="b" href="/staff">
-          <svg className="i" aria-hidden="true">
-            <path d="M2 27 11 10l6 10 3-5 10 12z" fill="currentColor" stroke="none" />
-            <circle cx="24" cy="8" r="4" fill="currentColor" stroke="none" />
-          </svg>
+          <Icon name="moon" />
           campVote
         </Link>
         <span className="h">Elections</span>
         <Link className="on" href="/staff">
-          <svg className="i" aria-hidden="true">
-            <path d="M3 3v18h18M7 16v-5M12 16V6M17 16v-8" />
-          </svg>
+          <Icon name="chart" />
           Dashboard
         </Link>
         <Link href="/elections">
-          <svg className="i" aria-hidden="true">
-            <path d="M3 13h18v8H3zM7 13V3h10v10M10 8h4" />
-          </svg>
+          <Icon name="ballot" />
           Voter view
         </Link>
+        <Link href="/candidate">
+          <Icon name="user" />
+          My candidacy
+        </Link>
         <Link href="/account">
-          <svg className="i" aria-hidden="true">
-            <circle cx="12" cy="8" r="4" />
-            <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
-          </svg>
+          <Icon name="user" />
           Account
         </Link>
         <div className="foot">
           <Link href="/how-voting-works">
-            <svg className="i" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 16v-5M12 8h.01" />
-            </svg>
+            <Icon name="info" />
             How voting works
           </Link>
         </div>
