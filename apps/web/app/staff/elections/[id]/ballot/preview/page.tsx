@@ -1,60 +1,109 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { BallotView } from "@campvote/web/components/ballot-view";
-import type { BallotContent } from "@campvote/shared/types/ballot_version";
+import Link from "next/link";
+import { use, useCallback, useEffect, useState } from "react";
+import { BallotView } from "@/components/ballot-view";
+import { ElectionTabs } from "@/components/election-tabs";
+import { EmptyState } from "@/components/empty-state";
+import { Icon } from "@/components/icon";
+import { RequireAuth } from "@/components/require-auth";
+import { StaffShell } from "@/components/staff-shell";
+import { ApiError, staff } from "@/lib/api";
+import type { BallotContent } from "@/lib/types";
 
-export default function BallotPreviewPage() {
-  const params = useParams();
-  const electionId = params.id;
+function Preview({ id }: { id: string }) {
   const [content, setContent] = useState<BallotContent | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [version, setVersion] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
 
-  const fetchLatestVersion = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      const response = await fetch(`/api/v1/staff/elections/${electionId}/ballot/versions`);
-      if (!response.ok) throw new Error("Failed to fetch versions");
-      const data = await response.json();
-      if (data.versions && data.versions.length > 0) {
-        const latest = data.versions[0];
-        const versionResponse = await fetch(
-          `/api/v1/staff/elections/${electionId}/ballot/versions/${latest.id}`
-        );
-        if (versionResponse.ok) {
-          const versionData = await versionResponse.json();
-          setContent(versionData.content);
-        }
+      const list = await staff.versions(id);
+      const latest = list.versions?.[0];
+      if (latest) {
+        const data = await staff.version(id, latest.id);
+        setContent(data.content);
+        setVersion(latest.version);
       }
+      setError("");
     } catch (err) {
-      console.error(err);
+      setError(err instanceof ApiError ? err.message : "The ballot preview could not be loaded.");
     } finally {
-      setLoading(false);
+      setLoaded(true);
     }
-  }, [electionId]);
+  }, [id]);
 
   useEffect(() => {
-    fetchLatestVersion();
-  }, [fetchLatestVersion]);
-
-  if (loading) return <div className="p-8">Loading...</div>;
+    load();
+  }, [load]);
 
   return (
-    <div className="p-8">
-      <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-6">
-        <p className="font-medium">Preview Mode</p>
-        <p className="text-sm">
-          No vote or participation is recorded. This is a ballot preview only.
-        </p>
+    <StaffShell title="Ballot preview">
+      <div className="page-head">
+        <div>
+          <span className="lbl">Preview</span>
+          <h1>Ballot preview</h1>
+          <p>This is exactly what voters see. Nothing is recorded.</p>
+        </div>
+        <Link className="btn" href={`/staff/elections/${id}/ballot`}>
+          Back to ballot
+        </Link>
       </div>
 
-      {content ? (
-        <BallotView content={content} mode="preview" />
-      ) : (
-        <div className="text-center py-12 text-gray-500">
-          No ballot version published yet. Go to the ballot builder to create and publish a version.
+      <ElectionTabs id={id} />
+
+      {error ? (
+        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
+          <Icon name="alert" />
+          <div>
+            <b>Something needs attention</b>
+            {error}
+          </div>
         </div>
-      )}
-    </div>
+      ) : null}
+
+      {!loaded && !error ? (
+        <div className="panel stack" aria-busy="true">
+          <span className="skel" style={{ height: 18, width: "30%" }} />
+          <span className="skel" style={{ height: 14 }} />
+        </div>
+      ) : null}
+
+      {loaded && !content && !error ? (
+        <EmptyState
+          title="No ballot published yet"
+          action={
+            <Link className="btn primary" href={`/staff/elections/${id}/ballot`}>
+              Open ballot builder
+            </Link>
+          }
+        >
+          Publish a ballot version, then come back to preview it.
+        </EmptyState>
+      ) : null}
+
+      {content ? (
+        <>
+          <div className="banner" style={{ marginBottom: 18 }}>
+            <Icon name="eye" />
+            <div>
+              <b>Preview mode</b>
+              {version ? `Version ${version}. ` : ""}No vote or participation is recorded.
+            </div>
+          </div>
+          <BallotView content={content} mode="preview" />
+        </>
+      ) : null}
+    </StaffShell>
+  );
+}
+
+export default function BallotPreviewPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return (
+    <RequireAuth>
+      <Preview id={id} />
+    </RequireAuth>
   );
 }

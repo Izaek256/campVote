@@ -1,169 +1,217 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import type { BallotVersion } from "@campvote/shared/types/ballot_version";
+import Link from "next/link";
+import { use, useCallback, useEffect, useState } from "react";
+import { ElectionTabs } from "@/components/election-tabs";
+import { EmptyState } from "@/components/empty-state";
+import { Icon } from "@/components/icon";
+import { RequireAuth } from "@/components/require-auth";
+import { StaffShell } from "@/components/staff-shell";
+import { ApiError, staff } from "@/lib/api";
+import { formatEAT } from "@/lib/format";
 
-interface VersionComparison {
+type Version = {
+  id: string;
+  version: number;
+  content_hash: string;
+  status: string;
+  published_by: string;
+  published_at: string;
+};
+
+type Comparison = {
   same_hash: boolean;
-  v1: BallotVersion;
-  v2: BallotVersion;
-}
+  v1: Version;
+  v2: Version;
+};
 
-export default function BallotVersionsPage() {
-  const params = useParams();
-  const searchParams = useSearchParams();
-  const electionId = params.id;
-  const [versions, setVersions] = useState<BallotVersion[]>([]);
-  const [selectedV1, setSelectedV1] = useState<string>(searchParams.get("v1") || "");
-  const [selectedV2, setSelectedV2] = useState<string>(searchParams.get("v2") || "");
-  const [comparison, setComparison] = useState<VersionComparison | null>(null);
-  const [loading, setLoading] = useState(true);
+function Versions({ id }: { id: string }) {
+  const [versions, setVersions] = useState<Version[] | null>(null);
+  const [v1, setV1] = useState("");
+  const [v2, setV2] = useState("");
+  const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const fetchVersions = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      const response = await fetch(`/api/v1/staff/elections/${electionId}/ballot/versions`);
-      if (!response.ok) throw new Error("Failed to fetch versions");
-      const data = await response.json();
-      setVersions(data.versions || []);
+      const data = await staff.versions(id);
+      setVersions(data.versions ?? []);
+      setError("");
     } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+      setError(err instanceof ApiError ? err.message : "Ballot versions could not be loaded.");
     }
-  }, [electionId]);
+  }, [id]);
 
   useEffect(() => {
-    fetchVersions();
-  }, [fetchVersions]);
+    load();
+  }, [load]);
 
-  const handleCompare = async () => {
-    if (!selectedV1 || !selectedV2) {
-      alert("Select two versions to compare");
+  async function compare() {
+    if (!v1 || !v2) {
+      setError("Choose two versions to compare.");
       return;
     }
-
-    try {
-      const response = await fetch(
-        `/api/v1/staff/elections/${electionId}/ballot/versions/compare?v1=${selectedV1}&v2=${selectedV2}`
-      );
-      if (!response.ok) throw new Error("Failed to compare versions");
-      const data = await response.json();
-      setComparison(data);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to compare versions");
+    if (v1 === v2) {
+      setError("Choose two different versions.");
+      return;
     }
-  };
-
-  if (loading) return <div className="p-8">Loading...</div>;
+    setBusy(true);
+    setError("");
+    try {
+      setComparison(await staff.compare(id, v1, v2));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "The versions could not be compared.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">Ballot Versions</h1>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <StaffShell title="Ballot versions">
+      <div className="page-head">
         <div>
-          <label className="block text-sm font-medium mb-2">Version 1</label>
-          <select
-            value={selectedV1}
-            onChange={(e) => setSelectedV1(e.target.value)}
-            className="w-full border rounded px-3 py-2"
-          >
-            <option value="">Select version</option>
-            {versions.map((v) => (
-              <option key={v.id} value={v.id}>
-                Version {v.version} - {new Date(v.published_at).toLocaleDateString()}
-              </option>
-            ))}
-          </select>
+          <span className="lbl">Ballot history</span>
+          <h1>Ballot versions</h1>
+          <p>Every publish creates an immutable version with a content hash.</p>
         </div>
-        <div>
-          <label className="block text-sm font-medium mb-2">Version 2</label>
-          <select
-            value={selectedV2}
-            onChange={(e) => setSelectedV2(e.target.value)}
-            className="w-full border rounded px-3 py-2"
-          >
-            <option value="">Select version</option>
-            {versions.map((v) => (
-              <option key={v.id} value={v.id}>
-                Version {v.version} - {new Date(v.published_at).toLocaleDateString()}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Link className="btn" href={`/staff/elections/${id}/ballot`}>
+          Back to ballot
+        </Link>
       </div>
 
-      <button
-        onClick={handleCompare}
-        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mb-6"
-      >
-        Compare Versions
-      </button>
+      <ElectionTabs id={id} />
 
-      {comparison && (
-        <div className="border rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">Comparison Result</h2>
-          <div
-            className={`p-4 rounded mb-4 ${comparison.same_hash ? "bg-green-50 text-green-800" : "bg-yellow-50 text-yellow-800"}`}
-          >
-            {comparison.same_hash ? "Versions are identical" : "Versions differ"}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <h3 className="font-medium mb-2">Version 1</h3>
-              <div className="text-sm text-gray-600">
-                Version {comparison.v1.version} • {comparison.v1.status}
-              </div>
-              <div className="text-xs text-gray-500 font-mono mt-1">
-                Hash: {comparison.v1.content_hash}
-              </div>
-            </div>
-            <div>
-              <h3 className="font-medium mb-2">Version 2</h3>
-              <div className="text-sm text-gray-600">
-                Version {comparison.v2.version} • {comparison.v2.status}
-              </div>
-              <div className="text-xs text-gray-500 font-mono mt-1">
-                Hash: {comparison.v2.content_hash}
-              </div>
-            </div>
+      {error ? (
+        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
+          <Icon name="alert" />
+          <div>
+            <b>Something needs attention</b>
+            {error}
           </div>
         </div>
-      )}
+      ) : null}
 
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold mb-4">All Versions</h2>
-        <div className="space-y-2">
-          {versions.map((version) => (
-            <div key={version.id} className="border rounded p-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <span className="font-medium">Version {version.version}</span>
-                  {version.status === "CURRENT" && (
-                    <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                      Current
-                    </span>
-                  )}
-                  {version.status === "SUPERSEDED" && (
-                    <span className="ml-2 text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded">
-                      Superseded
-                    </span>
-                  )}
-                </div>
-                <div className="text-sm text-gray-500">
-                  {new Date(version.published_at).toLocaleString()}
-                </div>
-              </div>
-              <div className="mt-2 text-xs text-gray-600 font-mono">
-                Hash: {version.content_hash}
-              </div>
-              <div className="mt-2 text-sm text-gray-600">Published by: {version.published_by}</div>
-            </div>
-          ))}
+      {!versions && !error ? (
+        <div className="panel stack" aria-busy="true">
+          <span className="skel" style={{ height: 18, width: "30%" }} />
+          <span className="skel" style={{ height: 14 }} />
         </div>
-      </div>
-    </div>
+      ) : null}
+
+      {versions && versions.length === 0 ? (
+        <EmptyState title="No versions yet">
+          Publish the ballot to create the first version.
+        </EmptyState>
+      ) : null}
+
+      {versions && versions.length > 0 ? (
+        <>
+          <section className="panel stack" style={{ marginBottom: 20 }}>
+            <div className="section-h" style={{ marginTop: 0 }}>
+              <h2>Compare two versions</h2>
+            </div>
+            <div className="form-grid">
+              <div className="field">
+                <label htmlFor="v1">Version 1</label>
+                <select
+                  id="v1"
+                  className="sel"
+                  value={v1}
+                  onChange={(event) => setV1(event.target.value)}
+                >
+                  <option value="">Select a version</option>
+                  {versions.map((version) => (
+                    <option key={version.id} value={version.id}>
+                      Version {version.version} · {formatEAT(version.published_at)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="v2">Version 2</label>
+                <select
+                  id="v2"
+                  className="sel"
+                  value={v2}
+                  onChange={(event) => setV2(event.target.value)}
+                >
+                  <option value="">Select a version</option>
+                  {versions.map((version) => (
+                    <option key={version.id} value={version.id}>
+                      Version {version.version} · {formatEAT(version.published_at)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <button type="button" className="btn primary" onClick={compare} disabled={busy}>
+                {busy ? "Comparing…" : "Compare versions"}
+              </button>
+            </div>
+          </section>
+
+          {comparison ? (
+            <div
+              className={`banner ${comparison.same_hash ? "ok" : "hatch"}`}
+              style={{ marginBottom: 20 }}
+            >
+              <Icon name={comparison.same_hash ? "check" : "alert"} />
+              <div>
+                <b>{comparison.same_hash ? "Identical content" : "Content differs"}</b>
+                Version {comparison.v1.version} and version {comparison.v2.version}{" "}
+                {comparison.same_hash
+                  ? "have the same content hash."
+                  : "have different content hashes."}
+                <div className="mono" style={{ marginTop: 8 }}>
+                  v{comparison.v1.version}: {comparison.v1.content_hash}
+                </div>
+                <div className="mono">
+                  v{comparison.v2.version}: {comparison.v2.content_hash}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="panel pad0">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Version</th>
+                  <th>Status</th>
+                  <th>Published</th>
+                  <th>Hash</th>
+                </tr>
+              </thead>
+              <tbody>
+                {versions.map((version) => (
+                  <tr key={version.id}>
+                    <td>
+                      <b>v{version.version}</b>
+                    </td>
+                    <td>{version.status.toLowerCase()}</td>
+                    <td>
+                      {formatEAT(version.published_at)}
+                      <span className="candidate-meta">{version.published_by}</span>
+                    </td>
+                    <td className="mono">{version.content_hash.slice(0, 16)}…</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
+    </StaffShell>
+  );
+}
+
+export default function BallotVersionsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return (
+    <RequireAuth>
+      <Versions id={id} />
+    </RequireAuth>
   );
 }

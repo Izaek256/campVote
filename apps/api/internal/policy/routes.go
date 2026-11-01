@@ -149,8 +149,35 @@ func init() {
 	// the handler returns the ballot only when the server-side eligibility
 	// check passes for this election.
 	authenticated("GET", "/api/v1/elections/:id/eligibility", "/api/v1/elections/:id/ballot",
-		"/api/v1/elections/:id/lifecycle", "/api/v1/elections/:id/my-vote-status")
+		"/api/v1/elections/:id/lifecycle", "/api/v1/elections/:id/my-vote-status",
+		"/api/v1/elections/:id/candidate-application")
 	authenticated("POST", "/api/v1/elections/:id/ballot/start", "/api/v1/elections/:id/ballot/submit")
+
+	// Candidate self-service (ISSUE-21). Any signed-in caller may ask; the
+	// handler checks roster eligibility and the application window.
+	authenticated("GET", "/api/v1/candidates/my")
+	authenticated("POST", "/api/v1/elections/:id/candidates/apply",
+		"/api/v1/candidates/my/:candidate_id/withdraw")
+
+	// Officer candidate review and ballot definition (ISSUE-06). These were
+	// registered without a policy, so the guard denied every one of them.
+	permitted("candidates.view", "GET", "/api/v1/elections/:id/candidates")
+	permitted("candidates.create", "POST", "/api/v1/elections/:id/candidates")
+	permitted("candidates.edit", "PUT", "/api/v1/elections/:id/candidates/:candidate_id",
+		"/api/v1/elections/:id/positions/:position_id")
+	permitted("candidates.review", "POST", "/api/v1/elections/:id/candidates/:candidate_id/approve",
+		"/api/v1/elections/:id/candidates/:candidate_id/reject")
+	permitted("candidates.edit", "POST", "/api/v1/elections/:id/candidates/:candidate_id/withdraw")
+	permitted("ballots.view", "GET", "/api/v1/elections/:id/positions")
+	permitted("ballots.edit", "POST", "/api/v1/elections/:id/positions",
+		"/api/v1/elections/:id/ballot/publish")
+	permitted("ballots.edit", "DELETE", "/api/v1/elections/:id/positions/:position_id")
+	permitted("ballots.view", "GET", "/api/v1/elections/:id/ballot/versions",
+		"/api/v1/elections/:id/ballot/versions/compare",
+		"/api/v1/elections/:id/ballot/versions/:version_id")
+	permitted("results.view", "GET", "/api/v1/elections/:id/turnout")
+	permitted("audit.view", "GET", "/api/v1/elections/:id/reports/summary.pdf",
+		"/api/v1/elections/:id/reports/verification.pdf")
 
 	// Roster evidence is officer-only and election-scoped in the handler.
 	permitted("rosters.import", "POST", "/api/v1/elections/:id/roster/preview",

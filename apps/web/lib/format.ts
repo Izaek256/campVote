@@ -91,6 +91,30 @@ export function statusClass(status: ElectionStatus): string {
   return chipClasses[status] ?? "draft";
 }
 
+const candidateLabels: Record<string, string> = {
+  NOMINATED: "Submitted",
+  PENDING: "Under review",
+  APPROVED: "Approved",
+  REJECTED: "Not approved",
+  WITHDRAWN: "Withdrawn",
+};
+
+const candidateClasses: Record<string, string> = {
+  NOMINATED: "sched",
+  PENDING: "review",
+  APPROVED: "final",
+  REJECTED: "cancel",
+  WITHDRAWN: "draft",
+};
+
+export function candidateStatusLabel(status: string): string {
+  return candidateLabels[status] ?? status;
+}
+
+export function candidateStatusClass(status: string): string {
+  return candidateClasses[status] ?? "draft";
+}
+
 export function categoryLabel(category: string): string {
   return category.charAt(0) + category.slice(1).toLowerCase();
 }
