@@ -74,7 +74,7 @@ export const auth = {
     api<AuthPayload>("/auth/register", { method: "POST", body }),
   /** Two-step sign-up: step 1 — send a 6-digit verification code to the email. */
   signupInitiate: (email: string) =>
-    api<{ message: string; code?: string }>("/auth/signup/initiate", {
+    api<{ message: string; verification_code?: string }>("/auth/signup/initiate", {
       method: "POST",
       body: { email },
     }),

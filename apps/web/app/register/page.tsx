@@ -87,8 +87,8 @@ export default function RegisterPage() {
     setBusy(true);
     try {
       const result = await auth.signupInitiate(email.trim());
-      // Development: backend echoes the code.
-      if (result.code) setDevCode(result.code);
+      // Development: backend echoes the code as `verification_code`.
+      if (result.verification_code) setDevCode(result.verification_code);
       setStep("verify");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -147,7 +147,7 @@ export default function RegisterPage() {
     setBusy(true);
     try {
       const result = await auth.signupInitiate(email.trim());
-      if (result.code) setDevCode(result.code);
+      if (result.verification_code) setDevCode(result.verification_code);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not resend. Please try again.");
     } finally {

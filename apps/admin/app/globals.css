@@ -1,3 +1,32 @@
+@import "tailwindcss";
+
+/* ── Design tokens ────────────────────────────────────────────────────────── */
+/* These CSS variables are used by both Tailwind utilities (via @theme) and
+   direct var() references in components that predate the Tailwind setup.    */
+@theme {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-foreground: var(--ink);
+  --color-text-secondary: var(--ink-2);
+  --color-text-muted: var(--ink-3);
+  --color-border: var(--line);
+  --color-accent: var(--primary);
+  --color-danger: var(--danger);
+
+  /* bg- aliases used by the generated admin pages */
+  --color-bg-elevated: var(--surface);
+  --color-bg-secondary: var(--sunken);
+  --color-bg-hover: var(--line);
+  --color-bg-tertiary: var(--line);
+
+  /* text- aliases */
+  --color-text-foreground: var(--ink);
+
+  --font-family-ui: var(--font-ui);
+  --font-family-mono: var(--font-mono);
+}
+
 :root {
   --font-ui: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
