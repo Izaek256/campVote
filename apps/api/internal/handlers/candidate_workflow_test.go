@@ -60,7 +60,7 @@ func candidateElection(t *testing.T, db *gorm.DB, status string, startsAt time.T
 		t.Fatal(err)
 	}
 	position := &models.Position{
-		ElectionID: election.ID, Title: "President",
+		ElectionID: models.Ptr(election.ID), Title: "President",
 		QuestionType:  models.QuestionTypeSingleChoice,
 		MinSelections: 1, MaxSelections: 1, Seats: 1,
 	}
@@ -106,7 +106,7 @@ func TestCandidateApplicationChecksRosterAndWindow(t *testing.T) {
 	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", applicationPayload(position.ID, "Synthetic Applicant")).AssertConflict()
 
 	second := models.Position{
-		ElectionID: election.ID, Title: "Secretary", QuestionType: models.QuestionTypeSingleChoice,
+		ElectionID: models.Ptr(election.ID), Title: "Secretary", QuestionType: models.QuestionTypeSingleChoice,
 		MinSelections: 1, MaxSelections: 1, Seats: 1,
 	}
 	if err := db.Create(&second).Error; err != nil {

@@ -27,7 +27,7 @@ func TestCandidateApplicationWithDocuments(t *testing.T) {
 	require.NoError(t, db.Create(&election).Error)
 
 	position := models.Position{
-		ElectionID:    election.ID,
+		ElectionID:    models.Ptr(election.ID),
 		Title:         "Test Position",
 		QuestionType:  models.QuestionTypeSingleChoice,
 		MinSelections: 1,
@@ -81,7 +81,7 @@ func TestCandidateScreeningWorkflow(t *testing.T) {
 	require.NoError(t, db.Create(&election).Error)
 
 	position := models.Position{
-		ElectionID:    election.ID,
+		ElectionID:    models.Ptr(election.ID),
 		Title:         "Test Position",
 		QuestionType:  models.QuestionTypeSingleChoice,
 		MinSelections: 1,

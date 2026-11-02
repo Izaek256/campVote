@@ -64,7 +64,7 @@ func ballotElection(t *testing.T, db *gorm.DB, id string, start, end time.Time) 
 		t.Fatal(err)
 	}
 	position := &models.Position{
-		ElectionID: election.ID, Title: "President", QuestionType: models.QuestionTypeSingleChoice,
+		ElectionID: models.Ptr(election.ID), Title: "President", QuestionType: models.QuestionTypeSingleChoice,
 		MinSelections: 1, MaxSelections: 1, Seats: 1,
 	}
 	if err := db.Create(position).Error; err != nil {
@@ -220,7 +220,7 @@ func TestMultiChoiceBallotAcceptsDistinctChoicesAndRejectsDuplicates(t *testing.
 	now := time.Now().UTC()
 	a := ballotElection(t, db, "e-a", now.Add(-time.Hour), now.Add(time.Hour))
 	multi := &models.Position{
-		ElectionID: a.election.ID, Title: "Senate", QuestionType: models.QuestionTypeMultiChoice,
+		ElectionID: models.Ptr(a.election.ID), Title: "Senate", QuestionType: models.QuestionTypeMultiChoice,
 		MinSelections: 1, MaxSelections: 2, Seats: 2,
 	}
 	if err := db.Create(multi).Error; err != nil {

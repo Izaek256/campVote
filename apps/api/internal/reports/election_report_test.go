@@ -43,7 +43,7 @@ func TestElectionSummary(t *testing.T) {
 
 	// Create a position
 	position := &models.Position{
-		ElectionID:    election.ID,
+		ElectionID:    models.Ptr(election.ID),
 		Title:         "President",
 		Description:   "Guild President",
 		MaxSelections: 1,
@@ -130,7 +130,7 @@ func TestResultsVerification(t *testing.T) {
 
 	// Create a position
 	position := &models.Position{
-		ElectionID:    election.ID,
+		ElectionID:    models.Ptr(election.ID),
 		Title:         "President",
 		Description:   "Guild President",
 		MaxSelections: 1,

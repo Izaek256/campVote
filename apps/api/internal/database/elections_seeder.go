@@ -111,7 +111,7 @@ func SeedElections(db *gorm.DB) error {
 
 	// ── Positions for Guild Election ──────────────────────────────────────────
 	posPresident := models.Position{
-		ElectionID:    guildElection.ID,
+		ElectionID:    models.Ptr(guildElection.ID),
 		Title:         "Guild President",
 		Description:   "Chief executive officer of the Guild Government.",
 		QuestionType:  models.QuestionTypeSingleChoice,
@@ -126,7 +126,7 @@ func SeedElections(db *gorm.DB) error {
 	}
 
 	posVicePresident := models.Position{
-		ElectionID:    guildElection.ID,
+		ElectionID:    models.Ptr(guildElection.ID),
 		Title:         "Vice Guild President",
 		Description:   "Principal deputy to the Guild President.",
 		QuestionType:  models.QuestionTypeSingleChoice,
@@ -141,7 +141,7 @@ func SeedElections(db *gorm.DB) error {
 	}
 
 	posReferendum := models.Position{
-		ElectionID:    guildElection.ID,
+		ElectionID:    models.Ptr(guildElection.ID),
 		Title:         "Referendum: Guild Constitution Article 42 Amendment",
 		Description:   "Do you approve extending the electoral preparation window from 14 to 21 days?",
 		QuestionType:  models.QuestionTypeReferendum,

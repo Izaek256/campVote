@@ -100,7 +100,7 @@ func TestElectionLifecycleAPIValidatesSchedulesFreezesAndAudits(t *testing.T) {
 
 	// Build a valid ballot directly: position/candidate endpoints are ISSUE-06.
 	position := &models.Position{
-		ElectionID: e.ID, Title: "President", QuestionType: models.QuestionTypeSingleChoice,
+		ElectionID: models.Ptr(e.ID), Title: "President", QuestionType: models.QuestionTypeSingleChoice,
 		MinSelections: 1, MaxSelections: 1, Seats: 1,
 	}
 	if err := db.Create(position).Error; err != nil {
@@ -265,7 +265,7 @@ func TestSpoofedDateHeaderCannotExtendVoting(t *testing.T) {
 		t.Fatal(err)
 	}
 	position := &models.Position{
-		ElectionID: election.ID, Title: "President", QuestionType: models.QuestionTypeSingleChoice,
+		ElectionID: models.Ptr(election.ID), Title: "President", QuestionType: models.QuestionTypeSingleChoice,
 		MinSelections: 1, MaxSelections: 1, Seats: 1,
 	}
 	if err := db.Create(position).Error; err != nil {

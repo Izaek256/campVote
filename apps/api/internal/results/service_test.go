@@ -54,7 +54,7 @@ func closedElection(t *testing.T, db *gorm.DB) models.Election {
 		}
 	}
 	position := models.Position{
-		ID: "e-auto-pos", ElectionID: election.ID, Title: "President",
+		ID: "e-auto-pos", ElectionID: models.Ptr(election.ID), Title: "President",
 		QuestionType: models.QuestionTypeSingleChoice, Seats: 1,
 	}
 	if err := db.Create(&position).Error; err != nil {

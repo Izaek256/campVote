@@ -61,7 +61,7 @@ func resultsFixtureFor(t *testing.T, db *gorm.DB, id string, status, policy stri
 		t.Fatal(err)
 	}
 
-	position := models.Position{ID: id + "-pos", ElectionID: id, Title: "President"}
+	position := models.Position{ID: id + "-pos", ElectionID: models.Ptr(id), Title: "President"}
 	if err := db.Create(&position).Error; err != nil {
 		t.Fatal(err)
 	}

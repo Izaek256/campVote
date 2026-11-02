@@ -116,7 +116,7 @@ func validElection(t *testing.T, db *gorm.DB, status string, start, end time.Tim
 func addPositionAndCandidate(t *testing.T, db *gorm.DB, electionID string) {
 	t.Helper()
 	position := &models.Position{
-		ElectionID: electionID, Title: "President", QuestionType: models.QuestionTypeSingleChoice,
+		ElectionID: models.Ptr(electionID), Title: "President", QuestionType: models.QuestionTypeSingleChoice,
 		MinSelections: 1, MaxSelections: 1, Seats: 1,
 	}
 	if err := db.Create(position).Error; err != nil {

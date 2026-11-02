@@ -47,34 +47,60 @@ func ParseEmail(email string) (Identity, bool) {
 	}, true
 }
 
-// RuleAllows reports whether the identity is permitted by the election's
-// eligibility rules:
+// Rule is an eligibility constraint: a required email domain, plus optional
+// year and course allow-lists. It is the shared shape used by an election's
+// voter eligibility and by a position's candidate eligibility, so both are
+// evaluated by exactly the same code.
+type Rule struct {
+	AllowedDomain  string
+	AllowedYears   string
+	AllowedCourses string
+}
+
+// RuleForElection reads the eligibility rule an election declares.
+func RuleForElection(e *models.Election) Rule {
+	return Rule{AllowedDomain: e.AllowedDomain, AllowedYears: e.AllowedYears, AllowedCourses: e.AllowedCourses}
+}
+
+// RuleForPosition reads the eligibility rule a position declares for the
+// people who may stand for it.
+func RuleForPosition(p *models.Position) Rule {
+	return Rule{AllowedDomain: p.AllowedDomain, AllowedYears: p.AllowedYears, AllowedCourses: p.AllowedCourses}
+}
+
+// Allows reports whether the identity is permitted by the rule:
 //   - AllowedDomain must match id.Domain (leading "@" is stripped if present).
 //   - AllowedYears is a comma-separated list; empty means any year.
 //   - AllowedCourses is a comma-separated list; empty means any course.
 //     Matching is case-insensitive.
-func RuleAllows(e *models.Election, id Identity) bool {
+func (r Rule) Allows(id Identity) bool {
 	// Domain check — required
-	wantDomain := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(e.AllowedDomain), "@"))
+	wantDomain := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(r.AllowedDomain), "@"))
 	if wantDomain != "" && id.Domain != wantDomain {
 		return false
 	}
 
 	// Year check — optional (empty = any)
-	if e.AllowedYears != "" {
-		if !inList(id.Year, e.AllowedYears) {
+	if r.AllowedYears != "" {
+		if !inList(id.Year, r.AllowedYears) {
 			return false
 		}
 	}
 
 	// Course check — optional (empty = any)
-	if e.AllowedCourses != "" {
-		if !inList(id.Course, e.AllowedCourses) {
+	if r.AllowedCourses != "" {
+		if !inList(id.Course, r.AllowedCourses) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// RuleAllows reports whether the identity is permitted by the election's
+// eligibility rules.
+func RuleAllows(e *models.Election, id Identity) bool {
+	return RuleForElection(e).Allows(id)
 }
 
 // Programme returns the upper-cased course code, e.g. "BSE".

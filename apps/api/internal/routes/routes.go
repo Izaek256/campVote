@@ -1384,6 +1384,12 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.POST("/elections/:id/candidates/apply", candidateHandler.Apply)
 		protected.POST("/candidates/my/:candidate_id/withdraw", candidateHandler.WithdrawMine)
 
+		// Standalone position applications. A student sees only the positions
+		// their email domain, year and course make them eligible for, and may
+		// apply to one directly without going through an election.
+		protected.GET("/positions/eligible", positionHandler.Eligible)
+		protected.POST("/positions/:position_id/apply", positionHandler.Apply)
+
 		// grit:routes:protected
 	}
 
@@ -1557,6 +1563,20 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.POST("/elections/:id/positions", positionHandler.Create)
 		staff.PUT("/elections/:id/positions/:position_id", positionHandler.Update)
 		staff.DELETE("/elections/:id/positions/:position_id", positionHandler.Delete)
+
+		// Positions-first workflow. An administrator creates a position before
+		// any election exists, collects applications, settles the candidate
+		// list, and only then links the position to the election it will be
+		// contested in. Listing is global (filter with ?election_id or
+		// ?unlinked=1) because the position outlives any single election.
+		staff.GET("/positions", positionHandler.ListAll)
+		staff.POST("/positions", positionHandler.CreateStandalone)
+		staff.PUT("/positions/:position_id", positionHandler.UpdateStandalone)
+		staff.DELETE("/positions/:position_id", positionHandler.DeleteStandalone)
+		staff.GET("/positions/:position_id/applications", positionHandler.Applications)
+		staff.POST("/positions/:position_id/applications/:candidate_id/approve", positionHandler.ApproveApplication)
+		staff.POST("/positions/:position_id/applications/:candidate_id/reject", positionHandler.RejectApplication)
+		staff.POST("/positions/:position_id/link", positionHandler.Link)
 
 		// Candidate management
 		staff.GET("/elections/:id/candidates", candidateHandler.List)
