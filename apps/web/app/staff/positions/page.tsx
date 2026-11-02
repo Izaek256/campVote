@@ -31,7 +31,8 @@ type Form = {
 };
 
 // One position is one contest. The eligibility fields decide who may stand for
-// it, kept separate from the election's own voter eligibility.
+// it, kept separate from the election's own voter eligibility. They all start
+// blank, which means "any student" — set a domain only to restrict the field.
 const emptyForm: Form = {
   title: "",
   description: "",
@@ -41,7 +42,7 @@ const emptyForm: Form = {
   min_selections: 0,
   max_selections: 1,
   max_candidates: 0,
-  allowed_domain: "std.mast.ac.ug",
+  allowed_domain: "",
   allowed_years: "",
   allowed_courses: "",
   status: "OPEN",
@@ -353,17 +354,17 @@ function ManagePositions() {
 
           <div className="section-h">
             <h2>Who may stand for this position</h2>
-            <p>Leave years and courses blank to admit every student on the domain.</p>
+            <p>Leave everything blank to admit every student.</p>
           </div>
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="p-domain">Student domain</label>
+              <label htmlFor="p-domain">Student domain (optional)</label>
               <input
                 id="p-domain"
                 className="in"
                 value={form.allowed_domain}
                 onChange={(event) => setForm({ ...form, allowed_domain: event.target.value })}
-                placeholder="std.mast.ac.ug"
+                placeholder="Leave blank for any student"
               />
             </div>
             <div className="field">

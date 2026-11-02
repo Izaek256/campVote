@@ -383,3 +383,42 @@ func TestElectionListHidesOtherPeoplesDrafts(t *testing.T) {
 		t.Fatalf("voter list = %+v, want the scheduled election", visible)
 	}
 }
+
+// TestElectionCreateLeavesDomainOpenToAnyStudent guards the bug where creating
+// an election silently defaulted the voter domain to one campus address space,
+// hiding the election from every voter whose email used a different domain.
+func TestElectionCreateLeavesDomainOpenToAnyStudent(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	clock := now
+	engine := lifecycleEngine(t, db, &clock)
+	auth := testkit.Auth(testkit.Config(), db)
+	admin := rbacUser(t, db, "domain-admin@must.ac.ug", models.RoleAdmin)
+	voter := rbacUser(t, db, "2024bse088@std.must.ac.ug", models.RoleStudentVoter)
+	adminToken := testkit.SignIn(t, db, auth, admin)
+	voterToken := testkit.SignIn(t, db, auth, voter)
+	client := testkit.New(t, engine)
+
+	created := createLifecycleElection(t, client, adminToken,
+		now.Add(24*time.Hour), now.Add(30*time.Hour))
+
+	var stored models.Election
+	if err := db.Where("id = ?", created.ID).First(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.AllowedDomain != "" {
+		t.Fatalf("allowed_domain = %q, want empty so any registration email qualifies", stored.AllowedDomain)
+	}
+
+	// Drafts are creator-only, so publish the election to test the visibility
+	// rule itself rather than the draft filter.
+	if err := db.Model(&models.Election{}).Where("id = ?", created.ID).
+		Update("status", models.ElectionStatusScheduled).Error; err != nil {
+		t.Fatal(err)
+	}
+	var visible []lifecycleElection
+	client.As(voterToken).Get("/api/v1/elections").AssertOK().BindData(&visible)
+	if len(visible) != 1 || visible[0].ID != created.ID {
+		t.Fatalf("voter list = %+v, want the domain-agnostic election", visible)
+	}
+}

@@ -383,3 +383,52 @@ Also fixed while converting: `app/staff/elections/[id]/results/page.tsx` had tur
 - CRLF: many files in this repository are `i/lf w/crlf`, so Biome `format` reports whole-file noise on them. Only the three genuinely mis-formatted files were formatted; the rest were left alone rather than rewriting line endings.
 - No automated test covers toasts; the Vitest suite is limited to ballot and format helpers. Verification is the type check, lint, build and the manual pass above.
 
+---
+
+## [2026-11-03] Domain-Default Bug Fix, Simplified Election Form, and App-Wide Theme Switcher
+
+**Branch:** `feature/mvp-phases-3-7`, not yet committed or merged.
+**Goal:** three maintainer-reported items in one pass — (1) a position linked to an election never appeared to a logged-in student, (2) the election creation form had "a lot of ambiguous steps" and should capture only the important details, (3) dark/light mode was missing from parts of the app.
+
+### 1. Bug — a student saw no positions
+**Symptom:** an administrator created a position and an election, linked them, but the student's **Run for a position** page showed an empty list.
+
+**Root cause (three independent layers, all writing the same wrong domain):**
+| Layer | Detail |
+|---|---|
+| Position create form | pre-filled `allowed_domain` with `std.mast.ac.ug`, so every new position was restricted |
+| `ElectionLifecycleHandler.Create` | force-defaulted a blank `AllowedDomain` to `std.mast.ac.ug` |
+| `models.Election.AllowedDomain` | carried the GORM tag `default:'std.mast.ac.ug'`, a **database** default applied on insert even when the Go value was `""` — the decisive cause |
+The student's registration email is `…@std.must.ac.ug`, so `eligibility.Rule.Allows` rejected the `std.mast.ac.ug` mismatch and `GET /positions/eligible` filtered the position out. A blank domain means "any student with a parseable registration email".
+
+**Fix:**
+- `apps/web/app/staff/positions/page.tsx` — `emptyForm.allowed_domain` starts `""`; the eligibility section reads *"Leave everything blank to admit every student"* and the input placeholder is *"Leave blank for any student"*.
+- `apps/api/internal/handlers/election_lifecycle.go` — removed the `if election.AllowedDomain == "" { … = "std.mast.ac.ug" }` force-default; `lifecycle.validDomains` already accepts an empty domain.
+- `apps/api/internal/models/election.go` — removed the GORM `default:'std.mast.ac.ug'` tag from `AllowedDomain` (the position model never had one).
+- Live data (local dev DB, via `psql`): blanked `allowed_domain` on the affected position/election rows and dropped the leftover Postgres column default (`ALTER TABLE elections ALTER COLUMN allowed_domain DROP DEFAULT`).
+
+**Regression test:** `TestElectionCreateLeavesDomainOpenToAnyStudent` (`apps/api/internal/handlers/election_lifecycle_test.go`) asserts the stored election has an empty `allowed_domain` and that a voter on a different domain sees it. It fails against the previous model tag and passes after the fix.
+
+### 2. Election creation simplified ("keep it simple")
+The create form was reduced to **Election title**, **Voting opens (EAT)** and **Voting closes (EAT)** — the minimum needed to start. Removed from create (still editable later on the election page): description, category, organising unit, and results policy. Those now fall back to a safe server default, and new elections start as a private `DRAFT`.
+
+### 3. Dark/light mode switcher, app-wide
+The theme engine (`components/theme-toggle.tsx`, the CSS variables in `globals.css`, the `localStorage` key `"theme"`) already existed and the public/student header already rendered the toggle. The gaps closed here:
+- `components/app-shell.tsx` — added `<ThemeToggle />` to the admin/student top bar (previously no theme control there).
+- `app/login/page.tsx`, `app/register/page.tsx` — added the toggle to the auth card header.
+- `app/layout.tsx` — a small pre-paint script applies the saved theme before first paint so pages no longer flash the default mode on load.
+
+### Checks Run
+- `go build ./...` — PASS.
+- `go vet ./internal/handlers/` — PASS.
+- `go test ./internal/handlers/... ./internal/models/... ./internal/eligibility/... ./internal/lifecycle/... ./internal/routes/... ./internal/policy/... -count=1` — PASS. Includes the new regression test.
+- `npm run type-check` — PASS (exit 0).
+- `go test ./...` — **environmental failures only**, in `internal/services` (passkey/recovery/saga) with `Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requires cgo to work. This is a stub`. These are not caused by this work and are unrelated to the changed packages.
+
+### Documentation
+- Created `docs/debugging/positions-hidden-by-domain-default.md` (symptom, reproduction, root-cause table, fix, verification, limitations).
+
+### Deferred / Known limitations
+- `SIGNUP_ALLOWED_DOMAINS` (`auth.go`) and the `NEXT_PUBLIC_*` defaults still say `std.mast.ac.ug` / `mast.ac.ug`, which look like a typo against `must.ac.ug` in `SRS.md` / `STACK.md` / `ADR.md` / `AGENTS.md`. Left unchanged here (out of scope for this pass); flagged in the debugging doc.
+- Browser (Playwright) evidence for the theme switcher and the simplified form: no Playwright suite exists locally.
+

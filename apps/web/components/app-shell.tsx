@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { isAdmin, useAuth } from "./auth-provider";
 import { Icon, type IconName } from "./icon";
+import { ThemeToggle } from "./theme-toggle";
 
 interface NavItem {
   href: string;
@@ -226,7 +227,10 @@ export function AppShell({
             <Icon name="menu" />
           </button>
           <b>{title ?? (admin ? "Admin" : "campVote")}</b>
-          <span className="chip draft">{admin ? "Admin" : "Student voter"}</span>
+          <span className="row" style={{ marginLeft: "auto" }}>
+            <ThemeToggle />
+            <span className="chip draft">{admin ? "Admin" : "Student voter"}</span>
+          </span>
         </div>
         <main className="admin-body">{children}</main>
       </div>

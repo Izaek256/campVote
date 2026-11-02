@@ -118,9 +118,9 @@ func (h *ElectionLifecycleHandler) Create(c *gin.Context) {
 	if election.ResultPolicy == "" {
 		election.ResultPolicy = models.ResultPolicyAfterClose
 	}
-	if election.AllowedDomain == "" {
-		election.AllowedDomain = "std.mast.ac.ug"
-	}
+	// A blank domain means "any student with a parseable registration email".
+	// Never default it to one campus domain: a wrong default silently hides the
+	// election from every voter whose domain differs.
 	if err := lifecycle.ValidateBasics(election, now, false); err != nil {
 		respond.WriteError(c, err, "Election configuration is invalid")
 		return

@@ -19,6 +19,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap"
         />
+        {/* Apply the saved theme before paint so every page starts in the
+            chosen mode instead of flashing the default. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'try{var t=localStorage.getItem("theme");if(t&&t!=="system"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}',
+          }}
+        />
       </head>
       <body>
         <AuthProvider>

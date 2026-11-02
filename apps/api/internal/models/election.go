@@ -57,9 +57,11 @@ type Election struct {
 	// Policies and access rules
 	ResultPolicy   string `gorm:"size:50;not null;default:'AFTER_CLOSE'" json:"result_policy"`
 
-	// AllowedDomain is the student email domain for this election,
-	// e.g. "std.mast.ac.ug". Leading "@" is accepted and stripped.
-	AllowedDomain  string `gorm:"size:255;default:'std.mast.ac.ug'" json:"allowed_domain"`
+	// AllowedDomain is the optional student email domain for this election.
+	// Leading "@" is accepted and stripped. Empty means any student with a
+	// parseable registration email. It must not carry a database default: a
+	// wrong campus domain silently hides the election from every other voter.
+	AllowedDomain  string `gorm:"size:255" json:"allowed_domain"`
 	// AllowedYears is a comma-separated list of enrolment years, e.g. "2024,2025".
 	// Empty means any year.
 	AllowedYears   string `gorm:"size:255" json:"allowed_years"`

@@ -10,18 +10,17 @@ import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
 import { ApiError, elections } from "@/lib/api";
-import { ELECTION_AUTHORITY } from "@/lib/config";
 import { categoryLabel, formatShortEAT } from "@/lib/format";
 import type { Election } from "@/lib/types";
 
+// Keep creation minimal: a title and the voting window are all that is needed
+// to start. Everything else (category, description, organising unit, results
+// policy, eligibility) falls back to a safe server default and can be set
+// later on the election page.
 const emptyForm = {
   title: "",
-  description: "",
-  category: "GUILD",
-  organizing_unit: "",
   starts_at: "",
   ends_at: "",
-  result_policy: "AFTER_CLOSE",
 };
 
 /** datetime-local is rendered as EAT; the API stores UTC. */
@@ -92,8 +91,8 @@ function StaffHome() {
           <span className="lbl">Officials</span>
           <h1>Elections</h1>
           <p>
-            Create an election quickly with minimal info, then add details later. Drafts stay
-            private to you.
+            Create an election with a title and its voting window, then add positions, candidates
+            and eligibility. Drafts stay private to you.
           </p>
         </div>
         <div className="row">
@@ -131,51 +130,6 @@ function StaffHome() {
               />
               {fields.title ? <span className="err">{fields.title}</span> : null}
             </div>
-            <div className="field full">
-              <label htmlFor="description">Description (optional)</label>
-              <textarea
-                id="description"
-                className="ta"
-                value={form.description}
-                onChange={(event) => setForm({ ...form, description: event.target.value })}
-                placeholder="What voters are deciding."
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="category">Category</label>
-              <select
-                id="category"
-                className="sel"
-                value={form.category}
-                onChange={(event) => setForm({ ...form, category: event.target.value })}
-              >
-                {[
-                  "GUILD",
-                  "FACULTY",
-                  "DEPARTMENT",
-                  "PROGRAMME",
-                  "CLASS",
-                  "CLUB",
-                  "ASSOCIATION",
-                  "COMMITTEE",
-                  "REFERENDUM",
-                ].map((value) => (
-                  <option key={value} value={value}>
-                    {categoryLabel(value)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="unit">Organising unit (optional)</label>
-              <input
-                id="unit"
-                className="in"
-                value={form.organizing_unit}
-                onChange={(event) => setForm({ ...form, organizing_unit: event.target.value })}
-                placeholder={ELECTION_AUTHORITY}
-              />
-            </div>
             <div className="field">
               <label htmlFor="starts">Voting opens (EAT)</label>
               <input
@@ -197,19 +151,6 @@ function StaffHome() {
                 onChange={(event) => setForm({ ...form, ends_at: event.target.value })}
               />
               {fields.ends_at ? <span className="err">{fields.ends_at}</span> : null}
-            </div>
-            <div className="field">
-              <label htmlFor="policy">Results policy</label>
-              <select
-                id="policy"
-                className="sel"
-                value={form.result_policy}
-                onChange={(event) => setForm({ ...form, result_policy: event.target.value })}
-              >
-                <option value="AFTER_CLOSE">After close</option>
-                <option value="LIVE">Live provisional</option>
-                <option value="CERTIFIED_ONLY">Certified only</option>
-              </select>
             </div>
           </div>
           <div className="row">

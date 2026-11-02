@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/toast";
 import { ApiError } from "@/lib/api";
 import { CAMPUS_NAME, STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "@/lib/config";
@@ -41,6 +42,9 @@ export default function LoginPage() {
   return (
     <main className="auth-wrap">
       <div className="auth-card">
+        <div className="row" style={{ justifyContent: "flex-end", marginBottom: 4 }}>
+          <ThemeToggle />
+        </div>
         <Link className="brand row" href="/login" style={{ marginBottom: 24 }}>
           <span className="mark">
             <Icon name="moon" size="l" />
