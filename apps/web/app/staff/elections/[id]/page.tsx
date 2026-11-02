@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ElectionTabs } from "@/components/election-tabs";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
+import { useToast } from "@/components/toast";
 import { ApiError, elections } from "@/lib/api";
 import {
   EAT,
@@ -60,11 +61,11 @@ function transitionLabel(to: string): string {
 }
 
 function Manage({ id }: { id: string }) {
+  const toast = useToast();
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [election, setElection] = useState<Election | null>(null);
   const [report, setReport] = useState<EligibilityReport | null>(null);
   const [results, setResults] = useState<Results | null>(null);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [notes, setNotes] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [pendingTo, setPendingTo] = useState("");
@@ -104,7 +105,9 @@ function Manage({ id }: { id: string }) {
         allowed_courses: current.allowed_courses ?? "",
       });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Election could not be loaded.");
+      const message = err instanceof ApiError ? err.message : "Election could not be loaded.";
+      setLoadError(message);
+      toast.error(message);
       return;
     }
     const reportResult = await elections.report(id).catch((err) => {
@@ -144,7 +147,7 @@ function Manage({ id }: { id: string }) {
     });
     setRoles(roleResult ?? []);
     setNotes(messages);
-  }, [id]);
+  }, [id, toast.error]);
 
   useEffect(() => {
     load();
@@ -152,15 +155,13 @@ function Manage({ id }: { id: string }) {
 
   async function run(action: () => Promise<unknown>, message: string) {
     setBusy(true);
-    setError("");
-    setNotice("");
     try {
       await action();
-      setNotice(message);
+      toast.success(message);
       await load();
       return true;
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The change was refused.");
+      toast.error(err instanceof ApiError ? err.message : "The change was refused.");
       return false;
     } finally {
       setBusy(false);
@@ -211,21 +212,21 @@ function Manage({ id }: { id: string }) {
   async function assignRole(event: React.FormEvent) {
     event.preventDefault();
     if (!roleEmail.trim()) {
-      setError("Enter the email address of the account to assign.");
+      toast.error("Enter the email address of the account to assign.");
       return;
     }
     setRoleBusy(true);
-    setError("");
-    setNotice("");
     try {
       const user = await elections.roles.lookup(id, roleEmail.trim());
       await elections.roles.assign(id, user.user_id, roleName);
-      setNotice(`${user.full_name || user.email} was assigned ${roleName.replaceAll("_", " ")}.`);
+      toast.success(
+        `${user.full_name || user.email} was assigned ${roleName.replaceAll("_", " ")}.`
+      );
       setRoleEmail("");
       const next = await elections.roles.list(id);
       setRoles(next);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The role could not be assigned.");
+      toast.error(err instanceof ApiError ? err.message : "The role could not be assigned.");
     } finally {
       setRoleBusy(false);
     }
@@ -233,14 +234,12 @@ function Manage({ id }: { id: string }) {
 
   async function removeRole(userId: string, role: string) {
     setRoleBusy(true);
-    setError("");
-    setNotice("");
     try {
       await elections.roles.remove(id, userId, role);
       setRoles(await elections.roles.list(id));
-      setNotice("Role removed.");
+      toast.success("Role removed.");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The role could not be removed.");
+      toast.error(err instanceof ApiError ? err.message : "The role could not be removed.");
     } finally {
       setRoleBusy(false);
     }
@@ -249,11 +248,11 @@ function Manage({ id }: { id: string }) {
   async function certify() {
     const snapshotId = results?.snapshot?.id;
     if (!snapshotId) {
-      setError("Run the tally before certifying these results.");
+      toast.error("Run the tally before certifying these results.");
       return;
     }
     if (!certifyReason.trim()) {
-      setError("Add a reason before certifying.");
+      toast.error("Add a reason before certifying.");
       return;
     }
     const ok = await run(
@@ -266,24 +265,25 @@ function Manage({ id }: { id: string }) {
     }
   }
 
+  if (loadError) {
+    return (
+      <StaffShell title="Manage election">
+        <LoadError
+          title="We could not open this election"
+          message={loadError}
+          backHref="/staff"
+          backLabel="Back to elections"
+        />
+      </StaffShell>
+    );
+  }
+
   if (!election) {
     return (
       <StaffShell title="Manage election">
         <div className="panel stack" aria-busy="true">
-          {error ? (
-            <div className="banner bad" role="alert">
-              <Icon name="alert" />
-              <div>
-                <b>Election unavailable</b>
-                {error}
-              </div>
-            </div>
-          ) : (
-            <>
-              <span className="skel" style={{ height: 18, width: "35%" }} />
-              <span className="skel" style={{ height: 14 }} />
-            </>
-          )}
+          <span className="skel" style={{ height: 18, width: "35%" }} />
+          <span className="skel" style={{ height: 14 }} />
         </div>
         <p style={{ marginTop: 16 }}>
           <Link className="btn" href="/staff">
@@ -319,23 +319,6 @@ function Manage({ id }: { id: string }) {
         </Link>
       </div>
 
-      <ElectionTabs id={election.id} />
-
-      {error ? (
-        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" />
-          <div>
-            <b>Request refused</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
-      {notice ? (
-        <div className="banner ok" role="status" style={{ marginBottom: 16 }}>
-          <Icon name="check" />
-          <div>{notice}</div>
-        </div>
-      ) : null}
       {notes.map((note) => (
         <p className="hint" key={note}>
           {note}
@@ -402,7 +385,9 @@ function Manage({ id }: { id: string }) {
               />
             </div>
             <div className="field">
-              <label htmlFor="eligibility-years">Enrolment years (comma separated, blank = any)</label>
+              <label htmlFor="eligibility-years">
+                Enrolment years (comma separated, blank = any)
+              </label>
               <input
                 id="eligibility-years"
                 className="in"
@@ -414,7 +399,9 @@ function Manage({ id }: { id: string }) {
               />
             </div>
             <div className="field">
-              <label htmlFor="eligibility-courses">Course codes (comma separated, blank = any)</label>
+              <label htmlFor="eligibility-courses">
+                Course codes (comma separated, blank = any)
+              </label>
               <input
                 id="eligibility-courses"
                 className="in"
@@ -507,7 +494,9 @@ function Manage({ id }: { id: string }) {
                     key={to}
                     type="button"
                     className={`btn sm${to === "CANCELLED" ? " danger-o" : ""}`}
-                    disabled={busy || (to === "SCHEDULED" && readiness !== null && !readiness.ready)}
+                    disabled={
+                      busy || (to === "SCHEDULED" && readiness !== null && !readiness.ready)
+                    }
                     onClick={() => {
                       setPendingTo(to);
                       setReason("");
@@ -642,31 +631,6 @@ function Manage({ id }: { id: string }) {
         </div>
 
         <aside className="stack">
-          <div className="panel stack">
-            <span className="lbl">Quick Actions</span>
-            <div className="stack">
-              <Link className="btn sm" href={`/staff/elections/${id}/positions`}>
-                <Icon name="list" size="s" />
-                Manage Positions
-              </Link>
-              <Link className="btn sm" href={`/staff/elections/${id}/candidates`}>
-                <Icon name="users" size="s" />
-                Manage Candidates
-              </Link>
-              <Link className="btn sm" href={`/staff/elections/${id}/ballot`}>
-                <Icon name="file" size="s" />
-                Build Ballot
-              </Link>
-              <Link className="btn sm" href={`/staff/elections/${id}/monitor`}>
-                <Icon name="chart" size="s" />
-                Live Monitor
-              </Link>
-              <Link className="btn sm" href={`/staff/elections/${id}/turnout`}>
-                <Icon name="activity" size="s" />
-                Turnout
-              </Link>
-            </div>
-          </div>
           <div className="panel stack">
             <span className="lbl">Temporary election roles</span>
             <form className="form-stack" onSubmit={assignRole}>
@@ -815,7 +779,7 @@ function Manage({ id }: { id: string }) {
 export default function ManageElectionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth>
+    <RequireAuth adminOnly>
       <Manage id={id} />
     </RequireAuth>
   );

@@ -2,15 +2,28 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useAuth } from "./auth-provider";
+import { isAdmin, useAuth } from "./auth-provider";
 
-export function RequireAuth({ children }: { children: React.ReactNode }) {
+export function RequireAuth({
+  children,
+  adminOnly = false,
+}: {
+  children: React.ReactNode;
+  /** Only ADMIN accounts may view this page; everyone else is sent to their elections. */
+  adminOnly?: boolean;
+}) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const denied = adminOnly && !!user && !isAdmin(user);
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
-  }, [loading, user, router]);
+    if (loading) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    if (adminOnly && !isAdmin(user)) router.replace("/elections");
+  }, [loading, user, adminOnly, router]);
 
   if (loading) {
     return (
@@ -24,6 +37,6 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!user) return null;
+  if (!user || denied) return null;
   return <>{children}</>;
 }

@@ -14,7 +14,3 @@ export const STAFF_EMAIL_DOMAIN =
   process.env.NEXT_PUBLIC_STAFF_EMAIL_DOMAIN?.trim() || "mast.ac.ug";
 export const STUDENT_EMAIL_EXAMPLE =
   process.env.NEXT_PUBLIC_STUDENT_EMAIL_EXAMPLE?.trim() || `2024BSE088@${STUDENT_EMAIL_DOMAIN}`;
-
-/** Demo accounts share this password; it is documented in docs/MVP_NOTES.md. */
-export const DEMO_STUDENT_PASSWORD = "Student#2026Demo";
-export const DEMO_STUDENT_EMAIL = `2024bse088@${STUDENT_EMAIL_DOMAIN}`;

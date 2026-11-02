@@ -1,11 +1,11 @@
 "use client";
 
 import { use, useCallback, useEffect, useState } from "react";
-import { ElectionTabs } from "@/components/election-tabs";
 import { Icon } from "@/components/icon";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
+import { useToast } from "@/components/toast";
 import { useChannel } from "@/hooks/use-realtime";
 import { ApiError, elections, staff } from "@/lib/api";
 import { formatEAT, formatNumber, formatPercent } from "@/lib/format";
@@ -14,10 +14,10 @@ import type { Election, Results } from "@/lib/types";
 type Turnout = Awaited<ReturnType<typeof staff.turnout>>;
 
 function Monitor({ id }: { id: string }) {
+  const toast = useToast();
   const [election, setElection] = useState<Election | null>(null);
   const [turnout, setTurnout] = useState<Turnout | null>(null);
   const [results, setResults] = useState<Results | null>(null);
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -32,14 +32,13 @@ function Monitor({ id }: { id: string }) {
       setElection(current);
       setTurnout(currentTurnout);
       setResults(currentResults);
-      setError("");
       setLastUpdated(new Date());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The monitor could not be loaded.");
+      toast.error(err instanceof ApiError ? err.message : "The monitor could not be loaded.");
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, toast.error]);
 
   useEffect(() => {
     load();
@@ -70,8 +69,8 @@ function Monitor({ id }: { id: string }) {
           <span className="lbl">Live participation</span>
           <h1>{election?.title ?? "Election monitor"}</h1>
           <p>
-            Turnout only while voting is open. Candidate counts appear after the election closes
-            and are never shown on this page early.
+            Turnout only while voting is open. Candidate counts appear after the election closes and
+            are never shown on this page early.
           </p>
         </div>
         <div className="row">
@@ -88,18 +87,6 @@ function Monitor({ id }: { id: string }) {
           </button>
         </div>
       </div>
-
-      <ElectionTabs id={id} />
-
-      {error ? (
-        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" />
-          <div>
-            <b>Something needs attention</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
 
       {loading ? (
         <div className="panel stack" aria-busy="true">
@@ -200,7 +187,7 @@ function Monitor({ id }: { id: string }) {
         </section>
       ) : null}
 
-      {!loading && participation.length === 0 && !error ? (
+      {!loading && participation.length === 0 ? (
         <div className="panel stack">
           <b>{isOpen ? "No ballots have been cast yet" : "No results yet"}</b>
           <span className="hint">
@@ -223,7 +210,7 @@ function Monitor({ id }: { id: string }) {
 export default function ElectionMonitorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth>
+    <RequireAuth adminOnly>
       <Monitor id={id} />
     </RequireAuth>
   );

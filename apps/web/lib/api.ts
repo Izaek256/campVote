@@ -9,8 +9,11 @@ import type {
   ElectionStatus,
   EligibilityDecision,
   EligibilityReport,
+  EligiblePosition,
   MyCandidate,
   Position,
+  PositionApplications,
+  PositionWithMeta,
   RecountResult,
   ResultSnapshot,
   Results,
@@ -26,14 +29,55 @@ export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").
 
 export class ApiError extends Error {
   status: number;
+  /** Machine-readable code from the API envelope, e.g. VALIDATION_ERROR. */
+  code?: string;
   fields?: Record<string, string>;
+  /** The API's X-Request-ID, which names the matching line in the API log. */
+  requestId: string;
 
-  constructor(message: string, status: number, fields?: Record<string, string>) {
-    super(message);
+  constructor(
+    message: string,
+    status: number,
+    options: { fields?: Record<string, string>; code?: string; requestId?: string } = {}
+  ) {
+    super(displayMessage(message, status, options));
     this.name = "ApiError";
     this.status = status;
-    this.fields = fields;
+    this.fields = options.fields;
+    this.code = options.code;
+    this.requestId = options.requestId ?? "";
   }
+}
+
+/**
+ * The most useful text we can put in front of a person for a failed request.
+ *
+ * This is built once here rather than in each page: every screen already shows
+ * ApiError.message, so all of them gain the detail at the same time instead of
+ * each one having to remember to ask for it.
+ *
+ * The API keeps 500 bodies deliberately generic because their text can describe
+ * the schema, so for server errors we append the code and the request id: that
+ * id is on the matching line of the API log.
+ */
+function displayMessage(
+  message: string,
+  status: number,
+  options: { fields?: Record<string, string>; code?: string; requestId?: string }
+): string {
+  const parts: string[] = [message];
+  if (options.fields && Object.keys(options.fields).length > 0) {
+    parts.push(
+      Object.entries(options.fields)
+        .map(([field, problem]) => `${field.replaceAll("_", " ")}: ${problem}`)
+        .join("; ")
+    );
+  }
+  if (status >= 500) {
+    if (options.code) parts.push(`[${options.code}]`);
+    if (options.requestId) parts.push(`ref ${options.requestId}`);
+  }
+  return parts.join(" — ");
 }
 
 /** Double-submit cookie: the API issues grit_csrf and expects it echoed. */
@@ -67,7 +111,11 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const message = payload?.error?.message ?? `Request failed (${response.status})`;
-    throw new ApiError(message, response.status, payload?.error?.details);
+    throw new ApiError(message, response.status, {
+      fields: payload?.error?.details,
+      code: payload?.error?.code,
+      requestId: response.headers.get("X-Request-ID") ?? undefined,
+    });
   }
   return (payload?.data ?? payload) as T;
 }
@@ -124,7 +172,11 @@ export async function upload(
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const message = payload?.error?.message ?? `Upload failed (${response.status})`;
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, {
+      fields: payload?.error?.details,
+      code: payload?.error?.code,
+      requestId: response.headers.get("X-Request-ID") ?? undefined,
+    });
   }
   return payload?.data as UploadRef;
 }
@@ -162,6 +214,44 @@ export const positions = {
     api<Position>(`/elections/${electionId}/positions/${positionId}`, { method: "PUT", body }),
   remove: (electionId: string, positionId: string) =>
     api<unknown>(`/elections/${electionId}/positions/${positionId}`, { method: "DELETE" }),
+
+  // Standalone (positions-first) endpoints. A position exists before any
+  // election does; these paths are not election-scoped.
+  listAll: (filter: { electionId?: string; unlinked?: boolean; status?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (filter.electionId) query.set("election_id", filter.electionId);
+    if (filter.unlinked) query.set("unlinked", "1");
+    if (filter.status) query.set("status", filter.status);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return api<{ positions: PositionWithMeta[] }>(`/positions${suffix}`);
+  },
+  createStandalone: (body: Record<string, unknown>) =>
+    api<Position>("/positions", { method: "POST", body }),
+  updateStandalone: (positionId: string, body: Record<string, unknown>) =>
+    api<Position>(`/positions/${positionId}`, { method: "PUT", body }),
+  removeStandalone: (positionId: string) =>
+    api<unknown>(`/positions/${positionId}`, { method: "DELETE" }),
+  applications: (positionId: string, status?: string) =>
+    api<PositionApplications>(
+      `/positions/${positionId}/applications${status ? `?status=${status}` : ""}`
+    ),
+  approve: (positionId: string, candidateId: string, reason: string) =>
+    api<Candidate>(`/positions/${positionId}/applications/${candidateId}/approve`, {
+      method: "POST",
+      body: { reason },
+    }),
+  reject: (positionId: string, candidateId: string, reason: string) =>
+    api<Candidate>(`/positions/${positionId}/applications/${candidateId}/reject`, {
+      method: "POST",
+      body: { reason },
+    }),
+  link: (positionId: string, electionId: string) =>
+    api<Position>(`/positions/${positionId}/link`, { method: "POST", body: { election_id: electionId } }),
+
+  // Applicant-facing.
+  eligible: () => api<{ positions: EligiblePosition[] }>("/positions/eligible"),
+  apply: (positionId: string, body: Record<string, unknown>) =>
+    api<Candidate>(`/positions/${positionId}/apply`, { method: "POST", body }),
 };
 
 export const staff = {

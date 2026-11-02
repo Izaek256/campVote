@@ -5,8 +5,10 @@ import { use, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Countdown } from "@/components/countdown";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
+import { useToast } from "@/components/toast";
 import { VoteRecordedNotice } from "@/components/vote-recorded-notice";
 import { ApiError, elections } from "@/lib/api";
 import { formatEAT } from "@/lib/format";
@@ -22,12 +24,12 @@ import type { Ballot, BallotPosition, SubmitResult } from "@/lib/types";
 
 /** Selections live only in this component's state, never in storage or the URL. */
 function BallotForm({ id }: { id: string }) {
+  const toast = useToast();
   const [ballot, setBallot] = useState<Ballot | null>(null);
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState("");
   const [loadStatus, setLoadStatus] = useState(0);
-  const [submitError, setSubmitError] = useState("");
   const [alreadyVoted, setAlreadyVoted] = useState(false);
   const [stale, setStale] = useState(false);
   const [unknownOutcome, setUnknownOutcome] = useState(false);
@@ -55,6 +57,11 @@ function BallotForm({ id }: { id: string }) {
         if (!active) return;
         setLoadStatus(err instanceof ApiError ? err.status : 0);
         setLoadError(err instanceof ApiError ? err.message : "The ballot could not be loaded.");
+        if (err instanceof ApiError && (err.status === 403 || err.status === 409)) {
+          toast.warn(err.message);
+        } else {
+          toast.error(err instanceof ApiError ? err.message : "The ballot could not be loaded.");
+        }
       });
     elections
       .startBallot(id)
@@ -62,12 +69,15 @@ function BallotForm({ id }: { id: string }) {
         if (active) setAlreadyVoted(false);
       })
       .catch((err) => {
-        if (active && err instanceof ApiError && err.status === 409) setAlreadyVoted(true);
+        if (active && err instanceof ApiError && err.status === 409) {
+          setAlreadyVoted(true);
+          toast.success("You have already voted");
+        }
       });
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, toast]);
 
   const answered = useMemo(
     () => Object.values(selections).filter((chosen) => chosen.length > 0).length,
@@ -108,7 +118,6 @@ function BallotForm({ id }: { id: string }) {
       first?.focus();
       return;
     }
-    setSubmitError("");
     setConfirmed(false);
     setReviewing(true);
     window.scrollTo({ top: 0 });
@@ -122,7 +131,6 @@ function BallotForm({ id }: { id: string }) {
   async function submit() {
     if (!ballot) return;
     setBusy(true);
-    setSubmitError("");
     setUnknownOutcome(false);
     try {
       const result = await elections.submitBallot(
@@ -139,14 +147,17 @@ function BallotForm({ id }: { id: string }) {
       if (err instanceof ApiError) {
         if (err.status === 409 && /changed/i.test(err.message)) {
           setStale(true);
+          toast.warn("The ballot changed while you were filling it in");
         } else if (err.status === 409) {
           setAlreadyVoted(true);
+          toast.success("You have already voted");
+        } else {
+          toast.error(err.message);
         }
-        setSubmitError(err.message);
       } else {
         // The request may have committed before the response was lost.
         setUnknownOutcome(true);
-        setSubmitError("We could not confirm your vote. Check your status before trying again.");
+        toast.error("We could not confirm your vote. Check your status before trying again.");
       }
     } finally {
       setBusy(false);
@@ -189,8 +200,8 @@ function BallotForm({ id }: { id: string }) {
   }
 
   // Post-vote state: if already voted, show access to results only after election ends
-  if (alreadyVoted && ballot) {
-    const electionEnded = new Date(ballot.ends_at) < new Date();
+  if (alreadyVoted) {
+    const electionEnded = ballot ? new Date(ballot.ends_at) < new Date() : false;
     return (
       <main className="app-wrap narrow">
         <div className="panel stack" style={{ marginTop: 20 }}>
@@ -208,12 +219,17 @@ function BallotForm({ id }: { id: string }) {
             ) : (
               <div className="text-sm text-gray-500">
                 <p>Results will be available after the election ends.</p>
-                <p className="mt-2">
-                  Election closes: <strong>{formatEAT(ballot.ends_at)}</strong>
-                </p>
+                {ballot ? (
+                  <p className="mt-2">
+                    Election closes: <strong>{formatEAT(ballot.ends_at)}</strong>
+                  </p>
+                ) : null}
               </div>
             )}
-            <div className="mt-4">
+            <div className="mt-4 row" style={{ justifyContent: "center" }}>
+              <Link className="btn ghost" href={`/elections/${id}/status`}>
+                Check vote status
+              </Link>
               <Link className="btn ghost" href="/elections">
                 Back to my elections
               </Link>
@@ -252,37 +268,29 @@ function BallotForm({ id }: { id: string }) {
       </div>
 
       {loadError ? (
-        <div
-          className={`banner ${loadStatus === 403 || loadStatus === 409 ? "hatch" : "bad"}`}
-          role="alert"
-        >
-          <Icon name={loadStatus === 401 ? "lock" : "alert"} />
-          <div>
-            <b>
-              {loadStatus === 401
+        <div style={{ marginBottom: 18 }}>
+          <LoadError
+            title={
+              loadStatus === 401
                 ? "Your session expired"
                 : loadStatus === 403
                   ? "The ballot is not available to you"
-                  : "Ballot unavailable"}
-            </b>
-            {loadError}
-            {loadStatus === 401 ? (
-              <>
-                {" "}
-                <Link href="/login">Sign in again</Link> to continue. Your selections are not saved.
-              </>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {alreadyVoted ? (
-        <div className="banner ok" style={{ marginBottom: 18 }}>
-          <Icon name="check" />
-          <div>
-            <b>You have already voted</b>
-            <Link href={`/elections/${id}/status`}>Check your status</Link> or view results after the election ends.
-          </div>
+                  : "Ballot unavailable"
+            }
+            message={
+              loadStatus === 401 ? `${loadError} Your selections are not saved.` : loadError
+            }
+            tone={loadStatus === 403 || loadStatus === 409 ? "hatch" : "bad"}
+            backHref={`/elections/${id}`}
+            backLabel="Back to the election"
+            action={
+              loadStatus === 401 ? (
+                <Link className="btn primary" href="/login">
+                  Sign in again
+                </Link>
+              ) : undefined
+            }
+          />
         </div>
       ) : null}
 
@@ -309,7 +317,8 @@ function BallotForm({ id }: { id: string }) {
           <Icon name="alert" />
           <div>
             <b>We could not confirm your vote</b>
-            {submitError} Do not submit again until you have checked your status.
+            Do not submit again until you have checked your status, in case the ballot was already
+            recorded.
             <div style={{ marginTop: 8 }}>
               <Link className="btn sm" href={`/elections/${id}/status`}>
                 Check status
@@ -395,16 +404,6 @@ function BallotForm({ id }: { id: string }) {
               If the network drops after you press Submit, check your status before trying again.
             </span>
           </label>
-
-          {submitError && !unknownOutcome ? (
-            <div className="banner bad" role="alert">
-              <Icon name="alert" />
-              <div>
-                <b>Your ballot was not accepted</b>
-                {submitError}
-              </div>
-            </div>
-          ) : null}
 
           <div className="row" style={{ justifyContent: "space-between" }}>
             <button type="button" className="btn ghost" onClick={() => setReviewing(false)}>
@@ -560,16 +559,6 @@ function BallotForm({ id }: { id: string }) {
               </section>
             );
           })}
-
-          {submitError && !unknownOutcome ? (
-            <div className="banner bad" role="alert" style={{ marginTop: 18 }}>
-              <Icon name="alert" />
-              <div>
-                <b>Your ballot was not accepted</b>
-                {submitError}
-              </div>
-            </div>
-          ) : null}
 
           <div className="ballot-actions">
             <span className="hint">

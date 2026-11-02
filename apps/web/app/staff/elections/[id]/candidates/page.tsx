@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ElectionTabs } from "@/components/election-tabs";
 import { EmptyState } from "@/components/empty-state";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
+import { useToast } from "@/components/toast";
 import { ApiError, candidates, positions } from "@/lib/api";
 import { candidateStatusClass, candidateStatusLabel, formatEAT } from "@/lib/format";
 import type { Candidate, Position } from "@/lib/types";
@@ -15,11 +16,11 @@ import type { Candidate, Position } from "@/lib/types";
 const filters = ["ALL", "NOMINATED", "APPROVED", "REJECTED", "WITHDRAWN"] as const;
 
 function Review({ id }: { id: string }) {
+  const toast = useToast();
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [items, setItems] = useState<Candidate[] | null>(null);
   const [configuredPositions, setConfiguredPositions] = useState<Position[]>([]);
   const [filter, setFilter] = useState<(typeof filters)[number]>("ALL");
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState<Candidate | null>(null);
   const [decision, setDecision] = useState<"approve" | "reject">("approve");
@@ -33,11 +34,12 @@ function Review({ id }: { id: string }) {
       ]);
       setItems(list.candidates ?? []);
       setConfiguredPositions(configured.positions ?? []);
-      setError("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Candidates could not be loaded.");
+      const message = err instanceof ApiError ? err.message : "Candidates could not be loaded.";
+      setLoadError(message);
+      toast.error(message);
     }
-  }, [id, filter, positions.list]);
+  }, [id, filter, toast]);
 
   useEffect(() => {
     load();
@@ -47,30 +49,27 @@ function Review({ id }: { id: string }) {
     setReviewing(candidate);
     setDecision(next);
     setReason("");
-    setError("");
-    setNotice("");
   }
 
   async function submit() {
     if (!reviewing) return;
     if (!reason.trim()) {
-      setError("Add a reason before recording the decision.");
+      toast.error("Add a reason before recording the decision.");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       if (decision === "approve") {
         await candidates.approve(id, reviewing.id, reason.trim());
-        setNotice(`${reviewing.full_name} was approved.`);
+        toast.success(`${reviewing.full_name} was approved.`);
       } else {
         await candidates.reject(id, reviewing.id, reason.trim());
-        setNotice(`${reviewing.full_name} was rejected.`);
+        toast.success(`${reviewing.full_name} was rejected.`);
       }
       setReviewing(null);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The decision was refused.");
+      toast.error(err instanceof ApiError ? err.message : "The decision was refused.");
     } finally {
       setBusy(false);
     }
@@ -93,24 +92,6 @@ function Review({ id }: { id: string }) {
         </Link>
       </div>
 
-      <ElectionTabs id={id} />
-
-      {error ? (
-        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" />
-          <div>
-            <b>Something needs attention</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
-      {notice ? (
-        <div className="banner ok" role="status" style={{ marginBottom: 16 }}>
-          <Icon name="check" />
-          <div>{notice}</div>
-        </div>
-      ) : null}
-
       <div className="row" style={{ marginBottom: 16 }}>
         {filters.map((value) => (
           <button
@@ -125,7 +106,14 @@ function Review({ id }: { id: string }) {
         ))}
       </div>
 
-      {!items && !error ? (
+      {loadError ? (
+        <LoadError
+          title="We could not load the candidates"
+          message={loadError}
+          backHref={`/staff/elections/${id}`}
+          backLabel="Back to the election"
+        />
+      ) : !items ? (
         <div className="panel stack" aria-busy="true">
           <span className="skel" style={{ height: 18, width: "30%" }} />
           <span className="skel" style={{ height: 14 }} />
@@ -324,7 +312,7 @@ function Review({ id }: { id: string }) {
 export default function CandidatesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth>
+    <RequireAuth adminOnly>
       <Review id={id} />
     </RequireAuth>
   );

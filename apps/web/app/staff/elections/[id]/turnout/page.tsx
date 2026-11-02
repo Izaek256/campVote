@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
-import { ElectionTabs } from "@/components/election-tabs";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
+import { useToast } from "@/components/toast";
 import { ApiError, staff } from "@/lib/api";
 import { formatEAT, formatNumber, formatPercent } from "@/lib/format";
 
@@ -18,18 +19,20 @@ type Turnout = {
 };
 
 function Panel({ id }: { id: string }) {
+  const toast = useToast();
   const [turnout, setTurnout] = useState<Turnout | null>(null);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setTurnout(await staff.turnout(id));
-      setError("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Turnout could not be loaded.");
+      const message = err instanceof ApiError ? err.message : "Turnout could not be loaded.";
+      setLoadError(message);
+      toast.error(message);
     }
-  }, [id]);
+  }, [id, toast.error]);
 
   useEffect(() => {
     load();
@@ -59,19 +62,14 @@ function Panel({ id }: { id: string }) {
         </div>
       </div>
 
-      <ElectionTabs id={id} />
-
-      {error ? (
-        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" />
-          <div>
-            <b>Something needs attention</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
-
-      {!turnout && !error ? (
+      {loadError ? (
+        <LoadError
+          title="We could not load turnout"
+          message={loadError}
+          backHref={`/staff/elections/${id}`}
+          backLabel="Back to the election"
+        />
+      ) : !turnout ? (
         <div className="panel stack" aria-busy="true">
           <span className="skel" style={{ height: 18, width: "30%" }} />
           <span className="skel" style={{ height: 14 }} />
@@ -123,7 +121,7 @@ function Panel({ id }: { id: string }) {
 export default function TurnoutPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth>
+    <RequireAuth adminOnly>
       <Panel id={id} />
     </RequireAuth>
   );

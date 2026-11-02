@@ -1329,6 +1329,14 @@ svg.i.l {
   background: var(--danger);
   color: var(--on-danger);
 }
+.toast.warn {
+  background: var(--ink);
+  color: var(--bg);
+  border-left: 3px solid var(--primary);
+}
+.toast.warn svg {
+  color: var(--g300);
+}
 .toast.ok svg {
   color: var(--g300);
 }
@@ -3368,6 +3376,96 @@ body {
   max-width: 1180px;
   width: 100%;
 }
+/* Mobile navigation: the sidebar becomes an off-canvas drawer. */
+.admin-burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--r);
+  cursor: pointer;
+}
+.admin-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  border: 0;
+  padding: 0;
+  background: rgba(4, 8, 6, 0.5);
+}
+.admin-side .close {
+  display: none;
+  margin-left: auto;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--r);
+}
+.admin-side .close:hover {
+  background: #16221c;
+  color: #fff;
+}
+/* Quick actions surface the setup steps that used to be buried in a tab rail. */
+.admin-side .quick {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 6px 4px 10px;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  background: var(--g600, #1f7a4d);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+.admin-side .quick:hover {
+  filter: brightness(1.08);
+  color: #fff;
+}
+.admin-side .sub {
+  padding-left: 22px;
+  font-size: 13px;
+}
+.admin-side .who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  margin-top: 8px;
+  border-top: 1px solid #1b241f;
+  color: #9fb0a7;
+  font-size: 12.5px;
+  min-width: 0;
+}
+.admin-side .who span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-side .signout {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 9px 10px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  border-radius: var(--r);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.admin-side .signout:hover {
+  background: #16221c;
+  color: #fff;
+}
 .table-actions {
   display: flex;
   gap: 8px;
@@ -3434,20 +3532,26 @@ body {
     grid-template-columns: 1fr;
   }
   .admin-side {
-    position: static;
-    height: auto;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 272px;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.18s ease;
+    z-index: 60;
+    box-shadow: 24px 0 60px rgba(0, 0, 0, 0.35);
   }
-  .admin-side .b {
-    padding-bottom: 4px;
+  .admin-side.open {
+    transform: translateX(0);
   }
-  .admin-side .h {
-    display: none;
+  .admin-side .close {
+    display: inline-flex;
   }
-  .admin-side .foot {
-    margin: 0;
+  .admin-burger {
+    display: inline-flex;
+  }
+  .admin-body {
+    padding: 18px 14px 80px;
   }
 }
 @media (max-width: 640px) {

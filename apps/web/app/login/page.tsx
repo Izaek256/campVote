@@ -5,14 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
+import { useToast } from "@/components/toast";
 import { ApiError } from "@/lib/api";
-import {
-  CAMPUS_NAME,
-  DEMO_STUDENT_EMAIL,
-  DEMO_STUDENT_PASSWORD,
-  STAFF_EMAIL_DOMAIN,
-  STUDENT_EMAIL_DOMAIN,
-} from "@/lib/config";
+import { CAMPUS_NAME, STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 
 export default function LoginPage() {
   const { user, loading, signIn } = useAuth();
@@ -21,6 +16,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const toast = useToast();
 
   useEffect(() => {
     if (!loading && user) router.replace("/elections");
@@ -35,6 +32,7 @@ export default function LoginPage() {
       router.replace("/elections");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "We could not sign you in. Try again.");
+      toast.error(err instanceof ApiError ? err.message : "We could not sign you in. Try again.");
     } finally {
       setBusy(false);
     }
@@ -85,12 +83,6 @@ export default function LoginPage() {
               required
             />
           </div>
-          {error ? (
-            <span className="field err" role="alert">
-              <Icon name="alert" size="s" />
-              {error}
-            </span>
-          ) : null}
           <button className="btn primary block lg" type="submit" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
@@ -114,8 +106,9 @@ export default function LoginPage() {
 
         {process.env.NODE_ENV !== "production" ? (
           <p className="hint" style={{ marginTop: 16 }}>
-            Local demo voter: <span className="mono">{DEMO_STUDENT_EMAIL}</span> /{" "}
-            <span className="mono">{DEMO_STUDENT_PASSWORD}</span>. Development data only.
+            No demo accounts are seeded. Create the first administrator with{" "}
+            <span className="mono">go run ./cmd/bootstrap</span>, then register voters at{" "}
+            <Link href="/register">/register</Link>.
           </p>
         ) : null}
       </div>

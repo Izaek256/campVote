@@ -1,12 +1,14 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
+import { useToast } from "@/components/toast";
 import { ApiError, elections } from "@/lib/api";
 import { ELECTION_AUTHORITY } from "@/lib/config";
 import { categoryLabel, formatShortEAT } from "@/lib/format";
@@ -29,29 +31,35 @@ function toISO(value: string): string {
 
 function StaffHome() {
   const router = useRouter();
+  const toast = useToast();
   const [items, setItems] = useState<Election[] | null>(null);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
 
   function load() {
     elections
       .list()
       .then(setItems)
-      .catch((err) =>
-        setError(err instanceof ApiError ? err.message : "Elections could not be loaded.")
-      );
+      .catch((err) => {
+        const message = err instanceof ApiError ? err.message : "Elections could not be loaded.";
+        setLoadError(message);
+        toast.error(message);
+      });
   }
 
-  useEffect(load, []);
+  useEffect(load, [toast.error]);
+
+  // Quick action from the sidebar: /staff?new=1 opens the create form.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new") === "1") setShowForm(true);
+  }, []);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
-    setError("");
     setFields({});
     try {
       const created = await elections.create({
@@ -62,10 +70,10 @@ function StaffHome() {
       router.push(`/staff/elections/${created.id}`);
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message);
+        toast.error(err.message);
         setFields(err.fields ?? {});
       } else {
-        setError("The election could not be created.");
+        toast.error("The election could not be created.");
       }
     } finally {
       setBusy(false);
@@ -73,9 +81,8 @@ function StaffHome() {
   }
 
   async function refresh() {
-    setNotice("");
     load();
-    setNotice("Reloaded from the server.");
+    toast.success("Reloaded from the server.");
   }
 
   return (
@@ -85,7 +92,8 @@ function StaffHome() {
           <span className="lbl">Officials</span>
           <h1>Elections</h1>
           <p>
-            Create an election quickly with minimal info, then add details later. Drafts stay private to you.
+            Create an election quickly with minimal info, then add details later. Drafts stay
+            private to you.
           </p>
         </div>
         <div className="row">
@@ -103,22 +111,6 @@ function StaffHome() {
           </button>
         </div>
       </div>
-
-      {notice ? (
-        <p className="hint" role="status">
-          {notice}
-        </p>
-      ) : null}
-
-      {error ? (
-        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" />
-          <div>
-            <b>Request refused</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
 
       {showForm ? (
         <form className="panel stack" onSubmit={create} style={{ marginBottom: 24 }}>
@@ -231,7 +223,9 @@ function StaffHome() {
         </form>
       ) : null}
 
-      {!items && !error ? (
+      {loadError ? (
+        <LoadError title="We could not load the elections" message={loadError} />
+      ) : !items ? (
         <div className="panel stack" aria-busy="true">
           <span className="skel" style={{ height: 14 }} />
           <span className="skel" style={{ height: 14, width: "80%" }} />
@@ -298,7 +292,7 @@ function StaffHome() {
 
 export default function StaffPage() {
   return (
-    <RequireAuth>
+    <RequireAuth adminOnly>
       <StaffHome />
     </RequireAuth>
   );

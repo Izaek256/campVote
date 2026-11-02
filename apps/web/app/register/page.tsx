@@ -6,8 +6,9 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
 import { PasswordStrength } from "@/components/password-strength";
+import { useToast } from "@/components/toast";
 import { ApiError, auth } from "@/lib/api";
-import { CAMPUS_NAME, STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "@/lib/config";
+import { STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 import { passwordFailures } from "@/lib/password-rules";
 
 // The backend enforces SIGNUP_ALLOWED_DOMAINS; this client check gives instant
@@ -50,6 +51,8 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+
+  const toast = useToast();
 
   // Already signed in — bounce straight to elections.
   useEffect(() => {
@@ -98,9 +101,11 @@ export default function RegisterPage() {
           setFieldErrors({ email: "An account with this email already exists." });
         } else {
           setError(err.message);
+          toast.error(err.message);
         }
       } else {
         setError("Something went wrong. Please try again.");
+        toast.error("Something went wrong. Please try again.");
       }
     } finally {
       setBusy(false);
@@ -115,6 +120,7 @@ export default function RegisterPage() {
 
     if (!code.trim() || code.trim().length !== 6) {
       setError("Please enter the 6-digit code from your email.");
+      toast.error("Please enter the 6-digit code from your email.");
       return;
     }
 
@@ -138,6 +144,11 @@ export default function RegisterPage() {
           ? err.message
           : "We could not complete your registration. Please try again."
       );
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : "We could not complete your registration. Please try again."
+      );
     } finally {
       setBusy(false);
     }
@@ -152,6 +163,7 @@ export default function RegisterPage() {
       if (result.verification_code) setDevCode(result.verification_code);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not resend. Please try again.");
+      toast.error(err instanceof ApiError ? err.message : "Could not resend. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -276,14 +288,6 @@ export default function RegisterPage() {
                 />
               </div>
 
-              {/* Generic error */}
-              {error ? (
-                <span className="field err" role="alert">
-                  <Icon name="alert" size="s" />
-                  {error}
-                </span>
-              ) : null}
-
               <button className="btn primary block lg" type="submit" disabled={busy}>
                 {busy ? "Sending verification…" : "Continue"}
               </button>
@@ -333,13 +337,6 @@ export default function RegisterPage() {
                     </span>
                   </div>
                 </div>
-              ) : null}
-
-              {error ? (
-                <span className="field err" role="alert">
-                  <Icon name="alert" size="s" />
-                  {error}
-                </span>
               ) : null}
 
               <button className="btn primary block lg" type="submit" disabled={busy}>

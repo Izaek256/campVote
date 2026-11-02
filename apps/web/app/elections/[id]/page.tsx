@@ -6,7 +6,9 @@ import { Icon } from "@/components/icon";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
 import { Countdown } from "@/components/countdown";
+import { LoadError } from "@/components/load-error";
 import { StatusChip } from "@/components/status-chip";
+import { useToast } from "@/components/toast";
 import { ApiError, elections } from "@/lib/api";
 import { categoryLabel, formatEAT, formatNumber, statusLabel } from "@/lib/format";
 import type { Election, EligibilityDecision } from "@/lib/types";
@@ -50,9 +52,10 @@ function LifecycleRail({ status }: { status: Election["status"] }) {
 }
 
 function ElectionView({ id }: { id: string }) {
+  const toast = useToast();
   const [election, setElection] = useState<Election | null>(null);
   const [eligibility, setEligibility] = useState<EligibilityDecision | null>(null);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -64,8 +67,10 @@ function ElectionView({ id }: { id: string }) {
         if (active) setElection(found);
       })
       .catch((err) => {
-        if (active)
-          setError(err instanceof ApiError ? err.message : "Election could not be loaded.");
+        if (!active) return;
+        const message = err instanceof ApiError ? err.message : "Election could not be loaded.";
+        setLoadError(message);
+        toast.error(message);
       });
     elections
       .eligibility(id)
@@ -79,23 +84,17 @@ function ElectionView({ id }: { id: string }) {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, toast]);
 
-  if (error) {
+  if (loadError) {
     return (
       <main className="app-wrap narrow">
-        <div className="banner bad" role="alert">
-          <Icon name="alert" />
-          <div>
-            <b>We could not open this election</b>
-            {error}
-          </div>
-        </div>
-        <p style={{ marginTop: 16 }}>
-          <Link className="btn" href="/elections">
-            Back to elections
-          </Link>
-        </p>
+        <LoadError
+          title="We could not open this election"
+          message={loadError}
+          backHref="/elections"
+          backLabel="Back to elections"
+        />
       </main>
     );
   }

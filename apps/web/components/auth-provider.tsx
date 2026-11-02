@@ -65,7 +65,7 @@ export function useAuth(): AuthState {
   return value;
 }
 
-export function isStaff(user: User | null): boolean {
+export function isAdmin(user: User | null): boolean {
   if (!user) return false;
-  return ["ADMIN", "CHIEF_ELECTION_ADMIN", "ELECTION_OFFICIAL"].includes(user.role);
+  return user.role === "ADMIN";
 }

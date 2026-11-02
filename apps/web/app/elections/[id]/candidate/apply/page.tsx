@@ -3,17 +3,19 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
+import { useToast } from "@/components/toast";
 import { ApiError, candidates, upload } from "@/lib/api";
 import { STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 import { formatEAT } from "@/lib/format";
 import type { CandidateApplicationView } from "@/lib/types";
 
 function Apply({ id }: { id: string }) {
+  const toast = useToast();
   const [view, setView] = useState<CandidateApplicationView | null>(null);
-  const [loadError, setLoadError] = useState("");
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -40,17 +42,19 @@ function Apply({ id }: { id: string }) {
         setView(data);
         setPositionId(data.positions[0]?.id ?? "");
       })
-      .catch((err) =>
-        setLoadError(err instanceof ApiError ? err.message : "This election could not be loaded.")
-      );
-  }, [id]);
+      .catch((err) => {
+        const message =
+          err instanceof ApiError ? err.message : "This election could not be loaded.";
+        setLoadError(message);
+        toast.error(message);
+      });
+  }, [id, toast]);
 
   async function pickFile(
     kind: "photo" | "manifesto" | "passport" | "id",
     file: File | undefined
   ) {
     if (!file) return;
-    setError("");
     setUploading(kind);
     try {
       const isPdf = kind === "manifesto";
@@ -63,7 +67,7 @@ function Apply({ id }: { id: string }) {
       else if (kind === "passport") setPassportPhotoUrl(ref.url);
       else setIdDocumentUrl(ref.url);
     } catch (err) {
-      setError(
+      toast.error(
         err instanceof ApiError
           ? err.message
           : kind === "manifesto"
@@ -77,25 +81,24 @@ function Apply({ id }: { id: string }) {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setError("");
     if (!positionId) {
-      setError("Choose the position you are applying for.");
+      toast.error("Choose the position you are applying for.");
       return;
     }
     if (fullName.trim().length < 2) {
-      setError("Enter the name that should appear on the ballot.");
+      toast.error("Enter the name that should appear on the ballot.");
       return;
     }
     if (!dateOfBirth) {
-      setError("Enter your date of birth.");
+      toast.error("Enter your date of birth.");
       return;
     }
     if (!passportPhotoUrl) {
-      setError("Upload your passport photo.");
+      toast.error("Upload your passport photo.");
       return;
     }
     if (!idDocumentUrl) {
-      setError("Upload a photo of your student ID.");
+      toast.error("Upload a photo of your student ID.");
       return;
     }
     setBusy(true);
@@ -116,7 +119,9 @@ function Apply({ id }: { id: string }) {
       });
       setDone(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Your application could not be submitted.");
+      toast.error(
+        err instanceof ApiError ? err.message : "Your application could not be submitted."
+      );
     } finally {
       setBusy(false);
     }
@@ -125,18 +130,12 @@ function Apply({ id }: { id: string }) {
   if (loadError) {
     return (
       <main className="app-wrap narrow">
-        <div className="banner bad" role="alert">
-          <Icon name="alert" />
-          <div>
-            <b>We could not open this application</b>
-            {loadError}
-          </div>
-        </div>
-        <p style={{ marginTop: 16 }}>
-          <Link className="btn" href="/elections">
-            Back to elections
-          </Link>
-        </p>
+        <LoadError
+          title="We could not open this application"
+          message={loadError}
+          backHref="/elections"
+          backLabel="Back to elections"
+        />
       </main>
     );
   }
@@ -197,16 +196,6 @@ function Apply({ id }: { id: string }) {
           <p>Applications close when voting opens on {formatEAT(view.election.starts_at)}.</p>
         </div>
       </div>
-
-      {error ? (
-        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" />
-          <div>
-            <b>We could not submit that</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
 
       {closed ? (
         <div className="banner hatch" role="alert" style={{ marginBottom: 16 }}>

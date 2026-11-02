@@ -1,13 +1,4 @@
-export type Role =
-  | "ADMIN"
-  | "EDITOR"
-  | "USER"
-  | "CHIEF_ELECTION_ADMIN"
-  | "ELECTION_OFFICIAL"
-  | "STUDENT_VOTER"
-  | "STAFF_VOTER"
-  | "CANDIDATE"
-  | "ELECTION_AUDITOR";
+export type Role = "ADMIN" | "STUDENT_VOTER";
 
 export interface User {
   id: string;
@@ -305,18 +296,49 @@ export interface MyCandidate {
   position_title: string;
 }
 
+export type PositionStatus = "OPEN" | "CLOSED";
+
 export interface Position {
   id: string;
-  election_id: string;
+  /** Null while the position exists before being attached to an election. */
+  election_id: string | null;
   title: string;
   description: string;
   requirements?: string;
   question_type: string;
+  /** Whether the position is still accepting applications. */
+  status: PositionStatus | string;
+  /** Cap on approved candidates; 0 means no limit. */
+  max_candidates: number;
+  /** Candidate eligibility rule: required domain plus optional year/course lists. */
+  allowed_domain?: string;
+  allowed_years?: string;
+  allowed_courses?: string;
   min_selections: number;
   max_selections: number;
   seats: number;
   allow_blank: boolean;
   display_order: number;
+}
+
+/** A position on the admin positions page, with its election name and counts. */
+export interface PositionWithMeta extends Position {
+  election_title?: string;
+  application_count: number;
+  approved_count: number;
+}
+
+/** A position as an applicant sees it: their own rule plus whether they applied. */
+export interface EligiblePosition extends Position {
+  election_title?: string;
+  applied: boolean;
+}
+
+/** A row on the admin application-review screen. */
+export interface PositionApplications {
+  position: Position;
+  applications: Candidate[];
+  approved_count: number;
 }
 
 export interface CandidateApplicationView {
