@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
 import { ApiError, elections } from "@/lib/api";
+import { ELECTION_AUTHORITY } from "@/lib/config";
 import { categoryLabel, formatShortEAT } from "@/lib/format";
 import type { Election } from "@/lib/types";
 
@@ -19,8 +20,6 @@ const emptyForm = {
   starts_at: "",
   ends_at: "",
   result_policy: "AFTER_CLOSE",
-  allowed_domains: "",
-  domain_selection: "ALL", // ALL, YEAR_2026, YEAR_2025, YEAR_2024, YEAR_2023, YEAR_2022, STAFF
 };
 
 /** datetime-local is rendered as EAT; the API stores UTC. */
@@ -37,13 +36,6 @@ function StaffHome() {
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-
-  // Initialize allowed_domains based on domain_selection
-  useEffect(() => {
-    if (form.domain_selection === "ALL" && !form.allowed_domains) {
-      setForm((prev) => ({ ...prev, allowed_domains: "@std.must.ac.ug,@must.ac.ug" }));
-    }
-  }, [form.domain_selection, form.allowed_domains]);
 
   function load() {
     elections
@@ -189,7 +181,7 @@ function StaffHome() {
                 className="in"
                 value={form.organizing_unit}
                 onChange={(event) => setForm({ ...form, organizing_unit: event.target.value })}
-                placeholder="MMU Electoral Commission"
+                placeholder={ELECTION_AUTHORITY}
               />
             </div>
             <div className="field">
@@ -226,53 +218,6 @@ function StaffHome() {
                 <option value="LIVE">Live provisional</option>
                 <option value="CERTIFIED_ONLY">Certified only</option>
               </select>
-            </div>
-            <div className="field full">
-              <label htmlFor="domain_selection">Voter Eligibility Domains</label>
-              <select
-                id="domain_selection"
-                className="sel"
-                value={form.domain_selection}
-                onChange={(event) => {
-                  const selection = event.target.value;
-                  let domains = "";
-                  if (selection === "YEAR_2026") {
-                    domains = "2026.mbr@std.must.ac.ug,2026.pha@std.must.ac.ug,2026.phs@std.must.ac.ug,2026.bns@std.must.ac.ug,2026.bnc@std.must.ac.ug,2026.mls@std.must.ac.ug,2026.mlc@std.must.ac.ug,2026.bsp@std.must.ac.ug,2026.bspc@std.must.ac.ug,2026.bba@std.must.ac.ug,2026.bpsm@std.must.ac.ug,2026.bsaf@std.must.ac.ug,2026.eco@std.must.ac.ug,2026.bpcd@std.must.ac.ug,2026.bsal@std.must.ac.ug,2026.bit@std.must.ac.ug,2026.bcs@std.must.ac.ug,2026.bse@std.must.ac.ug,2026.bs-chem-maths@std.must.ac.ug,2026.bs-biological@std.must.ac.ug,2026.bs-physical@std.must.ac.ug,2026.bme@std.must.ac.ug,2026.eee@std.must.ac.ug,2026.pem@std.must.ac.ug,2026.civ@std.must.ac.ug,2026.mie@std.must.ac.ug,2026.dlt@std.must.ac.ug";
-                  } else if (selection === "YEAR_2025") {
-                    domains = "2025.mbr@std.must.ac.ug,2025.pha@std.must.ac.ug,2025.phs@std.must.ac.ug,2025.bns@std.must.ac.ug,2025.bnc@std.must.ac.ug,2025.mls@std.must.ac.ug,2025.mlc@std.must.ac.ug,2025.bsp@std.must.ac.ug,2025.bspc@std.must.ac.ug,2025.bba@std.must.ac.ug,2025.bsaf@std.must.ac.ug,2025.bpsm@std.must.ac.ug,2025.eco@std.must.ac.ug,2025.bpcd@std.must.ac.ug,2025.bsal@std.must.ac.ug,2025.bit@std.must.ac.ug,2025.bcs@std.must.ac.ug,2025.bse@std.must.ac.ug,2025.bs-biological@std.must.ac.ug,2025.bs-chem-maths@std.must.ac.ug,2025.bs-physical@std.must.ac.ug,2025.bme@std.must.ac.ug,2025.pem@std.must.ac.ug,2025.eee@std.must.ac.ug,2025.cve@std.must.ac.ug,2025.mie@std.must.ac.ug,2025.dlt@std.must.ac.ug";
-                  } else if (selection === "YEAR_2024") {
-                    domains = "2024.mbr@std.must.ac.ug,2024.pha@std.must.ac.ug,2024.phs@std.must.ac.ug,2024.bns@std.must.ac.ug,2024.bnc@std.must.ac.ug,2024.mls@std.must.ac.ug,2024.mlc@std.must.ac.ug,2024.bsp@std.must.ac.ug,2024.bba@std.must.ac.ug,2024.baf@std.must.ac.ug,2024.bpsm@std.must.ac.ug,2024.eco@std.must.ac.ug,2024.bpcd@std.must.ac.ug,2024.bsal@std.must.ac.ug,2024.bgwh@std.must.ac.ug,2024.bit@std.must.ac.ug,2024.bcs@std.must.ac.ug,2024.bse@std.must.ac.ug,2024.bs@std.must.ac.ug,2024.bme@std.must.ac.ug,2024.pem@std.must.ac.ug,2024.eee@std.must.ac.ug,2024.mie@std.must.ac.ug,2024.cve@std.must.ac.ug";
-                  } else if (selection === "YEAR_2023") {
-                    domains = "2023.mbr@std.must.ac.ug,2023.pha@std.must.ac.ug,2023.bns@std.must.ac.ug,2023.mls@std.must.ac.ug,2023.bsp@std.must.ac.ug,2023.bsal@std.must.ac.ug,2023.bme@std.must.ac.ug,2023.pem@std.must.ac.ug,2023.eee@std.must.ac.ug,2023.bse@std.must.ac.ug,2023.mie@std.must.ac.ug,2023.cve@std.must.ac.ug";
-                  } else if (selection === "YEAR_2022") {
-                    domains = "2022.mbr@std.must.ac.ug";
-                  } else if (selection === "STAFF") {
-                    domains = "@must.ac.ug";
-                  } else {
-                    domains = "@std.must.ac.ug,@must.ac.ug";
-                  }
-                  setForm({ ...form, allowed_domains: domains, domain_selection: selection });
-                }}
-              >
-                <option value="ALL">All Students & Staff</option>
-                <option value="YEAR_2026">Year I (2026)</option>
-                <option value="YEAR_2025">Year II (2025)</option>
-                <option value="YEAR_2024">Year III (2024)</option>
-                <option value="YEAR_2023">Year IV (2023)</option>
-                <option value="YEAR_2022">Year V (2022)</option>
-                <option value="STAFF">Staff Only</option>
-              </select>
-              <input
-                id="domains"
-                className={`in${fields.allowed_domains ? " bad" : ""}`}
-                value={form.allowed_domains}
-                onChange={(event) => setForm({ ...form, allowed_domains: event.target.value })}
-                placeholder="Domains will be auto-filled from selection above"
-                readOnly
-              />
-              {fields.allowed_domains ? (
-                <span className="err">{fields.allowed_domains}</span>
-              ) : null}
             </div>
           </div>
           <div className="row">

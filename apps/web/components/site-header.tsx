@@ -62,7 +62,7 @@ export function SiteHeader() {
             </>
           ) : (
             <Link className="btn primary sm" href="/login">
-              Sign in with MMU account
+              Sign in
             </Link>
           )}
         </span>

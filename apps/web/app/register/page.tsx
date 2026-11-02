@@ -7,14 +7,17 @@ import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
 import { PasswordStrength } from "@/components/password-strength";
 import { ApiError, auth } from "@/lib/api";
+import { CAMPUS_NAME, STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 import { passwordFailures } from "@/lib/password-rules";
 
-// Allowed email domains for campus registration.
-const ALLOWED_DOMAINS = ["@std.must.ac.ug", "@must.ac.ug"];
-
+// The backend enforces SIGNUP_ALLOWED_DOMAINS; this client check gives instant
+// feedback without a round trip. Domain names come from config so the UI stays
+// neutral.
 function isAllowedDomain(email: string): boolean {
   const lower = email.toLowerCase().trim();
-  return ALLOWED_DOMAINS.some((d) => lower.endsWith(d));
+  return (
+    lower.endsWith(`@${STUDENT_EMAIL_DOMAIN}`) || lower.endsWith(`@${STAFF_EMAIL_DOMAIN}`)
+  );
 }
 
 /**
@@ -67,8 +70,7 @@ export default function RegisterPage() {
     if (!email.trim()) {
       errs.email = "Email is required.";
     } else if (!isAllowedDomain(email)) {
-      errs.email =
-        "Please use your @std.must.ac.ug (student) or @must.ac.ug (staff/official) address.";
+      errs.email = `Please use your @${STUDENT_EMAIL_DOMAIN} (student) or @${STAFF_EMAIL_DOMAIN} (staff/official) address.`;
     }
     const pwFails = passwordFailures(password, [email, firstName, lastName]);
     if (pwFails.length > 0) {
@@ -174,7 +176,7 @@ export default function RegisterPage() {
           <>
             <h1>Create your account</h1>
             <p className="lead">
-              Register with your MUST campus email to participate in Guild elections.
+              Register with your campus email to participate in campus elections.
             </p>
 
             <form className="form-stack" onSubmit={handleDetailsSubmit} noValidate>
@@ -232,7 +234,7 @@ export default function RegisterPage() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@std.must.ac.ug"
+                  placeholder={`you@${STUDENT_EMAIL_DOMAIN}`}
                   required
                   aria-describedby={fieldErrors.email ? "err-email" : "hint-email"}
                 />
@@ -243,7 +245,7 @@ export default function RegisterPage() {
                   </span>
                 ) : (
                   <span id="hint-email" className="hint">
-                    Use your @std.must.ac.ug or @must.ac.ug address.
+                    Use your @{STUDENT_EMAIL_DOMAIN} or @{STAFF_EMAIL_DOMAIN} address.
                   </span>
                 )}
               </div>

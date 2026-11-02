@@ -6,6 +6,7 @@ import { Icon } from "@/components/icon";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
 import { ApiError, candidates, upload } from "@/lib/api";
+import { STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 import { formatEAT } from "@/lib/format";
 import type { CandidateApplicationView } from "@/lib/types";
 
@@ -378,7 +379,7 @@ function Apply({ id }: { id: string }) {
                 value={contactEmail}
                 onChange={(event) => setContactEmail(event.target.value)}
                 disabled={blocked}
-                placeholder="you@std.mast.ac.ug"
+                placeholder={`you@${STUDENT_EMAIL_DOMAIN}`}
               />
             </div>
             <div className="field">

@@ -1,6 +1,6 @@
 import type { ElectionStatus } from "./types";
 
-/** MMU display zone. Stored timestamps are UTC; voters read EAT. */
+/** Campus display zone. Stored timestamps are UTC; voters read EAT. */
 export const EAT = "Africa/Kampala";
 
 const dateTime = new Intl.DateTimeFormat("en-GB", {

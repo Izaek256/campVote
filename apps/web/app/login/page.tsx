@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
 import { ApiError } from "@/lib/api";
 import {
+  CAMPUS_NAME,
   DEMO_STUDENT_EMAIL,
   DEMO_STUDENT_PASSWORD,
   STAFF_EMAIL_DOMAIN,
@@ -50,9 +51,9 @@ export default function LoginPage() {
             camp<b style={{ fontWeight: 400 }}>Vote</b>
           </span>
         </Link>
-        <h1>Guild elections</h1>
+        <h1>Campus elections</h1>
         <p className="lead">
-          Sign in with your MMU account to see the elections you are eligible for.
+          Sign in with your {CAMPUS_NAME} account to see the elections you are eligible for.
         </p>
 
         <form className="form-stack" onSubmit={handleSubmit} noValidate>
@@ -65,10 +66,12 @@ export default function LoginPage() {
               autoComplete="username"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@std.must.ac.ug"
+              placeholder={`you@${STUDENT_EMAIL_DOMAIN}`}
               required
             />
-            <span className="hint">Use your verified @std.must.ac.ug or @must.ac.ug address.</span>
+            <span className="hint">
+              Use your verified @{STUDENT_EMAIL_DOMAIN} or @{STAFF_EMAIL_DOMAIN} address.
+            </span>
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>
@@ -111,8 +114,8 @@ export default function LoginPage() {
 
         {process.env.NODE_ENV !== "production" ? (
           <p className="hint" style={{ marginTop: 16 }}>
-            Local demo voter: <span className="mono">ivan.mugisha@std.must.ac.ug</span> /{" "}
-            <span className="mono">admin123</span>. Development data only.
+            Local demo voter: <span className="mono">{DEMO_STUDENT_EMAIL}</span> /{" "}
+            <span className="mono">{DEMO_STUDENT_PASSWORD}</span>. Development data only.
           </p>
         ) : null}
       </div>
