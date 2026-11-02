@@ -152,6 +152,9 @@ func CORSDynamic(resolve func() []string) gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Headers", allowedRequestHeadersValue)
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Max-Age", "86400")
+		// Without this a cross-origin caller cannot read the id, so a failed
+		// request would have no way to name the log line that explains it.
+		c.Header("Access-Control-Expose-Headers", "X-Request-ID")
 
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
