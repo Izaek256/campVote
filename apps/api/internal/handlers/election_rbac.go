@@ -31,6 +31,8 @@ func NewElectionRBACHandler(db *gorm.DB) *ElectionRBACHandler {
 
 type electionRoleView struct {
 	UserID    string    `json:"user_id"`
+	Email     string    `json:"email,omitempty"`
+	FullName  string    `json:"full_name,omitempty"`
 	Role      string    `json:"role"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -49,10 +51,56 @@ func (h *ElectionRBACHandler) ListRoles(c *gin.Context) {
 		return
 	}
 	out := make([]electionRoleView, 0, len(rows))
+	ids := make([]string, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, electionRoleView{UserID: row.UserID, Role: row.Role, CreatedAt: row.CreatedAt})
+		ids = append(ids, row.UserID)
+	}
+	users := map[string]models.User{}
+	if len(ids) > 0 {
+		var list []models.User
+		if err := h.DB.Where("id IN ?", ids).Find(&list).Error; err != nil {
+			respond.Internal(c, err)
+			return
+		}
+		for _, user := range list {
+			users[user.ID] = user
+		}
+	}
+	for _, row := range rows {
+		user := users[row.UserID]
+		out = append(out, electionRoleView{
+			UserID: row.UserID, Email: user.Email,
+			FullName: strings.TrimSpace(user.FirstName + " " + user.LastName),
+			Role:     row.Role, CreatedAt: row.CreatedAt,
+		})
 	}
 	respond.OK(c, out)
+}
+
+// LookupUser resolves an exact email to a user id so the role panel can assign
+// a role without asking an official to copy database identifiers around. The
+// lookup is scoped to an election the caller can already manage roles for.
+func (h *ElectionRBACHandler) LookupUser(c *gin.Context) {
+	authority, ok := h.authority(c, policy.PermElectionRoles)
+	if !ok {
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(c.Query("email")))
+	if email == "" {
+		respond.BadRequest(c, "An email address is required")
+		return
+	}
+	var user models.User
+	if err := h.DB.Where("LOWER(email) = ?", email).First(&user).Error; err != nil {
+		respond.NotFound(c, "No account uses that email address")
+		return
+	}
+	respond.OK(c, gin.H{
+		"user_id":     user.ID,
+		"email":       user.Email,
+		"full_name":   strings.TrimSpace(user.FirstName + " " + user.LastName),
+		"election_id": authority.Election.ID,
+	})
 }
 
 type assignElectionRoleRequest struct {

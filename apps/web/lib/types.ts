@@ -66,6 +66,14 @@ export interface Election {
   my_vote_status?: VoteStatus;
 }
 
+export interface ElectionRole {
+  user_id: string;
+  email?: string;
+  full_name?: string;
+  role: string;
+  created_at: string;
+}
+
 export interface VoteStatus {
   election_id: string;
   voted: boolean;
@@ -280,6 +288,13 @@ export interface Candidate {
   reviewed_at?: string | null;
   withdrawn_at?: string | null;
   withdrawal_reason?: string;
+  date_of_birth?: string | null;
+  registration_number?: string;
+  campus_residence?: string;
+  id_document_url?: string;
+  passport_photo_url?: string;
+  programme?: string;
+  study_year?: number;
   created_at: string;
   updated_at: string;
 }
@@ -295,6 +310,7 @@ export interface Position {
   election_id: string;
   title: string;
   description: string;
+  requirements?: string;
   question_type: string;
   min_selections: number;
   max_selections: number;
@@ -314,6 +330,11 @@ export interface CandidateApplicationView {
     unit: string;
   };
   positions: Position[];
+  applicant?: {
+    programme?: string;
+    study_year?: number;
+    registration_number?: string;
+  };
   eligible: boolean;
   eligibility_reason?: string;
   accepting_applications: boolean;

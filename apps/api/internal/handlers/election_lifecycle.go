@@ -247,6 +247,37 @@ func (h *ElectionLifecycleHandler) Get(c *gin.Context) {
 	respond.OK(c, h.view(&authority.Election, now))
 }
 
+// Readiness reports whether the election can be scheduled. The reasons are
+// safe to show to an official: field-level configuration problems, never voter
+// identities.
+func (h *ElectionLifecycleHandler) Readiness(c *gin.Context) {
+	authority, ok := h.authority(c, policy.PermElectionEdit)
+	if !ok {
+		return
+	}
+	now := h.now()
+	if err := lifecycle.Ensure(h.DB, &authority.Election, now); err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	ready := true
+	problems := map[string]string{}
+	if err := lifecycle.ValidateConfiguration(h.DB, &authority.Election, now, true); err != nil {
+		ready = false
+		var configErr *lifecycle.ConfigError
+		if errors.As(err, &configErr) {
+			problems = configErr.Fields
+		} else {
+			problems["configuration"] = err.Error()
+		}
+	}
+	respond.OK(c, gin.H{
+		"ready":    ready,
+		"status":   authority.Election.Status,
+		"problems": problems,
+	})
+}
+
 // Phase exposes the server's phase and clock to any signed-in caller for
 // display. It contains no identity, roster or ballot data.
 func (h *ElectionLifecycleHandler) Phase(c *gin.Context) {

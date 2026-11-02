@@ -3,8 +3,8 @@ package models
 import (
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/ids"
+	"gorm.io/gorm"
 )
 
 // Candidate approval lifecycle statuses (ISSUE-06)
@@ -18,40 +18,44 @@ const (
 
 // Candidate represents a candidate running for a position in an election.
 type Candidate struct {
-	ID             string         `gorm:"primarykey;size:36" json:"id"`
-	ElectionID     string         `gorm:"size:36;not null;index" json:"election_id"`
-	PositionID     string         `gorm:"size:36;not null;index" json:"position_id"`
-	FullName       string         `gorm:"size:255;not null" json:"full_name" binding:"required"`
-	Slogan         string         `gorm:"size:200" json:"slogan,omitempty"`
-	PhotoURL       string         `gorm:"size:500" json:"photo_url"`
-	Manifesto      string         `gorm:"type:text" json:"manifesto"`
+	ID         string `gorm:"primarykey;size:36" json:"id"`
+	ElectionID string `gorm:"size:36;not null;index" json:"election_id"`
+	PositionID string `gorm:"size:36;not null;index" json:"position_id"`
+	FullName   string `gorm:"size:255;not null" json:"full_name" binding:"required"`
+	Slogan     string `gorm:"size:200" json:"slogan,omitempty"`
+	PhotoURL   string `gorm:"size:500" json:"photo_url"`
+	Manifesto  string `gorm:"type:text" json:"manifesto"`
 	// ManifestoURL is the uploaded PDF, kept beside the short manifesto text
 	// voters read on the ballot.
-	ManifestoURL   string         `gorm:"size:500" json:"manifesto_url,omitempty"`
-	Bio            string         `gorm:"type:text" json:"bio"`
-	ContactEmail   string         `gorm:"size:255" json:"contact_email,omitempty"`
-	ContactPhone   string         `gorm:"size:50" json:"contact_phone,omitempty"`
-	BallotNumber   int            `gorm:"not null;default:0" json:"ballot_number"`
-	ApprovalStatus string         `gorm:"size:50;not null;default:'NOMINATED';index" json:"approval_status"`
-	ReviewNotes    string         `gorm:"type:text" json:"review_notes,omitempty"`
-	
+	ManifestoURL   string `gorm:"size:500" json:"manifesto_url,omitempty"`
+	Bio            string `gorm:"type:text" json:"bio"`
+	ContactEmail   string `gorm:"size:255" json:"contact_email,omitempty"`
+	ContactPhone   string `gorm:"size:50" json:"contact_phone,omitempty"`
+	BallotNumber   int    `gorm:"not null;default:0" json:"ballot_number"`
+	ApprovalStatus string `gorm:"size:50;not null;default:'NOMINATED';index" json:"approval_status"`
+	ReviewNotes    string `gorm:"type:text" json:"review_notes,omitempty"`
+
 	// Nomination tracking (ISSUE-06)
-	NominatedBy    string         `gorm:"size:36;index" json:"nominated_by,omitempty"` // User ID who nominated
-	ReviewedBy     string         `gorm:"size:36;index" json:"reviewed_by,omitempty"`  // User ID who reviewed
-	ReviewedAt     *time.Time     `json:"reviewed_at,omitempty"`
-	WithdrawnAt    *time.Time     `json:"withdrawn_at,omitempty"`
-	WithdrawalReason string       `gorm:"type:text" json:"withdrawal_reason,omitempty"`
-	
+	NominatedBy      string     `gorm:"size:36;index" json:"nominated_by,omitempty"` // User ID who nominated
+	ReviewedBy       string     `gorm:"size:36;index" json:"reviewed_by,omitempty"`  // User ID who reviewed
+	ReviewedAt       *time.Time `json:"reviewed_at,omitempty"`
+	WithdrawnAt      *time.Time `json:"withdrawn_at,omitempty"`
+	WithdrawalReason string     `gorm:"type:text" json:"withdrawal_reason,omitempty"`
+
 	// Application details for candidate screening
-	DateOfBirth    *time.Time     `json:"date_of_birth,omitempty"`
+	DateOfBirth        *time.Time `json:"date_of_birth,omitempty"`
 	RegistrationNumber string     `gorm:"size:100" json:"registration_number,omitempty"`
-	CampusResidence string        `gorm:"size:255" json:"campus_residence,omitempty"`
-	IDDocumentURL  string         `gorm:"size:500" json:"id_document_url,omitempty"`
-	PassportPhotoURL string        `gorm:"size:500" json:"passport_photo_url,omitempty"`
-	
-	CreatedAt      time.Time      `gorm:"index" json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+	CampusResidence    string     `gorm:"size:255" json:"campus_residence,omitempty"`
+	IDDocumentURL      string     `gorm:"size:500" json:"id_document_url,omitempty"`
+	PassportPhotoURL   string     `gorm:"size:500" json:"passport_photo_url,omitempty"`
+	// Programme and StudyYear are derived from the registration-number email
+	// (2024BSE088 → BSE, year of study in the current academic year).
+	Programme string `gorm:"size:50" json:"programme,omitempty"`
+	StudyYear int    `gorm:"not null;default:0" json:"study_year,omitempty"`
+
+	CreatedAt time.Time      `gorm:"index" json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // BeforeCreate assigns a new UUID and sets default status.

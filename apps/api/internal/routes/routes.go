@@ -25,6 +25,7 @@ import (
 	"campvote/apps/api/internal/handlers"
 	"campvote/apps/api/internal/health"
 	"campvote/apps/api/internal/jobs"
+	"campvote/apps/api/internal/lifecycle"
 	"campvote/apps/api/internal/llms"
 	"campvote/apps/api/internal/mail"
 	"campvote/apps/api/internal/middleware"
@@ -33,6 +34,7 @@ import (
 	"campvote/apps/api/internal/policy"
 	"campvote/apps/api/internal/realtime"
 	"campvote/apps/api/internal/respond"
+	"campvote/apps/api/internal/results"
 	"campvote/apps/api/internal/saga"
 	"campvote/apps/api/internal/sagas"
 	"campvote/apps/api/internal/services"
@@ -823,6 +825,22 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		realtimeOptions = append(realtimeOptions, realtime.WithRedis(cfg.RedisURL, ""))
 	}
 	realtimeHub := realtime.NewHub(realtimeOptions...)
+	// Register the one post-close hook before any request can close an
+	// election. It is idempotent and records the first provisional tally;
+	// Read retries a missing one after a restart or a failed hook.
+	lifecycle.OnClosed = results.OnClose
+	// A new snapshot is broadcast on a public channel named for the election.
+	// The payload says only that results changed: the results endpoint still
+	// applies the publication policy, and no count rides the socket.
+	results.OnSnapshot = func(electionID, snapshotID string) {
+		realtimeHub.Publish("public-election-results."+electionID, realtime.Event{
+			Type: "results.updated",
+			Payload: map[string]string{
+				"election_id": electionID,
+				"snapshot_id": snapshotID,
+			},
+		})
+	}
 	// Revoking a session has to close that user's live sockets too. Without
 	// this, "sign out of all devices" leaves every open WebSocket streaming.
 	services.OnSessionsRevoked = realtimeHub.DisconnectUser
@@ -1508,12 +1526,14 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.GET("/elections/:id", electionLifecycleHandler.Get)
 		staff.PUT("/elections/:id", electionLifecycleHandler.Update)
 		staff.POST("/elections/:id/transitions", electionLifecycleHandler.Transition)
+		staff.GET("/elections/:id/readiness", electionLifecycleHandler.Readiness)
 
 		// Per-election roles and the operations whose visibility depends on
 		// the election itself. policy.Guard has already checked the permission
 		// key; the handler then checks the actor's relationship to this one
 		// election, which is what stops a cross-election IDOR.
 		staff.GET("/elections/:id/roles", electionRBACHandler.ListRoles)
+		staff.GET("/elections/:id/roles/lookup", electionRBACHandler.LookupUser)
 		staff.PUT("/elections/:id/roles/:userId", electionRBACHandler.AssignRole)
 		staff.DELETE("/elections/:id/roles/:userId/:role", electionRBACHandler.RemoveRole)
 

@@ -29,6 +29,13 @@ const DisplayTimezone = "Africa/Kampala"
 // request made, rather than a person.
 const SystemActor = "system"
 
+// OnClosed runs after an election has been persisted as CLOSED. It is
+// registered by the HTTP layer so this package stays free of tally and
+// eligibility concerns, which import lifecycle and would otherwise form a
+// cycle. A hook failure is logged but never reopens the election: the close is
+// the durable fact, and Read retries a missing snapshot.
+var OnClosed func(db *gorm.DB, election *models.Election, at time.Time) error
+
 var (
 	// ErrIllegalTransition is returned for a state pair the machine forbids.
 	ErrIllegalTransition = errors.New("illegal election transition")
@@ -407,6 +414,14 @@ func persist(db *gorm.DB, e *models.Election, to, actorID, reason, ip string, at
 	// Reload so Version and UpdatedAt describe the row that was written.
 	if err := db.Where("id = ?", e.ID).First(e).Error; err != nil {
 		return nil, err
+	}
+	if to == models.ElectionStatusClosed && OnClosed != nil {
+		if hookErr := OnClosed(db, e, at); hookErr != nil {
+			// Closing is not undone by a tally failure. Read retries a missing
+			// snapshot, and the scheduler's next pass would close the same
+			// election only if it were still open, which it is not.
+			log.Printf("lifecycle: tally on close for election %s failed: %v", e.ID, hookErr)
+		}
 	}
 	return e, nil
 }

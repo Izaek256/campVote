@@ -6,6 +6,12 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
 import { ApiError } from "@/lib/api";
+import {
+  DEMO_STUDENT_EMAIL,
+  DEMO_STUDENT_PASSWORD,
+  STAFF_EMAIL_DOMAIN,
+  STUDENT_EMAIL_DOMAIN,
+} from "@/lib/config";
 
 export default function LoginPage() {
   const { user, loading, signIn } = useAuth();

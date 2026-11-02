@@ -11,6 +11,7 @@ import (
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/policy"
 	"campvote/apps/api/internal/respond"
+	"campvote/apps/api/internal/results"
 	"campvote/apps/api/internal/tally"
 )
 
@@ -87,64 +88,6 @@ func viewOf(snapshot models.ResultSnapshot) (snapshotView, bool) {
 		view.CertifiedAt = &at
 	}
 	return view, true
-}
-
-// compute tallies the election's stored ballots against its positions.
-func (h *ResultsHandler) compute(electionID string) (tally.Result, error) {
-	var eligible int64
-	if err := h.DB.Model(&models.ElectionRoster{}).
-		Where("election_id = ? AND status = ?", electionID, models.RosterStatusEligible).
-		Count(&eligible).Error; err != nil {
-		return tally.Result{}, err
-	}
-
-	var positions []models.Position
-	if err := h.DB.Where("election_id = ?", electionID).
-		Preload("Candidates").Order("display_order ASC, id ASC").
-		Find(&positions).Error; err != nil {
-		return tally.Result{}, err
-	}
-	rules := make([]tally.PositionRule, 0, len(positions))
-	for _, position := range positions {
-		rule := tally.PositionRule{
-			ID: position.ID, Title: position.Title, QuestionType: position.QuestionType,
-			Seats: position.Seats, DisplayOrder: position.DisplayOrder,
-		}
-		for _, candidate := range position.Candidates {
-			rule.Candidates = append(rule.Candidates, tally.CandidateRef{
-				ID: candidate.ID, Name: candidate.FullName,
-			})
-		}
-		rules = append(rules, rule)
-	}
-
-	// Only aggregate fields are loaded. Ballot rows carry no identity, so
-	// there is nothing here that could link a voter to a choice.
-	var stored []models.AnonymousBallot
-	if err := h.DB.Where("election_id = ?", electionID).
-		Preload("Selections").Find(&stored).Error; err != nil {
-		return tally.Result{}, err
-	}
-
-	ballots := make([]tally.Ballot, 0, len(stored))
-	for _, row := range stored {
-		ballot := tally.Ballot{ID: row.ID, Status: row.Status}
-		for _, selection := range row.Selections {
-			s := tally.Selection{PositionID: selection.PositionID, Choice: selection.Choice}
-			if selection.CandidateID != nil {
-				s.CandidateID = *selection.CandidateID
-			}
-			ballot.Selections = append(ballot.Selections, s)
-		}
-		ballots = append(ballots, ballot)
-	}
-
-	return tally.Compute(tally.Input{
-		ElectionID:     electionID,
-		EligibleVoters: int(eligible),
-		Positions:      rules,
-		Ballots:        ballots,
-	}), nil
 }
 
 // election loads the election by id. A missing election writes 404. It also
@@ -238,7 +181,7 @@ func (h *ResultsHandler) RunTally(c *gin.Context) {
 		return
 	}
 
-	result, err := h.compute(election.ID)
+	result, err := results.Compute(h.DB, election.ID)
 	if err != nil {
 		respond.Internal(c, err)
 		return
@@ -301,6 +244,7 @@ func (h *ResultsHandler) RunTally(c *gin.Context) {
 		respond.Internal(c, err)
 		return
 	}
+	results.NotifySnapshot(election.ID, snapshot.ID)
 	respond.Created(c, gin.H{
 		"election_id": election.ID,
 		"snapshot":    mustView(snapshot, result),
@@ -345,6 +289,16 @@ func (h *ResultsHandler) Read(c *gin.Context) {
 	snapshot, err := h.currentSnapshot(election.ID, staff)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// A close hook may have failed, or the election may have closed
+			// through a path that did not register one. Record the missing
+			// snapshot now, then try once more before reporting unavailable.
+			if results.Closed(election.Status) {
+				if _, tallyErr := results.EnsureOnClose(h.DB, &election, h.now()); tallyErr == nil {
+					snapshot, err = h.currentSnapshot(election.ID, staff)
+				}
+			}
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			respond.OK(c, gin.H{
 				"election_id": election.ID,
 				"available":   false,
@@ -353,8 +307,10 @@ func (h *ResultsHandler) Read(c *gin.Context) {
 			})
 			return
 		}
-		respond.Internal(c, err)
-		return
+		if err != nil {
+			respond.Internal(c, err)
+			return
+		}
 	}
 	view, ok := viewOf(snapshot)
 	if !ok {
@@ -446,7 +402,7 @@ func (h *ResultsHandler) Recount(c *gin.Context) {
 		return
 	}
 
-	recounted, err := h.compute(election.ID)
+	recounted, err := results.Compute(h.DB, election.ID)
 	if err != nil {
 		respond.Internal(c, err)
 		return

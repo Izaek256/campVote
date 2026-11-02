@@ -232,6 +232,23 @@ func TestOfficialCanEditButCannotCancelOrExtend(t *testing.T) {
 	}).AssertForbidden()
 }
 
+func TestPlainStudentCannotCreateElection(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	clock := now
+	engine := lifecycleEngine(t, db, &clock)
+	student := rbacUser(t, db, "2024bse088@std.mast.ac.ug", models.RoleStudentVoter)
+	token := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), student)
+	client := testkit.New(t, engine)
+
+	client.As(token).Post("/api/v1/elections", map[string]any{
+		"title":         "Student-run election",
+		"starts_at":     now.Add(time.Hour).Format(time.RFC3339),
+		"ends_at":       now.Add(3 * time.Hour).Format(time.RFC3339),
+		"result_policy": models.ResultPolicyAfterClose,
+	}).AssertForbidden()
+}
+
 func TestSpoofedDateHeaderCannotExtendVoting(t *testing.T) {
 	db := rbacDB(t)
 	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)

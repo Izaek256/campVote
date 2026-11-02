@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { Icon } from "@/components/icon";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
 import { StatusChip } from "@/components/status-chip";
+import { useChannel } from "@/hooks/use-realtime";
 import { ApiError, elections } from "@/lib/api";
 import { formatNumber, formatPercent } from "@/lib/format";
 import type { PositionResult, Results } from "@/lib/types";
@@ -56,26 +57,33 @@ function ResultsView({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [blocked, setBlocked] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    elections
-      .results(id)
-      .then((data) => {
-        if (active) setResults(data);
-      })
-      .catch((err) => {
-        if (!active) return;
-        if (err instanceof ApiError && err.status === 403) {
-          setBlocked(true);
-          setError(err.message);
-        } else {
-          setError(err instanceof ApiError ? err.message : "Results could not be loaded.");
-        }
-      });
-    return () => {
-      active = false;
-    };
+  const load = useCallback(async () => {
+    try {
+      const data = await elections.results(id);
+      setResults(data);
+      setError("");
+      setBlocked(false);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        setBlocked(true);
+        setError(err.message);
+      } else {
+        setError(err instanceof ApiError ? err.message : "Results could not be loaded.");
+      }
+    }
   }, [id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // The automatic tally at close publishes on this channel, so a page already
+  // open updates without a refresh or a staff click.
+  useChannel(`public-election-results.${id}`, {
+    "results.updated": () => {
+      void load();
+    },
+  });
 
   const snapshot = results?.snapshot;
   const certified = snapshot?.status === "CERTIFIED";

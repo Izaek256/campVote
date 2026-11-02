@@ -18,6 +18,7 @@ function Apply({ id }: { id: string }) {
 
   const [positionId, setPositionId] = useState("");
   const [fullName, setFullName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [slogan, setSlogan] = useState("");
   const [bio, setBio] = useState("");
   const [manifesto, setManifesto] = useState("");
@@ -25,7 +26,11 @@ function Apply({ id }: { id: string }) {
   const [contactPhone, setContactPhone] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [manifestoUrl, setManifestoUrl] = useState("");
-  const [uploading, setUploading] = useState<"photo" | "manifesto" | "">("");
+  const [passportPhotoUrl, setPassportPhotoUrl] = useState("");
+  const [idDocumentUrl, setIdDocumentUrl] = useState("");
+  const [uploading, setUploading] = useState<
+    "photo" | "manifesto" | "passport" | "id" | ""
+  >("");
 
   useEffect(() => {
     candidates
@@ -39,24 +44,30 @@ function Apply({ id }: { id: string }) {
       );
   }, [id]);
 
-  async function pickFile(kind: "photo" | "manifesto", file: File | undefined) {
+  async function pickFile(
+    kind: "photo" | "manifesto" | "passport" | "id",
+    file: File | undefined
+  ) {
     if (!file) return;
     setError("");
     setUploading(kind);
     try {
+      const isPdf = kind === "manifesto";
       const ref = await upload(file, {
-        accepts: kind === "photo" ? "image" : "pdf",
-        maxSize: (kind === "photo" ? 2 : 5) * 1024 * 1024,
+        accepts: isPdf ? "pdf" : "image",
+        maxSize: (isPdf ? 5 : 2) * 1024 * 1024,
       });
       if (kind === "photo") setPhotoUrl(ref.url);
-      else setManifestoUrl(ref.url);
+      else if (kind === "manifesto") setManifestoUrl(ref.url);
+      else if (kind === "passport") setPassportPhotoUrl(ref.url);
+      else setIdDocumentUrl(ref.url);
     } catch (err) {
       setError(
         err instanceof ApiError
           ? err.message
-          : kind === "photo"
-            ? "The photo could not be uploaded."
-            : "The manifesto could not be uploaded."
+          : kind === "manifesto"
+            ? "The manifesto could not be uploaded."
+            : "That document could not be uploaded."
       );
     } finally {
       setUploading("");
@@ -74,16 +85,31 @@ function Apply({ id }: { id: string }) {
       setError("Enter the name that should appear on the ballot.");
       return;
     }
+    if (!dateOfBirth) {
+      setError("Enter your date of birth.");
+      return;
+    }
+    if (!passportPhotoUrl) {
+      setError("Upload your passport photo.");
+      return;
+    }
+    if (!idDocumentUrl) {
+      setError("Upload a photo of your student ID.");
+      return;
+    }
     setBusy(true);
     try {
       await candidates.apply(id, {
         position_id: positionId,
         full_name: fullName.trim(),
+        date_of_birth: dateOfBirth,
         slogan: slogan.trim(),
         bio: bio.trim(),
         manifesto: manifesto.trim(),
         manifesto_url: manifestoUrl,
         photo_url: photoUrl,
+        passport_photo_url: passportPhotoUrl,
+        id_document_url: idDocumentUrl,
         contact_email: contactEmail.trim(),
         contact_phone: contactPhone.trim(),
       });
@@ -151,6 +177,7 @@ function Apply({ id }: { id: string }) {
 
   const closed = !view.accepting_applications;
   const blocked = closed || !view.eligible;
+  const selectedPosition = view.positions.find((position) => position.id === positionId);
 
   return (
     <main className="app-wrap">
@@ -185,7 +212,8 @@ function Apply({ id }: { id: string }) {
           <Icon name="clock" />
           <div>
             <b>Applications are closed</b>
-            {view.application_reason ?? "This election is no longer accepting applications."}
+            {view.application_reason ??
+              "Applications open when the election is in Registration and close when voting opens."}
           </div>
         </div>
       ) : null}
@@ -193,9 +221,16 @@ function Apply({ id }: { id: string }) {
         <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
           <Icon name="alert" />
           <div>
-            <b>You are not on this election&apos;s roster</b>
+            <b>You are not eligible to stand in this election</b>
             {view.eligibility_reason ?? "Only eligible voters may stand for election."}
           </div>
+        </div>
+      ) : null}
+
+      {selectedPosition?.requirements ? (
+        <div className="panel stack" style={{ marginBottom: 16 }}>
+          <span className="lbl">Requirements for {selectedPosition.title}</span>
+          <p style={{ whiteSpace: "pre-wrap" }}>{selectedPosition.requirements}</p>
         </div>
       ) : null}
 
@@ -231,6 +266,29 @@ function Apply({ id }: { id: string }) {
             ) : null}
           </div>
 
+          {view.applicant ? (
+            <div className="form-grid">
+              <div className="field">
+                <label htmlFor="programme">Programme</label>
+                <input
+                  id="programme"
+                  className="in"
+                  value={view.applicant.programme ?? ""}
+                  readOnly
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="study-year">Year of study</label>
+                <input
+                  id="study-year"
+                  className="in"
+                  value={view.applicant.study_year ?? ""}
+                  readOnly
+                />
+              </div>
+            </div>
+          ) : null}
+
           <div className="form-grid">
             <div className="field">
               <label htmlFor="full-name">Name on the ballot *</label>
@@ -245,6 +303,21 @@ function Apply({ id }: { id: string }) {
               />
             </div>
             <div className="field">
+              <label htmlFor="date-of-birth">Date of birth *</label>
+              <input
+                id="date-of-birth"
+                className="in"
+                type="date"
+                value={dateOfBirth}
+                onChange={(event) => setDateOfBirth(event.target.value)}
+                disabled={blocked}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="form-grid">
+            <div className="field">
               <label htmlFor="slogan">Slogan (optional)</label>
               <input
                 id="slogan"
@@ -254,6 +327,15 @@ function Apply({ id }: { id: string }) {
                 disabled={blocked}
                 maxLength={200}
                 placeholder="One line voters will remember"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="registration-number">Registration number</label>
+              <input
+                id="registration-number"
+                className="in"
+                value={view.applicant?.registration_number ?? ""}
+                readOnly
               />
             </div>
           </div>
@@ -296,7 +378,7 @@ function Apply({ id }: { id: string }) {
                 value={contactEmail}
                 onChange={(event) => setContactEmail(event.target.value)}
                 disabled={blocked}
-                placeholder="you@std.must.ac.ug"
+                placeholder="you@std.mast.ac.ug"
               />
             </div>
             <div className="field">
@@ -314,7 +396,54 @@ function Apply({ id }: { id: string }) {
 
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="photo">Photo (JPEG or PNG, max 2 MB)</label>
+              <label htmlFor="passport-photo">Passport photo (JPEG or PNG, max 2 MB) *</label>
+              <input
+                id="passport-photo"
+                className="in"
+                type="file"
+                accept="image/jpeg,image/png"
+                disabled={blocked || uploading !== ""}
+                onChange={(event) => pickFile("passport", event.target.files?.[0])}
+                required
+              />
+              {uploading === "passport" ? (
+                <span className="hint">Uploading passport photo…</span>
+              ) : null}
+              {passportPhotoUrl ? (
+                <span className="fileline">
+                  <Icon name="check" size="s" />
+                  Passport photo uploaded
+                  <span className="mono">ready</span>
+                </span>
+              ) : null}
+            </div>
+            <div className="field">
+              <label htmlFor="student-id">Student ID photo (JPEG or PNG, max 2 MB) *</label>
+              <input
+                id="student-id"
+                className="in"
+                type="file"
+                accept="image/jpeg,image/png"
+                disabled={blocked || uploading !== ""}
+                onChange={(event) => pickFile("id", event.target.files?.[0])}
+                required
+              />
+              {uploading === "id" ? (
+                <span className="hint">Uploading student ID…</span>
+              ) : null}
+              {idDocumentUrl ? (
+                <span className="fileline">
+                  <Icon name="check" size="s" />
+                  Student ID uploaded
+                  <span className="mono">ready</span>
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="photo">Ballot photo (optional, JPEG or PNG, max 2 MB)</label>
               <input
                 id="photo"
                 className="in"
@@ -333,7 +462,7 @@ function Apply({ id }: { id: string }) {
               ) : null}
             </div>
             <div className="field">
-              <label htmlFor="manifesto-file">Manifesto PDF (max 5 MB)</label>
+              <label htmlFor="manifesto-file">Manifesto PDF (optional, max 5 MB)</label>
               <input
                 id="manifesto-file"
                 className="in"

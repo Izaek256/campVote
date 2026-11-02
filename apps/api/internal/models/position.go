@@ -3,8 +3,8 @@ package models
 import (
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/ids"
+	"gorm.io/gorm"
 )
 
 // Question / contest types (FR-BALLOT-03)
@@ -17,25 +17,28 @@ const (
 
 // Position represents an elected office, contest, or ballot proposition.
 type Position struct {
-	ID            string         `gorm:"primarykey;size:36" json:"id"`
-	ElectionID    string         `gorm:"size:36;not null;index" json:"election_id"`
-	Title         string         `gorm:"size:255;not null" json:"title" binding:"required"`
-	Description   string         `gorm:"type:text" json:"description"`
-	QuestionType  string         `gorm:"size:50;not null;default:'SINGLE_CHOICE'" json:"question_type"`
-	
+	ID          string `gorm:"primarykey;size:36" json:"id"`
+	ElectionID  string `gorm:"size:36;not null;index" json:"election_id"`
+	Title       string `gorm:"size:255;not null" json:"title" binding:"required"`
+	Description string `gorm:"type:text" json:"description"`
+	// Requirements is the eligibility/experience text shown to applicants
+	// before they apply and to officials while vetting.
+	Requirements string `gorm:"type:text" json:"requirements"`
+	QuestionType string `gorm:"size:50;not null;default:'SINGLE_CHOICE'" json:"question_type"`
+
 	// Rules for ballot validity (FR-BALLOT-05)
-	MinSelections int            `gorm:"not null;default:1" json:"min_selections"`
-	MaxSelections int            `gorm:"not null;default:1" json:"max_selections"`
-	Seats         int            `gorm:"not null;default:1" json:"seats"`
-	AllowBlank    bool           `gorm:"default:false" json:"allow_blank"`
-	DisplayOrder  int            `gorm:"not null;default:0" json:"display_order"`
-	
-	CreatedAt     time.Time      `gorm:"index" json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+	MinSelections int  `gorm:"not null;default:1" json:"min_selections"`
+	MaxSelections int  `gorm:"not null;default:1" json:"max_selections"`
+	Seats         int  `gorm:"not null;default:1" json:"seats"`
+	AllowBlank    bool `gorm:"default:false" json:"allow_blank"`
+	DisplayOrder  int  `gorm:"not null;default:0" json:"display_order"`
+
+	CreatedAt time.Time      `gorm:"index" json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Associations
-	Candidates    []Candidate    `gorm:"foreignKey:PositionID;constraint:OnDelete:CASCADE" json:"candidates,omitempty"`
+	Candidates []Candidate `gorm:"foreignKey:PositionID;constraint:OnDelete:CASCADE" json:"candidates,omitempty"`
 }
 
 // BeforeCreate assigns a new UUID.

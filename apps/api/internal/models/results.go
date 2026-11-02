@@ -22,9 +22,10 @@ const (
 // new record that keeps the original visible instead of an edit in place.
 type ResultSnapshot struct {
 	ID         string `gorm:"primarykey;size:36" json:"id"`
-	ElectionID string `gorm:"size:36;not null;index" json:"election_id"`
+	ElectionID string `gorm:"size:36;not null;index;uniqueIndex:idx_result_snapshot_election_version" json:"election_id"`
 	// Version numbers this election's snapshots 1, 2, 3... The latest
-	// non-superseded one is the current result.
+	// non-superseded one is the current result. Versions are unique per
+	// election, not globally.
 	Version int    `gorm:"not null;default:1;uniqueIndex:idx_result_snapshot_election_version" json:"version"`
 	Status  string `gorm:"size:20;not null;default:'PROVISIONAL';index" json:"status"`
 

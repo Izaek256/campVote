@@ -17,7 +17,7 @@ import {
   formatPercent,
   statusLabel,
 } from "@/lib/format";
-import type { Election, EligibilityReport, Results } from "@/lib/types";
+import type { Election, ElectionRole, EligibilityReport, Results } from "@/lib/types";
 
 function toEatInput(iso: string): string {
   const date = new Date(iso);
@@ -38,6 +38,27 @@ function toISO(value: string): string {
   return value ? `${value}:00+03:00` : "";
 }
 
+function transitionLabel(to: string): string {
+  switch (to) {
+    case "REGISTRATION":
+      return "Open applications";
+    case "SCHEDULED":
+      return "Schedule election";
+    case "PENDING_APPROVAL":
+      return "Send for approval";
+    case "CLOSED":
+      return "Close early";
+    case "RESULTS_UNDER_REVIEW":
+      return "Review results";
+    case "ARCHIVED":
+      return "Archive";
+    case "CANCELLED":
+      return "Cancel";
+    default:
+      return statusLabel(to as Election["status"]);
+  }
+}
+
 function Manage({ id }: { id: string }) {
   const [election, setElection] = useState<Election | null>(null);
   const [report, setReport] = useState<EligibilityReport | null>(null);
@@ -52,6 +73,19 @@ function Manage({ id }: { id: string }) {
   const [certifyReason, setCertifyReason] = useState("");
   const [form, setForm] = useState({ title: "", starts_at: "", ends_at: "", reason: "" });
   const [fields, setFields] = useState<Record<string, string>>({});
+  const [eligibility, setEligibility] = useState({
+    allowed_domain: "",
+    allowed_years: "",
+    allowed_courses: "",
+  });
+  const [readiness, setReadiness] = useState<{
+    ready: boolean;
+    problems: Record<string, string>;
+  } | null>(null);
+  const [roles, setRoles] = useState<ElectionRole[]>([]);
+  const [roleEmail, setRoleEmail] = useState("");
+  const [roleName, setRoleName] = useState("ELECTION_OFFICIAL");
+  const [roleBusy, setRoleBusy] = useState(false);
 
   const load = useCallback(async () => {
     const messages: string[] = [];
@@ -63,6 +97,11 @@ function Manage({ id }: { id: string }) {
         starts_at: toEatInput(current.starts_at),
         ends_at: toEatInput(current.ends_at),
         reason: "",
+      });
+      setEligibility({
+        allowed_domain: current.allowed_domain ?? "",
+        allowed_years: current.allowed_years ?? "",
+        allowed_courses: current.allowed_courses ?? "",
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Election could not be loaded.");
@@ -86,6 +125,24 @@ function Manage({ id }: { id: string }) {
       return null;
     });
     setResults(resultsResult);
+    const readinessResult = await elections.readiness(id).catch((err) => {
+      messages.push(
+        err instanceof ApiError && err.status === 403
+          ? "Readiness checks need the election edit permission."
+          : "Readiness could not be checked."
+      );
+      return null;
+    });
+    setReadiness(readinessResult);
+    const roleResult = await elections.roles.list(id).catch((err) => {
+      messages.push(
+        err instanceof ApiError && err.status === 403
+          ? "Role assignments need the elections.roles permission."
+          : "Role assignments could not be loaded."
+      );
+      return [] as ElectionRole[];
+    });
+    setRoles(roleResult ?? []);
     setNotes(messages);
   }, [id]);
 
@@ -133,6 +190,59 @@ function Manage({ id }: { id: string }) {
     if (ok) {
       setPendingTo("");
       setReason("");
+    }
+  }
+
+  async function saveEligibility(event: React.FormEvent) {
+    event.preventDefault();
+    const ok = await run(
+      () =>
+        elections.update(id, {
+          allowed_domain: eligibility.allowed_domain.trim(),
+          allowed_years: eligibility.allowed_years.trim(),
+          allowed_courses: eligibility.allowed_courses.trim(),
+          reason: form.reason,
+        }),
+      "Eligibility rule saved."
+    );
+    if (ok) await load();
+  }
+
+  async function assignRole(event: React.FormEvent) {
+    event.preventDefault();
+    if (!roleEmail.trim()) {
+      setError("Enter the email address of the account to assign.");
+      return;
+    }
+    setRoleBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const user = await elections.roles.lookup(id, roleEmail.trim());
+      await elections.roles.assign(id, user.user_id, roleName);
+      setNotice(`${user.full_name || user.email} was assigned ${roleName.replaceAll("_", " ")}.`);
+      setRoleEmail("");
+      const next = await elections.roles.list(id);
+      setRoles(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "The role could not be assigned.");
+    } finally {
+      setRoleBusy(false);
+    }
+  }
+
+  async function removeRole(userId: string, role: string) {
+    setRoleBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await elections.roles.remove(id, userId, role);
+      setRoles(await elections.roles.list(id));
+      setNotice("Role removed.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "The role could not be removed.");
+    } finally {
+      setRoleBusy(false);
     }
   }
 
@@ -270,6 +380,79 @@ function Manage({ id }: { id: string }) {
         </div>
       </div>
 
+      <section className="panel" id="eligibility" style={{ marginBottom: 20 }}>
+        <div className="section-h" style={{ marginTop: 0 }}>
+          <h2>Eligibility rule</h2>
+          <span className="mono">
+            {report ? `${formatNumber(report.eligible)} registered users match` : "count loading"}
+          </span>
+        </div>
+        <form className="form-stack" onSubmit={saveEligibility}>
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="eligibility-domain">Student email domain</label>
+              <input
+                id="eligibility-domain"
+                className="in"
+                value={eligibility.allowed_domain}
+                onChange={(event) =>
+                  setEligibility({ ...eligibility, allowed_domain: event.target.value })
+                }
+                placeholder="std.mast.ac.ug"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="eligibility-years">Enrolment years (comma separated, blank = any)</label>
+              <input
+                id="eligibility-years"
+                className="in"
+                value={eligibility.allowed_years}
+                onChange={(event) =>
+                  setEligibility({ ...eligibility, allowed_years: event.target.value })
+                }
+                placeholder="2024"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="eligibility-courses">Course codes (comma separated, blank = any)</label>
+              <input
+                id="eligibility-courses"
+                className="in"
+                value={eligibility.allowed_courses}
+                onChange={(event) =>
+                  setEligibility({ ...eligibility, allowed_courses: event.target.value })
+                }
+                placeholder="bse"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="eligibility-reason">Reason (required once frozen)</label>
+              <input
+                id="eligibility-reason"
+                className="in"
+                value={form.reason}
+                onChange={(event) => setForm({ ...form, reason: event.target.value })}
+                placeholder="Why the audience changed"
+              />
+            </div>
+          </div>
+          <p className="hint">
+            Example:{" "}
+            <span className="mono">
+              {(eligibility.allowed_years.split(",")[0] || "2024").trim().toUpperCase()}
+              {(eligibility.allowed_courses.split(",")[0] || "BSE").trim().toUpperCase()}
+              088@{eligibility.allowed_domain || "std.mast.ac.ug"}
+            </span>{" "}
+            is eligible. Empty year or course lists mean “any”.
+          </p>
+          <div>
+            <button className="btn primary" type="submit" disabled={busy}>
+              Save eligibility rule
+            </button>
+          </div>
+        </form>
+      </section>
+
       <div className="split">
         <div className="stack">
           <section className="panel">
@@ -302,6 +485,19 @@ function Manage({ id }: { id: string }) {
               Opening and closing follow the schedule automatically. Cancel, archive and an early
               close need a reason and the publisher permission.
             </p>
+            {readiness && !readiness.ready ? (
+              <div className="banner hatch" role="status" style={{ marginTop: 12 }}>
+                <Icon name="alert" size="s" />
+                <div>
+                  <b>Not ready to schedule</b>
+                  {Object.entries(readiness.problems).map(([field, problem]) => (
+                    <span key={field} className="hint" style={{ display: "block" }}>
+                      {problem}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="row" style={{ marginTop: 14 }}>
               {transitions.length === 0 ? (
                 <span className="hint">No further transitions are available.</span>
@@ -311,13 +507,13 @@ function Manage({ id }: { id: string }) {
                     key={to}
                     type="button"
                     className={`btn sm${to === "CANCELLED" ? " danger-o" : ""}`}
-                    disabled={busy}
+                    disabled={busy || (to === "SCHEDULED" && readiness !== null && !readiness.ready)}
                     onClick={() => {
                       setPendingTo(to);
                       setReason("");
                     }}
                   >
-                    {statusLabel(to)}
+                    {transitionLabel(to)}
                   </button>
                 ))
               )}
@@ -335,9 +531,9 @@ function Manage({ id }: { id: string }) {
             </div>
           </section>
 
-          <section className="panel">
+          <section className="panel" id="schedule">
             <div className="section-h" style={{ marginTop: 0 }}>
-              <h2>Configuration</h2>
+              <h2>Schedule</h2>
               <span className="mono">{frozen ? "frozen · reason required" : "before open"}</span>
             </div>
             <form className="form-stack" onSubmit={update}>
@@ -471,6 +667,64 @@ function Manage({ id }: { id: string }) {
               </Link>
             </div>
           </div>
+          <div className="panel stack">
+            <span className="lbl">Temporary election roles</span>
+            <form className="form-stack" onSubmit={assignRole}>
+              <div className="field">
+                <label htmlFor="role-email">Account email</label>
+                <input
+                  id="role-email"
+                  className="in"
+                  type="email"
+                  value={roleEmail}
+                  onChange={(event) => setRoleEmail(event.target.value)}
+                  placeholder="organizer@std.mast.ac.ug"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="role-name">Role on this election</label>
+                <select
+                  id="role-name"
+                  className="sel"
+                  value={roleName}
+                  onChange={(event) => setRoleName(event.target.value)}
+                >
+                  <option value="ELECTION_OFFICIAL">Election organizer</option>
+                  <option value="CHIEF_ELECTION_ADMIN">Chief election admin</option>
+                  <option value="ELECTION_AUDITOR">Election auditor</option>
+                  <option value="CANDIDATE">Candidate</option>
+                </select>
+              </div>
+              <button className="btn sm primary" type="submit" disabled={roleBusy}>
+                {roleBusy ? "Working…" : "Assign role"}
+              </button>
+            </form>
+            {roles.length === 0 ? (
+              <span className="hint">No temporary roles assigned.</span>
+            ) : (
+              <div className="stack">
+                {roles.map((role) => (
+                  <div className="row-between" key={role.user_id + role.role}>
+                    <span>
+                      <b>{role.full_name || role.email || role.user_id}</b>
+                      <span className="hint" style={{ display: "block" }}>
+                        {role.email} · {role.role.replaceAll("_", " ").toLowerCase()}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn sm danger-o"
+                      disabled={roleBusy}
+                      onClick={() => removeRole(role.user_id, role.role)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="panel stack">
             <span className="lbl">Audit</span>
             <dl className="kv">

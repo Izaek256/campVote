@@ -11,14 +11,19 @@ export function StaffShell({ children, title }: { children: React.ReactNode; tit
           <Icon name="moon" />
           campVote
         </Link>
-        <span className="h">Elections</span>
+        <span className="h">Staff</span>
         <Link className="on" href="/staff">
           <Icon name="chart" />
           Dashboard
         </Link>
+        <Link href="/staff">
+          <Icon name="ballot" />
+          Elections
+        </Link>
+        <span className="h">Voter site</span>
         <Link href="/elections">
           <Icon name="ballot" />
-          Voter view
+          All elections
         </Link>
         <Link href="/candidate">
           <Icon name="user" />

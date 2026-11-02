@@ -4,7 +4,9 @@ package eligibility
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"campvote/apps/api/internal/models"
 )
@@ -73,6 +75,31 @@ func RuleAllows(e *models.Election, id Identity) bool {
 	}
 
 	return true
+}
+
+// Programme returns the upper-cased course code, e.g. "BSE".
+func (id Identity) Programme() string {
+	return strings.ToUpper(id.Course)
+}
+
+// StudyYear derives the year of study from the enrolment year and the current
+// date. The academic year starts in August, so in November 2026 a student who
+// enrolled in 2024 is in year 3. A future enrolment year is clamped to 1.
+func (id Identity) StudyYear(at time.Time) int {
+	year, err := strconv.Atoi(id.Year)
+	if err != nil {
+		return 0
+	}
+	at = at.UTC()
+	academicStart := at.Year()
+	if at.Month() < time.August {
+		academicStart--
+	}
+	studyYear := academicStart - year + 1
+	if studyYear < 1 {
+		return 1
+	}
+	return studyYear
 }
 
 // inList checks whether val appears in a comma-separated list, case-insensitively.

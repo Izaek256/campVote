@@ -53,6 +53,9 @@ func resultsFixtureFor(t *testing.T, db *gorm.DB, id string, status, policy stri
 		ID: id, Title: id, Status: status, ResultPolicy: policy,
 		StartsAt: now.Add(-2 * time.Hour), EndsAt: now.Add(-time.Hour),
 		CreatedByID: creator.ID,
+		// Rule-based eligibility: only the two verified accounts below match.
+		AllowedDomain: "std.mast.ac.ug",
+		AllowedYears:  "2020",
 	}
 	if err := db.Create(&election).Error; err != nil {
 		t.Fatal(err)
@@ -69,7 +72,8 @@ func resultsFixtureFor(t *testing.T, db *gorm.DB, id string, status, policy stri
 			t.Fatal(err)
 		}
 	}
-	for _, email := range []string{"one-" + id + "@std.mast.ac.ug", "two-" + id + "@std.mast.ac.ug"} {
+	for _, email := range []string{"2020bse001@std.mast.ac.ug", "2020bse002@std.mast.ac.ug"} {
+		testkit.User(t, db, email, models.RoleStudentVoter)
 		row := models.ElectionRoster{ElectionID: id, Email: email, StudentNumber: email, Status: models.RosterStatusEligible}
 		if err := db.Create(&row).Error; err != nil {
 			t.Fatal(err)
@@ -496,4 +500,36 @@ func indexOf(haystack, needle string) int {
 		}
 	}
 	return -1
+}
+
+// A closed election with no snapshot yet is tallied on the first read, so a
+// close hook that failed or never ran does not leave voters with a blank page.
+func TestReadRecordsMissingTallyForAClosedElection(t *testing.T) {
+	db := rbacDB(t)
+	fixture := resultsFixtureFor(t, db, "e-retry", models.ElectionStatusClosed, models.ResultPolicyAfterClose)
+	castBallot(t, db, fixture.electionID, fixture.adaID)
+	voter := testkit.User(t, db, "2022bse008@std.mast.ac.ug", models.RoleStudentVoter)
+	voterToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), voter)
+
+	client := testkit.New(t, resultsEngine(t, db))
+	var body struct {
+		Available bool   `json:"available"`
+		Label     string `json:"label"`
+		Snapshot  struct {
+			BallotsCast int `json:"ballots_cast"`
+		} `json:"snapshot"`
+	}
+	client.As(voterToken).Get("/api/v1/elections/e-retry/results").AssertOK().BindData(&body)
+
+	if !body.Available || body.Label != models.ResultStatusProvisional {
+		t.Fatalf("read returned available=%v label=%q, want a provisional snapshot", body.Available, body.Label)
+	}
+	if body.Snapshot.BallotsCast != 1 {
+		t.Fatalf("ballots cast = %d, want 1", body.Snapshot.BallotsCast)
+	}
+	var count int64
+	db.Model(&models.ResultSnapshot{}).Where("election_id = ?", fixture.electionID).Count(&count)
+	if count != 1 {
+		t.Fatalf("snapshots = %d, want exactly 1", count)
+	}
 }

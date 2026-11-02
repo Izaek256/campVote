@@ -81,21 +81,33 @@ func (h *CandidateHandler) Application(c *gin.Context) {
 		return
 	}
 
+	applicant := gin.H{}
+	if user := requestUser(c); user != nil {
+		if id, ok := eligibility.ParseEmail(user.Email); ok {
+			applicant = gin.H{
+				"programme":           id.Programme(),
+				"study_year":          id.StudyYear(h.now()),
+				"registration_number": strings.ToUpper(id.Year + id.Course + id.Number),
+			}
+		}
+	}
+
 	respond.OK(c, gin.H{
 		"election": gin.H{
-			"id":         election.ID,
-			"title":      election.Title,
-			"status":     election.Status,
-			"starts_at":  election.StartsAt,
-			"ends_at":    election.EndsAt,
-			"category":   election.Category,
-			"unit":       election.OrganizingUnit,
+			"id":        election.ID,
+			"title":     election.Title,
+			"status":    election.Status,
+			"starts_at": election.StartsAt,
+			"ends_at":   election.EndsAt,
+			"category":  election.Category,
+			"unit":      election.OrganizingUnit,
 		},
-		"positions":            positions,
-		"eligible":             decision.Eligible,
-		"eligibility_reason":   decision.Reason,
+		"positions":              positions,
+		"applicant":              applicant,
+		"eligible":               decision.Eligible,
+		"eligibility_reason":     decision.Reason,
 		"accepting_applications": open,
-		"application_reason":   reason,
+		"application_reason":     reason,
 	})
 }
 
@@ -129,6 +141,11 @@ func (h *CandidateHandler) Apply(c *gin.Context) {
 	}
 	if !decision.Eligible {
 		respond.Forbidden(c, decision.Reason)
+		return
+	}
+	identity, parsed := eligibility.ParseEmail(user.Email)
+	if !parsed {
+		respond.Forbidden(c, "Your email address does not match the student registration format")
 		return
 	}
 
@@ -182,6 +199,27 @@ func (h *CandidateHandler) Apply(c *gin.Context) {
 		respond.BadRequest(c, "Uploaded files must be links to this site or an https address")
 		return
 	}
+	if strings.TrimSpace(input.DateOfBirth) == "" {
+		respond.BadRequest(c, "Your date of birth is required")
+		return
+	}
+	dob, err := time.Parse("2006-01-02", strings.TrimSpace(input.DateOfBirth))
+	if err != nil {
+		respond.BadRequest(c, "Invalid date of birth format. Use YYYY-MM-DD")
+		return
+	}
+	if !dob.Before(h.now()) {
+		respond.BadRequest(c, "Your date of birth must be in the past")
+		return
+	}
+	if strings.TrimSpace(input.PassportPhotoURL) == "" {
+		respond.BadRequest(c, "A passport photo is required")
+		return
+	}
+	if strings.TrimSpace(input.IDDocumentURL) == "" {
+		respond.BadRequest(c, "A photo of your student ID is required")
+		return
+	}
 
 	var position models.Position
 	if err := h.DB.Where("id = ? AND election_id = ?", input.PositionID, electionID).
@@ -196,46 +234,42 @@ func (h *CandidateHandler) Apply(c *gin.Context) {
 
 	var existing int64
 	if err := h.DB.Model(&models.Candidate{}).
-		Where("election_id = ? AND nominated_by = ? AND approval_status <> ?",
-			electionID, user.ID, models.CandidateStatusWithdrawn).
+		Where("election_id = ? AND nominated_by = ? AND position_id = ? AND approval_status <> ?",
+			electionID, user.ID, input.PositionID, models.CandidateStatusWithdrawn).
 		Count(&existing).Error; err != nil {
 		respond.Internal(c, err)
 		return
 	}
 	if existing > 0 {
-		respond.Conflict(c, "You already have an application for this election")
+		respond.Conflict(c, "You already have an application for this position")
 		return
 	}
 
 	candidate := models.Candidate{
-		ElectionID:          electionID,
-		PositionID:          input.PositionID,
-		FullName:            fullName,
-		Slogan:              strings.TrimSpace(input.Slogan),
-		PhotoURL:            strings.TrimSpace(input.PhotoURL),
-		Manifesto:           strings.TrimSpace(input.Manifesto),
-		ManifestoURL:        strings.TrimSpace(input.ManifestoURL),
-		Bio:                 strings.TrimSpace(input.Bio),
-		ContactEmail:        contactEmail,
-		ContactPhone:        strings.TrimSpace(input.ContactPhone),
-		// Additional fields
-		RegistrationNumber:  strings.TrimSpace(input.RegistrationNumber),
-		CampusResidence:     strings.TrimSpace(input.CampusResidence),
-		IDDocumentURL:       strings.TrimSpace(input.IDDocumentURL),
-		PassportPhotoURL:    strings.TrimSpace(input.PassportPhotoURL),
-		ApprovalStatus:      models.CandidateStatusNominated,
-		NominatedBy:         user.ID,
+		ElectionID:   electionID,
+		PositionID:   input.PositionID,
+		FullName:     fullName,
+		Slogan:       strings.TrimSpace(input.Slogan),
+		PhotoURL:     strings.TrimSpace(input.PhotoURL),
+		Manifesto:    strings.TrimSpace(input.Manifesto),
+		ManifestoURL: strings.TrimSpace(input.ManifestoURL),
+		Bio:          strings.TrimSpace(input.Bio),
+		ContactEmail: contactEmail,
+		ContactPhone: strings.TrimSpace(input.ContactPhone),
+		// Registration identity is derived from the verified email, not typed.
+		RegistrationNumber: strings.ToUpper(identity.Year + identity.Course + identity.Number),
+		Programme:          identity.Programme(),
+		StudyYear:          identity.StudyYear(h.now()),
+		CampusResidence:    strings.TrimSpace(input.CampusResidence),
+		IDDocumentURL:      strings.TrimSpace(input.IDDocumentURL),
+		PassportPhotoURL:   strings.TrimSpace(input.PassportPhotoURL),
+		ApprovalStatus:     models.CandidateStatusNominated,
+		NominatedBy:        user.ID,
 	}
-
-	// Parse date of birth if provided
-	if input.DateOfBirth != "" {
-		dob, err := time.Parse("2006-01-02", input.DateOfBirth)
-		if err != nil {
-			respond.BadRequest(c, "Invalid date of birth format. Use YYYY-MM-DD")
-			return
-		}
-		candidate.DateOfBirth = &dob
+	if candidate.PhotoURL == "" {
+		candidate.PhotoURL = candidate.PassportPhotoURL
 	}
+	candidate.DateOfBirth = &dob
 
 	if err := h.DB.Create(&candidate).Error; err != nil {
 		respond.Internal(c, err)
@@ -337,17 +371,19 @@ func (h *CandidateHandler) Create(c *gin.Context) {
 	userID := c.GetString("user_id")
 
 	var input struct {
-		PositionID   string `json:"position_id" binding:"required"`
-		FullName     string `json:"full_name" binding:"required"`
-		PhotoURL     string `json:"photo_url"`
-		Manifesto    string `json:"manifesto"`
-		Bio          string `json:"bio"`
+		PositionID string `json:"position_id" binding:"required"`
+		FullName   string `json:"full_name" binding:"required"`
+		PhotoURL   string `json:"photo_url"`
+		Manifesto  string `json:"manifesto"`
+		Bio        string `json:"bio"`
 		// Additional fields from comprehensive system
 		DateOfBirth        string `json:"date_of_birth"`
 		RegistrationNumber string `json:"registration_number"`
 		CampusResidence    string `json:"campus_residence"`
 		IDDocumentURL      string `json:"id_document_url"`
 		PassportPhotoURL   string `json:"passport_photo_url"`
+		Programme          string `json:"programme"`
+		StudyYear          int    `json:"study_year"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -367,18 +403,20 @@ func (h *CandidateHandler) Create(c *gin.Context) {
 	}
 
 	candidate := models.Candidate{
-		ElectionID:          electionID,
-		PositionID:          input.PositionID,
-		FullName:            input.FullName,
-		PhotoURL:            input.PhotoURL,
-		Manifesto:           input.Manifesto,
-		Bio:                 input.Bio,
-		ApprovalStatus:      models.CandidateStatusNominated,
-		NominatedBy:         userID,
-		RegistrationNumber:  input.RegistrationNumber,
-		CampusResidence:     input.CampusResidence,
-		IDDocumentURL:       input.IDDocumentURL,
-		PassportPhotoURL:    input.PassportPhotoURL,
+		ElectionID:         electionID,
+		PositionID:         input.PositionID,
+		FullName:           input.FullName,
+		PhotoURL:           input.PhotoURL,
+		Manifesto:          input.Manifesto,
+		Bio:                input.Bio,
+		ApprovalStatus:     models.CandidateStatusNominated,
+		NominatedBy:        userID,
+		RegistrationNumber: input.RegistrationNumber,
+		CampusResidence:    input.CampusResidence,
+		IDDocumentURL:      input.IDDocumentURL,
+		PassportPhotoURL:   input.PassportPhotoURL,
+		Programme:          strings.TrimSpace(input.Programme),
+		StudyYear:          input.StudyYear,
 	}
 
 	// Parse date of birth if provided
@@ -429,14 +467,14 @@ func (h *CandidateHandler) Update(c *gin.Context) {
 	// TODO: Add proper role check for officer access
 
 	var input struct {
-		FullName           string `json:"full_name"`
-		Slogan             string `json:"slogan"`
-		PhotoURL           string `json:"photo_url"`
-		Manifesto          string `json:"manifesto"`
-		ManifestoURL       string `json:"manifesto_url"`
-		Bio                string `json:"bio"`
-		ContactEmail       string `json:"contact_email"`
-		ContactPhone       string `json:"contact_phone"`
+		FullName     string `json:"full_name"`
+		Slogan       string `json:"slogan"`
+		PhotoURL     string `json:"photo_url"`
+		Manifesto    string `json:"manifesto"`
+		ManifestoURL string `json:"manifesto_url"`
+		Bio          string `json:"bio"`
+		ContactEmail string `json:"contact_email"`
+		ContactPhone string `json:"contact_phone"`
 		// Additional fields from comprehensive system
 		DateOfBirth        string `json:"date_of_birth"`
 		RegistrationNumber string `json:"registration_number"`
@@ -736,9 +774,9 @@ func (h *CandidateHandler) GetMyCandidacies(c *gin.Context) {
 	out := make([]gin.H, 0, len(candidates))
 	for _, candidate := range candidates {
 		out = append(out, gin.H{
-			"candidate":       candidate,
-			"election_title":  electionNames[candidate.ElectionID],
-			"position_title":  positionNames[candidate.PositionID],
+			"candidate":      candidate,
+			"election_title": electionNames[candidate.ElectionID],
+			"position_title": positionNames[candidate.PositionID],
 		})
 	}
 	respond.OK(c, gin.H{"candidates": out})

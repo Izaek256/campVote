@@ -5,6 +5,8 @@ import type {
   Candidate,
   CandidateApplicationView,
   Election,
+  ElectionRole,
+  ElectionStatus,
   EligibilityDecision,
   EligibilityReport,
   MyCandidate,
@@ -169,6 +171,13 @@ export const staff = {
       voted: number;
       percent: number;
       suppressed: boolean;
+      positions?: Array<{
+        position_id: string;
+        title: string;
+        ballots_answered: number;
+        blank_count: number;
+        abstain_count: number;
+      }>;
       last_refresh: string;
     }>(`/elections/${electionId}/turnout`),
   versions: (electionId: string) =>
@@ -218,6 +227,28 @@ export const elections = {
     api<Election>(`/elections/${id}`, { method: "PUT", body }),
   transition: (id: string, to: string, reason = "") =>
     api<Election>(`/elections/${id}/transitions`, { method: "POST", body: { to, reason } }),
+  readiness: (id: string) =>
+    api<{
+      ready: boolean;
+      status: ElectionStatus;
+      problems: Record<string, string>;
+    }>(`/elections/${id}/readiness`),
+  roles: {
+    list: (id: string) => api<ElectionRole[]>(`/elections/${id}/roles`),
+    lookup: (id: string, email: string) =>
+      api<{ user_id: string; email: string; full_name: string; election_id: string }>(
+        `/elections/${id}/roles/lookup?email=${encodeURIComponent(email)}`
+      ),
+    assign: (id: string, userId: string, role: string) =>
+      api<ElectionRole>(`/elections/${id}/roles/${userId}`, {
+        method: "PUT",
+        body: { role },
+      }),
+    remove: (id: string, userId: string, role: string) =>
+      api<{ removed: boolean }>(`/elections/${id}/roles/${userId}/${role}`, {
+        method: "DELETE",
+      }),
+  },
   eligibility: (id: string) => api<EligibilityDecision>(`/elections/${id}/eligibility`),
   report: (id: string) => api<EligibilityReport>(`/elections/${id}/eligibility/report`),
   freeze: (id: string) =>

@@ -41,6 +41,7 @@ func (h *PositionHandler) Create(c *gin.Context) {
 	var input struct {
 		Title         string `json:"title" binding:"required"`
 		Description   string `json:"description"`
+		Requirements  string `json:"requirements"`
 		QuestionType  string `json:"question_type" binding:"required"`
 		MinSelections int    `json:"min_selections"`
 		MaxSelections int    `json:"max_selections"`
@@ -84,6 +85,7 @@ func (h *PositionHandler) Create(c *gin.Context) {
 		ElectionID:    electionID,
 		Title:         input.Title,
 		Description:   input.Description,
+		Requirements:  input.Requirements,
 		QuestionType:  input.QuestionType,
 		MinSelections: input.MinSelections,
 		MaxSelections: input.MaxSelections,
@@ -140,6 +142,7 @@ func (h *PositionHandler) Update(c *gin.Context) {
 	var input struct {
 		Title         *string `json:"title"`
 		Description   *string `json:"description"`
+		Requirements  *string `json:"requirements"`
 		QuestionType  *string `json:"question_type"`
 		MinSelections *int    `json:"min_selections"`
 		MaxSelections *int    `json:"max_selections"`
@@ -159,6 +162,9 @@ func (h *PositionHandler) Update(c *gin.Context) {
 	}
 	if input.Description != nil {
 		updates["description"] = *input.Description
+	}
+	if input.Requirements != nil {
+		updates["requirements"] = *input.Requirements
 	}
 	if input.QuestionType != nil {
 		updates["question_type"] = *input.QuestionType

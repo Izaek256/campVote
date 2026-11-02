@@ -76,8 +76,9 @@ function Review({ id }: { id: string }) {
     }
   }
 
-  const positionTitle = (positionId: string) =>
-    configuredPositions.find((position) => position.id === positionId)?.title ?? "Position";
+  const positionFor = (positionId: string) =>
+    configuredPositions.find((position) => position.id === positionId);
+  const positionTitle = (positionId: string) => positionFor(positionId)?.title ?? "Position";
 
   return (
     <StaffShell title="Candidates">
@@ -202,6 +203,73 @@ function Review({ id }: { id: string }) {
                   ) : null}
                 </div>
               </div>
+              <div className="form-grid" style={{ marginTop: 16 }}>
+                <div className="field">
+                  <span className="lbl">Registration number</span>
+                  <span>{candidate.registration_number || "—"}</span>
+                </div>
+                <div className="field">
+                  <span className="lbl">Programme / year</span>
+                  <span>
+                    {candidate.programme || "—"}
+                    {candidate.study_year ? ` · Year ${candidate.study_year}` : ""}
+                  </span>
+                </div>
+                <div className="field">
+                  <span className="lbl">Date of birth</span>
+                  <span>{candidate.date_of_birth?.slice(0, 10) || "—"}</span>
+                </div>
+                <div className="field">
+                  <span className="lbl">Position requirements</span>
+                  <span style={{ whiteSpace: "pre-wrap" }}>
+                    {positionFor(candidate.position_id)?.requirements || "—"}
+                  </span>
+                </div>
+              </div>
+
+              {candidate.passport_photo_url || candidate.id_document_url ? (
+                <div className="row" style={{ marginTop: 12, alignItems: "flex-start", gap: 16 }}>
+                  {candidate.passport_photo_url ? (
+                    <a
+                      href={candidate.passport_photo_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="stack"
+                      style={{ gap: 4 }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={candidate.passport_photo_url}
+                        alt="Passport photo"
+                        width={112}
+                        height={112}
+                        style={{ objectFit: "cover", border: "1px solid var(--line)" }}
+                      />
+                      <span className="hint">Passport photo</span>
+                    </a>
+                  ) : null}
+                  {candidate.id_document_url ? (
+                    <a
+                      href={candidate.id_document_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="stack"
+                      style={{ gap: 4 }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={candidate.id_document_url}
+                        alt="Student ID"
+                        width={112}
+                        height={112}
+                        style={{ objectFit: "cover", border: "1px solid var(--line)" }}
+                      />
+                      <span className="hint">Student ID</span>
+                    </a>
+                  ) : null}
+                </div>
+              ) : null}
+
               {candidate.bio || candidate.manifesto ? (
                 <details style={{ marginTop: 12 }}>
                   <summary className="hint">Read the application</summary>

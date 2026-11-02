@@ -14,6 +14,7 @@ import type { Election, Position } from "@/lib/types";
 type Form = {
   title: string;
   description: string;
+  requirements: string;
   question_type: string;
   seats: number;
   min_selections: number;
@@ -25,6 +26,7 @@ type Form = {
 const emptyForm: Form = {
   title: "",
   description: "",
+  requirements: "",
   question_type: "SINGLE_CHOICE",
   seats: 1,
   min_selections: 0,
@@ -72,6 +74,7 @@ function Manage({ id }: { id: string }) {
     setForm({
       title: position.title,
       description: position.description,
+      requirements: position.requirements ?? "",
       question_type: position.question_type,
       seats: position.seats,
       min_selections: position.min_selections,
@@ -197,6 +200,17 @@ function Manage({ id }: { id: string }) {
                 rows={3}
                 value={form.description}
                 onChange={(event) => setForm({ ...form, description: event.target.value })}
+              />
+            </div>
+            <div className="field full">
+              <label htmlFor="position-requirements">Requirements</label>
+              <textarea
+                id="position-requirements"
+                className="ta"
+                rows={4}
+                value={form.requirements}
+                onChange={(event) => setForm({ ...form, requirements: event.target.value })}
+                placeholder="Eligibility, experience or documents applicants must have. Shown before they apply."
               />
             </div>
             <div className="field">
@@ -325,6 +339,11 @@ function Manage({ id }: { id: string }) {
                     <b>{position.title}</b>
                     {position.description ? (
                       <span className="candidate-meta">{position.description}</span>
+                    ) : null}
+                    {position.requirements ? (
+                      <span className="candidate-meta">
+                        <b>Requirements:</b> {position.requirements}
+                      </span>
                     ) : null}
                   </td>
                   <td>{position.question_type.replaceAll("_", " ").toLowerCase()}</td>

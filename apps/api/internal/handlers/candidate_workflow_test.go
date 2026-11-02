@@ -14,6 +14,16 @@ import (
 	"campvote/apps/api/internal/testkit"
 )
 
+func applicationPayload(positionID, name string) map[string]any {
+	return map[string]any{
+		"position_id":        positionID,
+		"full_name":          name,
+		"date_of_birth":      "2003-05-14",
+		"passport_photo_url": "/uploads/passport.jpg",
+		"id_document_url":    "/uploads/student-id.jpg",
+	}
+}
+
 func candidateEngine(t *testing.T, db *gorm.DB) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -90,20 +100,22 @@ func TestCandidateApplicationChecksRosterAndWindow(t *testing.T) {
 		t.Fatalf("application view = %+v, want eligible and open", view)
 	}
 
-	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", map[string]any{
-		"position_id": position.ID, "full_name": "Synthetic Applicant",
-		"manifesto": "A short manifesto", "manifesto_url": "/uploads/manifesto.pdf",
-	}).AssertCreated()
+	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", applicationPayload(position.ID, "Synthetic Applicant")).AssertCreated()
 
-	// One active application per election.
-	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", map[string]any{
-		"position_id": position.ID, "full_name": "Synthetic Applicant",
-	}).AssertConflict()
+	// One active application per position; a second position is allowed.
+	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", applicationPayload(position.ID, "Synthetic Applicant")).AssertConflict()
+
+	second := models.Position{
+		ElectionID: election.ID, Title: "Secretary", QuestionType: models.QuestionTypeSingleChoice,
+		MinSelections: 1, MaxSelections: 1, Seats: 1,
+	}
+	if err := db.Create(&second).Error; err != nil {
+		t.Fatal(err)
+	}
+	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", applicationPayload(second.ID, "Synthetic Applicant")).AssertCreated()
 
 	intruderToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), intruder)
-	client.As(intruderToken).Post("/api/v1/elections/e-cand/candidates/apply", map[string]any{
-		"position_id": position.ID, "full_name": "Not Listed",
-	}).AssertForbidden()
+	client.As(intruderToken).Post("/api/v1/elections/e-cand/candidates/apply", applicationPayload(position.ID, "Not Listed")).AssertForbidden()
 }
 
 func TestCandidateApplicationClosesWhenVotingOpens(t *testing.T) {
@@ -115,9 +127,7 @@ func TestCandidateApplicationClosesWhenVotingOpens(t *testing.T) {
 
 	client := testkit.New(t, candidateEngine(t, db))
 	token := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), voter)
-	client.As(token).Post("/api/v1/elections/e-cand/candidates/apply", map[string]any{
-		"position_id": position.ID, "full_name": "Late Applicant",
-	}).AssertConflict()
+	client.As(token).Post("/api/v1/elections/e-cand/candidates/apply", applicationPayload(position.ID, "Late Applicant")).AssertConflict()
 }
 
 func TestCandidateApprovalNotifiesAndAssignsBallotNumber(t *testing.T) {
@@ -133,9 +143,10 @@ func TestCandidateApprovalNotifiesAndAssignsBallotNumber(t *testing.T) {
 	officerToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), officer)
 
 	var created models.Candidate
-	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", map[string]any{
-		"position_id": position.ID, "full_name": "Synthetic Applicant",
-	}).AssertCreated().BindData(&created)
+	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", applicationPayload(position.ID, "Synthetic Applicant")).AssertCreated().BindData(&created)
+	if created.Programme != "BIT" || created.StudyYear < 1 {
+		t.Fatalf("derived identity = %q/year %d, want BIT and a positive study year", created.Programme, created.StudyYear)
+	}
 
 	client.As(officerToken).Post(
 		"/api/v1/elections/e-cand/candidates/"+created.ID+"/approve",
@@ -176,9 +187,7 @@ func TestCandidateWithdrawalIsOwnedByApplicant(t *testing.T) {
 	otherToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), other)
 
 	var created models.Candidate
-	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", map[string]any{
-		"position_id": position.ID, "full_name": "Synthetic Applicant",
-	}).AssertCreated().BindData(&created)
+	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", applicationPayload(position.ID, "Synthetic Applicant")).AssertCreated().BindData(&created)
 
 	// Another applicant cannot withdraw somebody else's application.
 	client.As(otherToken).Post("/api/v1/candidates/my/"+created.ID+"/withdraw",

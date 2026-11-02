@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
+import { CAMPUS_NAME } from "@/lib/config";
 
 export const metadata: Metadata = {
-  title: "campVote — MMU campus elections",
-  description: "Vote in authorised Mountains of the Moon University campus elections.",
+  title: `campVote — ${CAMPUS_NAME} elections`,
+  description: `Vote in authorised ${CAMPUS_NAME} elections.`,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

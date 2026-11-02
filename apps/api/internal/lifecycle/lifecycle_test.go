@@ -1,6 +1,7 @@
 package lifecycle_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -326,5 +327,73 @@ func TestIllegalTransitionHasAClearError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "illegal election transition") || !strings.Contains(err.Error(), "DRAFT") {
 		t.Errorf("error %q does not name the refused transition", err)
+	}
+}
+
+// A close through the lazy scheduler path runs the registered hook exactly
+// once, and only after the election is durably CLOSED.
+func TestCloseRunsTheOnClosedHookOnce(t *testing.T) {
+	db := testDB(t)
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	e := validElection(t, db, models.ElectionStatusOpen, now.Add(-2*time.Hour), now.Add(-time.Minute))
+
+	calls := 0
+	var seenStatus string
+	lifecycle.OnClosed = func(hookDB *gorm.DB, election *models.Election, at time.Time) error {
+		calls++
+		seenStatus = election.Status
+		if at.IsZero() {
+			t.Error("close hook received a zero time")
+		}
+		var stored models.Election
+		if err := hookDB.Where("id = ?", election.ID).First(&stored).Error; err != nil {
+			t.Errorf("close hook could not reload the election: %v", err)
+			return nil
+		}
+		if stored.Status != models.ElectionStatusClosed {
+			t.Errorf("stored status at hook time = %s, want CLOSED", stored.Status)
+		}
+		return nil
+	}
+	t.Cleanup(func() { lifecycle.OnClosed = nil })
+
+	if err := lifecycle.Ensure(db, e, now); err != nil {
+		t.Fatal(err)
+	}
+	if e.Status != models.ElectionStatusClosed {
+		t.Fatalf("status = %s, want CLOSED", e.Status)
+	}
+	if calls != 1 {
+		t.Fatalf("close hook calls = %d, want 1", calls)
+	}
+	if seenStatus != models.ElectionStatusClosed {
+		t.Fatalf("hook saw status %s, want CLOSED", seenStatus)
+	}
+
+	// A second reconciliation of an already-closed election does nothing.
+	if err := lifecycle.Ensure(db, e, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("close hook ran again on an already-closed election: %d calls", calls)
+	}
+}
+
+// A hook failure must not undo the close.
+func TestCloseHookFailureLeavesTheElectionClosed(t *testing.T) {
+	db := testDB(t)
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	e := validElection(t, db, models.ElectionStatusOpen, now.Add(-2*time.Hour), now.Add(-time.Minute))
+
+	lifecycle.OnClosed = func(*gorm.DB, *models.Election, time.Time) error {
+		return errors.New("tally store unavailable")
+	}
+	t.Cleanup(func() { lifecycle.OnClosed = nil })
+
+	if err := lifecycle.Ensure(db, e, now); err != nil {
+		t.Fatal(err)
+	}
+	if e.Status != models.ElectionStatusClosed {
+		t.Fatalf("status = %s, want CLOSED even when the hook fails", e.Status)
 	}
 }
