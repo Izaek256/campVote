@@ -13,7 +13,7 @@ import { ApiError, elections } from "@/lib/api";
 import { categoryLabel, formatShortEAT, statusLabel, timezoneClock } from "@/lib/format";
 import type { Election } from "@/lib/types";
 
-type Filter = "ALL" | "OPEN" | "SCHEDULED" | "CLOSED";
+type Filter = "ALL" | "OPEN" | "CLOSED";
 
 function ElectionsView() {
   const { user } = useAuth();
@@ -43,11 +43,6 @@ function ElectionsView() {
 
   const filtered = useMemo(() => {
     if (filter === "ALL") return visible;
-    if (filter === "CLOSED") {
-      return visible.filter((e) =>
-        ["CLOSED", "RESULTS_UNDER_REVIEW", "FINALIZED", "ARCHIVED"].includes(e.status)
-      );
-    }
     return visible.filter((e) => e.status === filter);
   }, [visible, filter]);
 
@@ -79,7 +74,7 @@ function ElectionsView() {
       </div>
 
       <div className="row" style={{ marginBottom: 20 }}>
-        {(["ALL", "OPEN", "SCHEDULED", "CLOSED"] as Filter[]).map((value) => (
+        {(["ALL", "OPEN", "CLOSED"] as Filter[]).map((value) => (
           <button
             key={value}
             type="button"
@@ -144,7 +139,9 @@ function ElectionsView() {
                 <span className="hint">
                   {election.accepting_votes
                     ? `Closes ${formatShortEAT(election.ends_at)}`
-                    : `Voting ${election.status === "SCHEDULED" ? "opens" : "opened"} ${formatShortEAT(election.starts_at)}`}
+                    : election.status === "CLOSED"
+                      ? `Voting closed ${formatShortEAT(election.ends_at)}`
+                      : `Voting opens ${formatShortEAT(election.starts_at)}`}
                 </span>
                 <span className="hint">{election.organizing_unit}</span>
                 <div style={{ marginTop: "auto", paddingTop: 8 }}>

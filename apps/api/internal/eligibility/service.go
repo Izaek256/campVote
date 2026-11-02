@@ -200,9 +200,7 @@ func SetStatus(db *gorm.DB, electionID, rosterID, actorID, status, reason string
 		return nil, err
 	}
 	switch election.Status {
-	case models.ElectionStatusClosed, models.ElectionStatusReview,
-		models.ElectionStatusFinalized, models.ElectionStatusArchived,
-		models.ElectionStatusCancelled:
+	case models.ElectionStatusClosed:
 		return nil, ErrElectionClosed
 	}
 	if !now.Before(election.EndsAt) {

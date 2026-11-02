@@ -1531,6 +1531,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.POST("/elections", electionLifecycleHandler.Create)
 		staff.GET("/elections/:id", electionLifecycleHandler.Get)
 		staff.PUT("/elections/:id", electionLifecycleHandler.Update)
+		staff.DELETE("/elections/:id", electionLifecycleHandler.Delete)
 		staff.POST("/elections/:id/transitions", electionLifecycleHandler.Transition)
 		staff.GET("/elections/:id/readiness", electionLifecycleHandler.Readiness)
 

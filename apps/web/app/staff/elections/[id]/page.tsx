@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Icon } from "@/components/icon";
@@ -41,20 +42,8 @@ function toISO(value: string): string {
 
 function transitionLabel(to: string): string {
   switch (to) {
-    case "REGISTRATION":
-      return "Open applications";
-    case "SCHEDULED":
-      return "Schedule election";
-    case "PENDING_APPROVAL":
-      return "Send for approval";
     case "CLOSED":
       return "Close early";
-    case "RESULTS_UNDER_REVIEW":
-      return "Review results";
-    case "ARCHIVED":
-      return "Archive";
-    case "CANCELLED":
-      return "Cancel";
     default:
       return statusLabel(to as Election["status"]);
   }
@@ -62,6 +51,7 @@ function transitionLabel(to: string): string {
 
 function Manage({ id }: { id: string }) {
   const toast = useToast();
+  const router = useRouter();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [election, setElection] = useState<Election | null>(null);
   const [report, setReport] = useState<EligibilityReport | null>(null);
@@ -72,6 +62,7 @@ function Manage({ id }: { id: string }) {
   const [reason, setReason] = useState("");
   const [confirmCertify, setConfirmCertify] = useState(false);
   const [certifyReason, setCertifyReason] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [form, setForm] = useState({ title: "", starts_at: "", ends_at: "", reason: "" });
   const [fields, setFields] = useState<Record<string, string>>({});
   const [eligibility, setEligibility] = useState({
@@ -265,6 +256,19 @@ function Manage({ id }: { id: string }) {
     }
   }
 
+  async function removeElection() {
+    setBusy(true);
+    try {
+      await elections.remove(id);
+      toast.success("Election deleted.");
+      router.replace("/staff");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The election could not be deleted.");
+      setBusy(false);
+      setConfirmDelete(false);
+    }
+  }
+
   if (loadError) {
     return (
       <StaffShell title="Manage election">
@@ -294,9 +298,9 @@ function Manage({ id }: { id: string }) {
     );
   }
 
-  const transitions = (election.allowed_transitions ?? []).filter(
-    (to) => to !== "OPEN" && to !== "FINALIZED"
-  );
+  // Opening is automatic at the start time, so the only manual transition the
+  // three-stage machine offers is closing early.
+  const transitions = (election.allowed_transitions ?? []).filter((to) => to !== "OPEN");
   const frozen = Boolean(election.eligibility_frozen_at);
 
   return (
@@ -448,35 +452,21 @@ function Manage({ id }: { id: string }) {
               <span className="mono">server clock</span>
             </div>
             <div className="rail" style={{ marginBottom: 16 }}>
-              {[
-                "DRAFT",
-                "REGISTRATION",
-                "PENDING_APPROVAL",
-                "SCHEDULED",
-                "OPEN",
-                "CLOSED",
-                "RESULTS_UNDER_REVIEW",
-                "FINALIZED",
-                "ARCHIVED",
-              ].map((state) => (
+              {["DRAFT", "OPEN", "CLOSED"].map((state) => (
                 <div key={state} className={`ls${state === election.status ? " cur" : ""}`}>
-                  {state === "PENDING_APPROVAL"
-                    ? "Approval"
-                    : state === "RESULTS_UNDER_REVIEW"
-                      ? "Review"
-                      : statusLabel(state as Election["status"])}
+                  {statusLabel(state as Election["status"])}
                 </div>
               ))}
             </div>
             <p className="hint">
-              Opening and closing follow the schedule automatically. Cancel, archive and an early
-              close need a reason and the publisher permission.
+              A draft opens automatically at its start time and closes at its end time. An early
+              close needs a reason.
             </p>
             {readiness && !readiness.ready ? (
               <div className="banner hatch" role="status" style={{ marginTop: 12 }}>
                 <Icon name="alert" size="s" />
                 <div>
-                  <b>Not ready to schedule</b>
+                  <b>Not ready to open</b>
                   {Object.entries(readiness.problems).map(([field, problem]) => (
                     <span key={field} className="hint" style={{ display: "block" }}>
                       {problem}
@@ -493,10 +483,8 @@ function Manage({ id }: { id: string }) {
                   <button
                     key={to}
                     type="button"
-                    className={`btn sm${to === "CANCELLED" ? " danger-o" : ""}`}
-                    disabled={
-                      busy || (to === "SCHEDULED" && readiness !== null && !readiness.ready)
-                    }
+                    className={`btn sm${to === "CLOSED" ? " danger-o" : ""}`}
+                    disabled={busy}
                     onClick={() => {
                       setPendingTo(to);
                       setReason("");
@@ -506,7 +494,7 @@ function Manage({ id }: { id: string }) {
                   </button>
                 ))
               )}
-              {["CLOSED", "RESULTS_UNDER_REVIEW"].includes(election.status) ? (
+              {election.status === "CLOSED" ? (
                 <button
                   type="button"
                   className="btn sm primary"
@@ -701,6 +689,15 @@ function Manage({ id }: { id: string }) {
               <dt>Accepting votes</dt>
               <dd>{election.accepting_votes ? "Yes" : "No"}</dd>
             </dl>
+            <button
+              type="button"
+              className="btn sm danger-o"
+              disabled={busy}
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Icon name="trash" size="s" />
+              Delete election
+            </button>
           </div>
           <div className="panel stack">
             <span className="lbl">Roster</span>
@@ -726,7 +723,7 @@ function Manage({ id }: { id: string }) {
         open={pendingTo !== ""}
         title={`Move to ${statusLabel(pendingTo as Election["status"])}?`}
         confirmLabel="Confirm change"
-        destructive={pendingTo === "CANCELLED"}
+        destructive={pendingTo === "CLOSED"}
         busy={busy}
         onClose={() => setPendingTo("")}
         onConfirm={transition}
@@ -737,8 +734,7 @@ function Manage({ id }: { id: string }) {
         </p>
         <div className="field">
           <label htmlFor="transition-reason">
-            Reason{" "}
-            {pendingTo === "CANCELLED" || pendingTo === "ARCHIVED" ? "(required)" : "(optional)"}
+            Reason {pendingTo === "CLOSED" ? "(required to close early)" : "(optional)"}
           </label>
           <textarea
             id="transition-reason"
@@ -771,6 +767,22 @@ function Manage({ id }: { id: string }) {
             placeholder="Why are these results being certified?"
           />
         </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete this election?"
+        confirmLabel="Delete election"
+        destructive
+        busy={busy}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={removeElection}
+      >
+        <p>
+          This permanently removes <b>{election.title}</b> together with its positions and
+          candidates. An election that has already collected a ballot cannot be deleted — close it
+          instead so its result stays auditable.
+        </p>
       </ConfirmDialog>
     </StaffShell>
   );

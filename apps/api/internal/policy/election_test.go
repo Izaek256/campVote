@@ -142,15 +142,15 @@ func TestResultsVisibilityFollowsElectionPolicy(t *testing.T) {
 	election(t, db, "live", models.ElectionStatusOpen, models.ResultPolicyLive, "creator")
 	election(t, db, "after-open", models.ElectionStatusOpen, models.ResultPolicyAfterClose, "creator")
 	election(t, db, "after-closed", models.ElectionStatusClosed, models.ResultPolicyAfterClose, "creator")
-	election(t, db, "cert-review", models.ElectionStatusReview, models.ResultPolicyCertifiedOnly, "creator")
-	election(t, db, "cert-final", models.ElectionStatusFinalized, models.ResultPolicyCertifiedOnly, "creator")
+	election(t, db, "cert-open", models.ElectionStatusOpen, models.ResultPolicyCertifiedOnly, "creator")
+	election(t, db, "cert-closed", models.ElectionStatusClosed, models.ResultPolicyCertifiedOnly, "creator")
 
 	assign(t, db, "live", "official", models.RoleElectionOfficial)
 	assign(t, db, "live", "candidate", models.RoleCandidate)
 	assign(t, db, "after-open", "official", models.RoleElectionOfficial)
 	assign(t, db, "after-closed", "official", models.RoleElectionOfficial)
-	assign(t, db, "cert-review", "official", models.RoleElectionOfficial)
-	assign(t, db, "cert-final", "official", models.RoleElectionOfficial)
+	assign(t, db, "cert-open", "official", models.RoleElectionOfficial)
+	assign(t, db, "cert-closed", "official", models.RoleElectionOfficial)
 
 	cases := []struct {
 		name     string
@@ -163,8 +163,8 @@ func TestResultsVisibilityFollowsElectionPolicy(t *testing.T) {
 		{"voter cannot see live provisional", "voter", "live", false},
 		{"official cannot see early after-close tally", "official", "after-open", false},
 		{"official sees after close", "official", "after-closed", true},
-		{"official cannot see review-stage certified-only tally", "official", "cert-review", false},
-		{"official sees certified-only after finalisation", "official", "cert-final", true},
+		{"official cannot see certified-only before close", "official", "cert-open", false},
+		{"official sees certified-only after close", "official", "cert-closed", true},
 	}
 	now := time.Now().UTC()
 	for _, tc := range cases {

@@ -108,13 +108,32 @@ caller's parsed identity satisfies, each flagged `applied`.
 - **One live application per applicant per position** — a duplicate returns `409`.
 - **Maximum candidates** — `ApproveApplication` counts already-approved siblings
   and returns `409` once the cap is reached. The cap is not a UI concern.
-- **Linking** — `Link` refuses a `FINALIZED`, `ARCHIVED` or `CANCELLED`
-  election, and in one transaction sets the position's election and moves its
-  candidates' `election_id`, so tallying sees them under the election they
-  contest.
+- **Linking** — `Link` refuses a `CLOSED` election (the three-stage lifecycle
+  has no other blocking state), and in one transaction sets the position's
+  election and moves its candidates' `election_id`, so tallying sees them under
+  the election they contest.
+- **Application details** — `Apply` requires a date of birth (valid `YYYY-MM-DD`),
+  a sex of `MALE`/`FEMALE`, an uploaded passport photo and an uploaded partial
+  transcript, and accepts religion, campus residence, contact details, slogan,
+  bio and manifesto. `RegistrationNumber`, `Programme` and `StudyYear` are
+  derived from the verified registration email, never from the request body.
 - **Audit** — every position/application change writes `ElectionAuditLog` when
   the position is linked, and always `services.LogActivity`. Ballot choices are
   never recorded here.
+
+### Admin application review
+
+Applications are reviewed from a modal rather than a bare approve button.
+`components/application-review-dialog.tsx` is a native `<dialog>` (focus
+containment, Escape to close, focus return) that shows the applicant's passport
+thumbnail, status chip, registration number, programme and year, and a
+definition list of names, campus id, programme, year, date of birth, computed
+age, sex, religion, residence and contact, plus links to the passport and
+transcript documents, the slogan and the bio. The reviewer browses applications
+with **Previous**/**Next** without closing the dialog and approves or rejects
+from the footer; a rejection reason is required and approve takes an optional
+note. The list rows in `/staff/positions` are clickable and carry a **Review**
+button that opens the same dialog.
 
 ---
 
@@ -127,8 +146,8 @@ sidebar quick actions **New election** and **New position**, and a
 
 | Route | Role | Purpose |
 |---|---|---|
-| `/staff/positions` | ADMIN | List/create/edit/delete positions, set the eligibility rule and max candidates, review applications, approve/reject, link to an election. Supports `?new=1` from the sidebar quick action. |
-| `/positions` | STUDENT_VOTER | Browse only the positions the student is eligible for and apply; an applied position shows as *awaiting review*. |
+| `/staff/positions` | ADMIN | List/create/edit/delete positions, set the eligibility rule and max candidates, review applications in the review dialog, approve/reject, link to an election. Supports `?new=1` from the sidebar quick action. |
+| `/positions` | STUDENT_VOTER | Browse only the positions the student is eligible for and apply with the full candidate profile (names, DOB and computed age, sex, religion, residence, slogan, bio, passport photo and partial transcript uploads); an applied position shows as *awaiting review*. |
 
 ---
 
@@ -136,20 +155,24 @@ sidebar quick actions **New election** and **New position**, and a
 
 | Check | Command | Result |
 |---|---|---|
-| Backend build | `go build ./...` | pass |
-| Backend vet | `go vet ./...` | pass |
-| Backend tests | `go test ./internal/handlers/... ./internal/routes/... ./internal/policy/... ./internal/eligibility/... ./internal/models/...` | pass |
-| New workflow tests | `go test ./internal/handlers/ -run 'TestEligiblePositions\|TestApplyToPosition\|TestApprovalEnforces\|TestLinkingPosition\|TestStandalonePosition'` | 5/5 pass |
-| Route inventory | `go test ./internal/routes/...` (`TestEveryRouteHasAPolicy`) | pass |
+| Backend tests | `go test ./internal/handlers/... ./internal/lifecycle/... ./internal/policy/... ./internal/results/...` | pass |
 | Frontend type-check | `npm run type-check` | pass |
-| Frontend lint (changed files) | `npx biome check app/staff/positions/page.tsx app/positions/page.tsx components/app-shell.tsx lib/types.ts` | pass |
 | Frontend tests | `npm run test` | 12/12 pass |
 | Frontend build | `npm run build` | pass (routes `/positions` and `/staff/positions` present) |
 
 New backend test coverage: eligibility scoping of the eligible list, ineligible
 apply rejected, duplicate apply rejected, max-candidate cap enforced
-server-side, linking adopts applications, and standalone creation being
-admin-only with an invalid question type rejected.
+server-side, linking adopts applications, standalone creation being admin-only
+with an invalid question type rejected, and the rich application payload
+(date of birth, sex, passport photo and transcript) being required.
+
+Biome lint also reports three pre-existing findings that this work does not
+introduce and does not fix: `lint/style/useNodejsImportProtocol` in
+`next.config.ts`, `lint/security/noDangerouslySetInnerHtml` in `app/layout.tsx`
+(the pre-paint theme script) and `lint/a11y/noRedundantAlt` in
+`app/staff/elections/[id]/candidates/page.tsx`. None block `type-check`, tests
+or the build. In addition, Biome `format` reports CRLF noise on files checked
+out on Windows.
 
 ---
 

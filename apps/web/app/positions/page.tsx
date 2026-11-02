@@ -9,7 +9,7 @@ import { Icon } from "@/components/icon";
 import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { useToast } from "@/components/toast";
-import { ApiError, positions } from "@/lib/api";
+import { ApiError, positions, upload } from "@/lib/api";
 import type { EligiblePosition } from "@/lib/types";
 
 function eligibilitySummary(position: EligiblePosition): string {
@@ -20,6 +20,42 @@ function eligibilitySummary(position: EligiblePosition): string {
   return parts.length ? `You qualify as ${parts.join(" · ")}` : "Open to any student";
 }
 
+/** Age in whole years from a YYYY-MM-DD date, or null while it is unreadable. */
+function ageFrom(dateOfBirth: string): number | null {
+  if (!dateOfBirth) return null;
+  const born = new Date(`${dateOfBirth}T00:00:00Z`);
+  if (Number.isNaN(born.getTime())) return null;
+  const now = new Date();
+  let age = now.getUTCFullYear() - born.getUTCFullYear();
+  const monthDiff = now.getUTCMonth() - born.getUTCMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < born.getUTCDate())) age -= 1;
+  return age >= 0 && age < 130 ? age : null;
+}
+
+type ApplicationForm = {
+  full_name: string;
+  date_of_birth: string;
+  sex: string;
+  religion: string;
+  campus_residence: string;
+  slogan: string;
+  bio: string;
+  passport_photo_url: string;
+  partial_transcript_url: string;
+};
+
+const emptyApplication: ApplicationForm = {
+  full_name: "",
+  date_of_birth: "",
+  sex: "",
+  religion: "",
+  campus_residence: "",
+  slogan: "",
+  bio: "",
+  passport_photo_url: "",
+  partial_transcript_url: "",
+};
+
 function RunForOffice() {
   const { user } = useAuth();
   const [items, setItems] = useState<EligiblePosition[] | null>(null);
@@ -28,7 +64,8 @@ function RunForOffice() {
 
   const toast = useToast();
   const [applying, setApplying] = useState<EligiblePosition | null>(null);
-  const [form, setForm] = useState({ full_name: "", slogan: "", bio: "" });
+  const [form, setForm] = useState<ApplicationForm>(emptyApplication);
+  const [uploading, setUploading] = useState<"passport" | "transcript" | "">("");
 
   const load = useCallback(async () => {
     try {
@@ -48,15 +85,56 @@ function RunForOffice() {
   function startApply(position: EligiblePosition) {
     setApplying(position);
     setForm({
+      ...emptyApplication,
       full_name: user ? `${user.first_name} ${user.last_name}` : "",
-      slogan: "",
-      bio: "",
     });
+  }
+
+  async function pickFile(kind: "passport" | "transcript", file: File | undefined) {
+    if (!file) return;
+    setUploading(kind);
+    try {
+      const ref =
+        kind === "transcript"
+          ? await upload(file, { accepts: "pdf", maxSize: 5 * 1024 * 1024 })
+          : await upload(file, { accepts: "image", maxSize: 2 * 1024 * 1024 });
+      setForm((current) =>
+        kind === "transcript"
+          ? { ...current, partial_transcript_url: ref.url }
+          : { ...current, passport_photo_url: ref.url }
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : kind === "transcript"
+            ? "The transcript could not be uploaded."
+            : "The passport photo could not be uploaded."
+      );
+    } finally {
+      setUploading("");
+    }
   }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!applying) return;
+    if (!form.date_of_birth) {
+      toast.error("Enter your date of birth.");
+      return;
+    }
+    if (!form.sex) {
+      toast.error("Choose your sex.");
+      return;
+    }
+    if (!form.passport_photo_url) {
+      toast.error("Upload your passport photo.");
+      return;
+    }
+    if (!form.partial_transcript_url) {
+      toast.error("Upload your partial transcript.");
+      return;
+    }
     setBusy(true);
     try {
       await positions.apply(applying.id, form);
@@ -94,13 +172,68 @@ function RunForOffice() {
           </div>
           <div className="form-grid">
             <div className="field full">
-              <label htmlFor="apply-name">Name to appear on the ballot *</label>
+              <label htmlFor="apply-name">Names to appear on the ballot *</label>
               <input
                 id="apply-name"
                 className="in"
                 value={form.full_name}
                 onChange={(event) => setForm({ ...form, full_name: event.target.value })}
                 required
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="apply-dob">Date of birth *</label>
+              <input
+                id="apply-dob"
+                className="in"
+                type="date"
+                value={form.date_of_birth}
+                onChange={(event) => setForm({ ...form, date_of_birth: event.target.value })}
+                required
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="apply-age">Age</label>
+              <input
+                id="apply-age"
+                className="in"
+                value={ageFrom(form.date_of_birth) ?? ""}
+                readOnly
+                placeholder="—"
+              />
+              <span className="hint">Calculated from your date of birth.</span>
+            </div>
+            <div className="field">
+              <label htmlFor="apply-sex">Sex *</label>
+              <select
+                id="apply-sex"
+                className="sel"
+                value={form.sex}
+                onChange={(event) => setForm({ ...form, sex: event.target.value })}
+                required
+              >
+                <option value="">Choose…</option>
+                <option value="MALE">Male</option>
+                <option value="FEMALE">Female</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="apply-religion">Religion</label>
+              <input
+                id="apply-religion"
+                className="in"
+                value={form.religion}
+                onChange={(event) => setForm({ ...form, religion: event.target.value })}
+              />
+            </div>
+            <div className="field full">
+              <label htmlFor="apply-residence">Campus residence / address</label>
+              <input
+                id="apply-residence"
+                className="in"
+                value={form.campus_residence}
+                onChange={(event) => setForm({ ...form, campus_residence: event.target.value })}
+                placeholder="Hall of residence or where you stay"
               />
             </div>
             <div className="field full">
@@ -123,6 +256,48 @@ function RunForOffice() {
                 value={form.bio}
                 onChange={(event) => setForm({ ...form, bio: event.target.value })}
               />
+            </div>
+            <div className="field">
+              <label htmlFor="apply-passport">Passport photo (JPEG or PNG, max 2 MB) *</label>
+              <input
+                id="apply-passport"
+                className="in"
+                type="file"
+                accept="image/jpeg,image/png"
+                disabled={uploading !== ""}
+                onChange={(event) => pickFile("passport", event.target.files?.[0])}
+              />
+              {uploading === "passport" ? (
+                <span className="hint">Uploading passport photo…</span>
+              ) : null}
+              {form.passport_photo_url ? (
+                <span className="fileline">
+                  <Icon name="check" size="s" />
+                  Passport photo uploaded
+                  <span className="mono">ready</span>
+                </span>
+              ) : null}
+            </div>
+            <div className="field">
+              <label htmlFor="apply-transcript">Partial transcript (PDF, max 5 MB) *</label>
+              <input
+                id="apply-transcript"
+                className="in"
+                type="file"
+                accept="application/pdf"
+                disabled={uploading !== ""}
+                onChange={(event) => pickFile("transcript", event.target.files?.[0])}
+              />
+              {uploading === "transcript" ? (
+                <span className="hint">Uploading transcript…</span>
+              ) : null}
+              {form.partial_transcript_url ? (
+                <span className="fileline">
+                  <Icon name="check" size="s" />
+                  Transcript uploaded
+                  <span className="mono">ready</span>
+                </span>
+              ) : null}
             </div>
           </div>
           <div className="row">

@@ -315,6 +315,11 @@ export const elections = {
   create: (body: Record<string, unknown>) => api<Election>("/elections", { method: "POST", body }),
   update: (id: string, body: Record<string, unknown>) =>
     api<Election>(`/elections/${id}`, { method: "PUT", body }),
+  /**
+   * Delete an election that has not yet collected a ballot. The server refuses
+   * with 409 once voting has started; close it instead.
+   */
+  remove: (id: string) => api<unknown>(`/elections/${id}`, { method: "DELETE" }),
   transition: (id: string, to: string, reason = "") =>
     api<Election>(`/elections/${id}/transitions`, { method: "POST", body: { to, reason } }),
   readiness: (id: string) =>

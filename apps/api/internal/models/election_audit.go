@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"campvote/apps/api/internal/ids"
+
 	"gorm.io/gorm"
 )
 
@@ -11,13 +12,10 @@ import (
 const (
 	AuditActionElectionCreated     = "ELECTION_CREATED"
 	AuditActionElectionUpdated     = "ELECTION_UPDATED"
-	AuditActionElectionScheduled   = "ELECTION_SCHEDULED"
 	AuditActionElectionOpened      = "ELECTION_OPENED"
 	AuditActionElectionClosed      = "ELECTION_CLOSED"
-	AuditActionElectionReview      = "ELECTION_REVIEW_STARTED"
-	AuditActionElectionArchived    = "ELECTION_ARCHIVED"
 	AuditActionElectionExtended    = "ELECTION_EXTENDED"
-	AuditActionElectionCancelled   = "ELECTION_CANCELLED"
+	AuditActionElectionDeleted     = "ELECTION_DELETED"
 	AuditActionRosterImported      = "ROSTER_IMPORTED"
 	AuditActionRosterRevoked       = "ROSTER_REVOKED"
 	AuditActionEligibilityFrozen   = "ELIGIBILITY_FROZEN"

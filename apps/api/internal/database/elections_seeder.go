@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"campvote/apps/api/internal/models"
+
 	"gorm.io/gorm"
 )
 
@@ -102,8 +103,8 @@ func SeedElections(db *gorm.DB) error {
 		EndsAt:         now.Add(48 * time.Hour),
 		ResultPolicy:   models.ResultPolicyAfterClose,
 		AllowedDomain:  "std.mast.ac.ug",
-		AllowedYears:   "",  // any year
-		AllowedCourses: "",  // any course
+		AllowedYears:   "", // any year
+		AllowedCourses: "", // any course
 	}
 	if err := db.Create(&guildElection).Error; err != nil {
 		return fmt.Errorf("creating guild election: %w", err)
@@ -226,13 +227,13 @@ func SeedElections(db *gorm.DB) error {
 		}
 	}
 
-	// ── Faculty Election (SCHEDULED) ──────────────────────────────────────────
+	// ── Faculty Election (OPEN, published for a future window) ───────────────
 	facultyElection := models.Election{
 		Title:          "Faculty of Science & Technology Student Representative 2026",
 		Description:    "Election of faculty representatives to the Academic Board.",
 		Category:       models.ElectionCategoryFaculty,
 		OrganizingUnit: "Dean of Science & Technology",
-		Status:         models.ElectionStatusScheduled,
+		Status:         models.ElectionStatusOpen,
 		StartsAt:       now.Add(72 * time.Hour),
 		EndsAt:         now.Add(120 * time.Hour),
 		ResultPolicy:   models.ResultPolicyLive,

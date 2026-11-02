@@ -247,7 +247,64 @@ func (h *ElectionLifecycleHandler) Get(c *gin.Context) {
 	respond.OK(c, h.view(&authority.Election, now))
 }
 
-// Readiness reports whether the election can be scheduled. The reasons are
+// Delete removes an election whose voting has not started. An election with
+// any stored ballot is refused: those ballots are the evidence of a contest,
+// and deleting the election would orphan them. Close it instead.
+func (h *ElectionLifecycleHandler) Delete(c *gin.Context) {
+	authority, ok := h.authority(c, policy.PermElectionEdit)
+	if !ok {
+		return
+	}
+	election := authority.Election
+	now := h.now()
+	if err := lifecycle.Ensure(h.DB, &election, now); err != nil {
+		respond.Internal(c, err)
+		return
+	}
+
+	var ballots int64
+	if err := h.DB.Model(&models.AnonymousBallot{}).
+		Where("election_id = ?", election.ID).Count(&ballots).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	if ballots > 0 {
+		respond.Conflict(c, "This election already has recorded ballots and cannot be deleted; close it instead")
+		return
+	}
+
+	details, _ := json.Marshal(map[string]string{
+		"title":  election.Title,
+		"status": election.Status,
+	})
+	err := h.DB.Transaction(func(tx *gorm.DB) error {
+		// Record the deletion before the election leaves the live table.
+		if err := tx.Create(&models.ElectionAuditLog{
+			ElectionID: election.ID,
+			ActorID:    c.GetString("user_id"),
+			Action:     models.AuditActionElectionDeleted,
+			Details:    string(details),
+			IPAddress:  c.ClientIP(),
+			CreatedAt:  now,
+		}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("election_id = ?", election.ID).Delete(&models.Candidate{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("election_id = ?", election.ID).Delete(&models.Position{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Election{}, "id = ?", election.ID).Error
+	})
+	if err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	respond.OK(c, gin.H{"id": election.ID, "message": "Election deleted"})
+}
+
+// Readiness reports whether the election can be opened. The reasons are
 // safe to show to an official: field-level configuration problems, never voter
 // identities.
 func (h *ElectionLifecycleHandler) Readiness(c *gin.Context) {
@@ -382,14 +439,6 @@ func (h *ElectionLifecycleHandler) Update(c *gin.Context) {
 		respond.WriteError(c, err, "Election configuration is invalid")
 		return
 	}
-	if current.Status == models.ElectionStatusScheduled {
-		// A scheduled election must stay schedulable: its end time cannot be
-		// moved into the past, which would silently close it on the next read.
-		if err := lifecycle.ValidateConfiguration(h.DB, &updated, now, true); err != nil {
-			respond.WriteError(c, err, "Election configuration is invalid")
-			return
-		}
-	}
 
 	values := electionUpdateValues(&updated)
 	if err := h.persistUpdate(c, &current, values, models.AuditActionElectionUpdated,
@@ -447,8 +496,9 @@ func (h *ElectionLifecycleHandler) updateFrozen(c *gin.Context, authority *polic
 	h.respondUpdated(c, current.ID, now)
 }
 
-// Transition applies an explicit state change. Opening by clock and
-// certification are deliberately not reachable here.
+// Transition applies an explicit state change. Opening is deliberately not
+// reachable here: only the server clock opens an election at its start time,
+// so a client can never force a contest open early.
 func (h *ElectionLifecycleHandler) Transition(c *gin.Context) {
 	authority, ok := h.authority(c, policy.PermElectionEdit)
 	if !ok {
@@ -470,28 +520,13 @@ func (h *ElectionLifecycleHandler) Transition(c *gin.Context) {
 	to := strings.ToUpper(strings.TrimSpace(in.To))
 	reason := strings.TrimSpace(in.Reason)
 
-	switch to {
-	case models.ElectionStatusOpen:
-		respond.Conflict(c, "Elections open automatically at their start time")
-		return
-	case models.ElectionStatusFinalized:
-		respond.Conflict(c, "Certification is a separate audited operation")
-		return
-	}
 	if !lifecycle.KnownStatus(to) || !lifecycle.CanTransition(authority.Election.Status, to) {
 		respond.Conflict(c, "Illegal election transition from "+authority.Election.Status+" to "+to)
 		return
 	}
-	if to == models.ElectionStatusCancelled && reason == "" {
-		respond.BadRequest(c, "A reason is required to cancel an election")
+	if to == models.ElectionStatusOpen {
+		respond.Conflict(c, "Elections open automatically at their start time")
 		return
-	}
-	if to == models.ElectionStatusCancelled || to == models.ElectionStatusArchived {
-		if !authority.Can(policy.PermElectionPublish) {
-			policy.LogDenial(h.DB, c, "requires "+policy.PermElectionPublish+" to "+to, authority.Election.ID)
-			respond.Forbidden(c, "Only an authorised publisher may cancel or archive an election")
-			return
-		}
 	}
 	if to == models.ElectionStatusClosed && now.Before(authority.Election.EndsAt) {
 		if reason == "" {

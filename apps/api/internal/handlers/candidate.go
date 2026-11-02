@@ -329,9 +329,7 @@ func applicationWindow(election *models.Election, at time.Time) (bool, string) {
 	switch election.Status {
 	case models.ElectionStatusDraft:
 		return false, "This election has not opened candidate applications yet"
-	case models.ElectionStatusClosed, models.ElectionStatusReview,
-		models.ElectionStatusFinalized, models.ElectionStatusArchived,
-		models.ElectionStatusCancelled:
+	case models.ElectionStatusClosed:
 		return false, "Candidate applications are closed for this election"
 	}
 	if !at.Before(election.StartsAt) {
@@ -353,6 +351,32 @@ func storedFileURL(value string) bool {
 	}
 	parsed, err := url.Parse(value)
 	return err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
+}
+
+// parseDateOfBirth accepts YYYY-MM-DD or an RFC 3339 timestamp, normalises it to
+// UTC, and refuses an empty, malformed, future or implausibly old value.
+func parseDateOfBirth(value string) (*time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, errors.New("date of birth is required")
+	}
+	var parsed time.Time
+	var err error
+	for _, layout := range []string{"2006-01-02", time.RFC3339} {
+		parsed, err = time.Parse(layout, value)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	parsed = parsed.UTC()
+	now := time.Now().UTC()
+	if parsed.After(now) || parsed.Before(now.AddDate(-120, 0, 0)) {
+		return nil, errors.New("date of birth is out of range")
+	}
+	return &parsed, nil
 }
 
 func (h *CandidateHandler) audit(c *gin.Context, electionID, action, details string) {

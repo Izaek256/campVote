@@ -136,9 +136,8 @@ function Workspace({ id }: { id: string }) {
   }
 
   const snapshot = results?.snapshot;
-  const closedOrLater = ["CLOSED", "RESULTS_UNDER_REVIEW", "FINALIZED", "ARCHIVED"].includes(
-    election?.status ?? ""
-  );
+  // In the three-stage lifecycle only CLOSED produces a tally.
+  const closedOrLater = election?.status === "CLOSED";
 
   return (
     <StaffShell title="Results workspace">

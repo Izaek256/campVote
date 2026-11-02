@@ -255,9 +255,11 @@ func (h *ResultsHandler) RunTally(c *gin.Context) {
 // Read GET /api/v1/elections/:id/results
 //
 // One handler serves the officer workspace and the voter/public page. The
-// election's publication policy is applied to every caller — an officer is not
-// exempt from a CERTIFIED_ONLY election that has not been certified — and
-// before it allows publication the answer carries no result data at all.
+// election's publication policy is applied to every caller, and before it
+// allows publication the answer carries no result data at all. In the
+// three-stage lifecycle a CERTIFIED_ONLY election becomes readable when voting
+// closes; certification then relabels the same snapshot from PROVISIONAL to
+// CERTIFIED rather than moving the election on.
 //
 // While an election is still open its tally is provisional, and provisional
 // figures are restricted to roles holding results.view_live. Once the policy
@@ -504,10 +506,6 @@ func (h *ResultsHandler) Certify(c *gin.Context) {
 			}).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&models.Election{}).Where("id = ?", election.ID).
-			Update("status", models.ElectionStatusFinalized).Error; err != nil {
-			return err
-		}
 		details, _ := json.Marshal(map[string]any{
 			"snapshot_id": snapshot.ID,
 			"version":     snapshot.Version,
@@ -533,7 +531,7 @@ func (h *ResultsHandler) Certify(c *gin.Context) {
 	view, _ := viewOf(snapshot)
 	respond.OK(c, gin.H{
 		"election_id": election.ID,
-		"status":      models.ElectionStatusFinalized,
+		"status":      election.Status,
 		"snapshot":    view,
 	}, "Results certified")
 }
@@ -589,12 +587,7 @@ func (h *ResultsHandler) latestVersion(electionID string) (int, error) {
 
 // closedOrLater reports whether voting has ended for this election.
 func closedOrLater(status string) bool {
-	switch status {
-	case models.ElectionStatusClosed, models.ElectionStatusReview,
-		models.ElectionStatusFinalized, models.ElectionStatusArchived:
-		return true
-	}
-	return false
+	return status == models.ElectionStatusClosed
 }
 
 func mustView(snapshot models.ResultSnapshot, result tally.Result) snapshotView {

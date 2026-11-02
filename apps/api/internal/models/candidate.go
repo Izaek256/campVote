@@ -46,8 +46,13 @@ type Candidate struct {
 	DateOfBirth        *time.Time `json:"date_of_birth,omitempty"`
 	RegistrationNumber string     `gorm:"size:100" json:"registration_number,omitempty"`
 	CampusResidence    string     `gorm:"size:255" json:"campus_residence,omitempty"`
+	Sex                string     `gorm:"size:20" json:"sex,omitempty"`
+	Religion           string     `gorm:"size:100" json:"religion,omitempty"`
 	IDDocumentURL      string     `gorm:"size:500" json:"id_document_url,omitempty"`
 	PassportPhotoURL   string     `gorm:"size:500" json:"passport_photo_url,omitempty"`
+	// PartialTranscriptURL is the uploaded academic transcript an official
+	// inspects during screening.
+	PartialTranscriptURL string `gorm:"size:500" json:"partial_transcript_url,omitempty"`
 	// Programme and StudyYear are derived from the registration-number email
 	// (2024BSE088 → BSE, year of study in the current academic year).
 	Programme string `gorm:"size:50" json:"programme,omitempty"`

@@ -130,9 +130,7 @@ function StatusView({ id }: { id: string }) {
             choices.
           </p>
           <div className="row">
-            {["CLOSED", "RESULTS_UNDER_REVIEW", "FINALIZED", "ARCHIVED"].includes(
-              election.status
-            ) ? (
+            {election.status === "CLOSED" ? (
               <Link className="btn" href={`/elections/${id}/results`}>
                 <Icon name="chart" size="s" />
                 View results

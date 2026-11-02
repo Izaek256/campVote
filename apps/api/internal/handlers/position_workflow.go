@@ -471,8 +471,8 @@ func (h *PositionHandler) Applications(c *gin.Context) {
 		}
 	}
 	respond.OK(c, gin.H{
-		"position": position,
-		"applications": candidates,
+		"position":       position,
+		"applications":   candidates,
 		"approved_count": approved,
 	})
 }
@@ -512,12 +512,18 @@ func (h *PositionHandler) Apply(c *gin.Context) {
 	}
 
 	var input struct {
-		FullName     string `json:"full_name"`
-		Slogan       string `json:"slogan"`
-		Bio          string `json:"bio"`
-		Manifesto    string `json:"manifesto"`
-		ContactEmail string `json:"contact_email"`
-		ContactPhone string `json:"contact_phone"`
+		FullName             string `json:"full_name"`
+		Slogan               string `json:"slogan"`
+		Bio                  string `json:"bio"`
+		Manifesto            string `json:"manifesto"`
+		ContactEmail         string `json:"contact_email"`
+		ContactPhone         string `json:"contact_phone"`
+		DateOfBirth          string `json:"date_of_birth"`
+		CampusResidence      string `json:"campus_residence"`
+		Sex                  string `json:"sex"`
+		Religion             string `json:"religion"`
+		PassportPhotoURL     string `json:"passport_photo_url"`
+		PartialTranscriptURL string `json:"partial_transcript_url"`
 	}
 	// An empty body is allowed: the applicant then stands under their account
 	// name. A malformed body is still rejected.
@@ -543,6 +549,35 @@ func (h *PositionHandler) Apply(c *gin.Context) {
 		return
 	}
 
+	dateOfBirth, err := parseDateOfBirth(input.DateOfBirth)
+	if err != nil {
+		respond.Validation(c, "Your date of birth is not valid", map[string]string{
+			"date_of_birth": "use YYYY-MM-DD",
+		})
+		return
+	}
+	sex := strings.ToUpper(strings.TrimSpace(input.Sex))
+	if sex != "MALE" && sex != "FEMALE" {
+		respond.Validation(c, "Choose your sex", map[string]string{
+			"sex": "must be MALE or FEMALE",
+		})
+		return
+	}
+	passportPhoto := strings.TrimSpace(input.PassportPhotoURL)
+	if passportPhoto == "" || !storedFileURL(passportPhoto) {
+		respond.Validation(c, "A passport photo is required", map[string]string{
+			"passport_photo_url": "upload a passport photo first",
+		})
+		return
+	}
+	transcript := strings.TrimSpace(input.PartialTranscriptURL)
+	if transcript == "" || !storedFileURL(transcript) {
+		respond.Validation(c, "A partial transcript is required", map[string]string{
+			"partial_transcript_url": "upload a partial transcript first",
+		})
+		return
+	}
+
 	var existing int64
 	if err := h.DB.Model(&models.Candidate{}).
 		Where("position_id = ? AND nominated_by = ? AND approval_status <> ?",
@@ -557,16 +592,22 @@ func (h *PositionHandler) Apply(c *gin.Context) {
 	}
 
 	candidate := models.Candidate{
-		ElectionID:     position.ElectionRef(),
-		PositionID:     position.ID,
-		FullName:       fullName,
-		Slogan:         strings.TrimSpace(input.Slogan),
-		Bio:            strings.TrimSpace(input.Bio),
-		Manifesto:      strings.TrimSpace(input.Manifesto),
-		ContactEmail:   strings.TrimSpace(input.ContactEmail),
-		ContactPhone:   strings.TrimSpace(input.ContactPhone),
-		ApprovalStatus: models.CandidateStatusNominated,
-		NominatedBy:    user.ID,
+		ElectionID:           position.ElectionRef(),
+		PositionID:           position.ID,
+		FullName:             fullName,
+		Slogan:               strings.TrimSpace(input.Slogan),
+		Bio:                  strings.TrimSpace(input.Bio),
+		Manifesto:            strings.TrimSpace(input.Manifesto),
+		ContactEmail:         strings.TrimSpace(input.ContactEmail),
+		ContactPhone:         strings.TrimSpace(input.ContactPhone),
+		DateOfBirth:          dateOfBirth,
+		CampusResidence:      strings.TrimSpace(input.CampusResidence),
+		Sex:                  sex,
+		Religion:             strings.TrimSpace(input.Religion),
+		PassportPhotoURL:     passportPhoto,
+		PartialTranscriptURL: transcript,
+		ApprovalStatus:       models.CandidateStatusNominated,
+		NominatedBy:          user.ID,
 		// Registration identity comes from the verified email, not from input.
 		RegistrationNumber: strings.ToUpper(identity.Year + identity.Course + identity.Number),
 		Programme:          identity.Programme(),
@@ -747,7 +788,7 @@ func (h *PositionHandler) Link(c *gin.Context) {
 			return
 		}
 		switch election.Status {
-		case models.ElectionStatusFinalized, models.ElectionStatusArchived, models.ElectionStatusCancelled:
+		case models.ElectionStatusClosed:
 			respond.Forbidden(c, "This election can no longer take new positions")
 			return
 		}

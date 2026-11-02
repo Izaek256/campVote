@@ -16,17 +16,12 @@ export interface AuthPayload {
   tokens: { access_token: string; refresh_token: string; expires_at: number };
 }
 
-export type ElectionStatus =
-  | "DRAFT"
-  | "REGISTRATION"
-  | "PENDING_APPROVAL"
-  | "SCHEDULED"
-  | "OPEN"
-  | "CLOSED"
-  | "RESULTS_UNDER_REVIEW"
-  | "FINALIZED"
-  | "ARCHIVED"
-  | "CANCELLED";
+/**
+ * The election lifecycle has three stages. DRAFT is private while it is being
+ * built; the server opens it automatically at its start time; it closes at its
+ * end time. There is no separate scheduled or finalised state.
+ */
+export type ElectionStatus = "DRAFT" | "OPEN" | "CLOSED";
 
 export interface Election {
   id: string;
@@ -282,8 +277,11 @@ export interface Candidate {
   date_of_birth?: string | null;
   registration_number?: string;
   campus_residence?: string;
+  sex?: string;
+  religion?: string;
   id_document_url?: string;
   passport_photo_url?: string;
+  partial_transcript_url?: string;
   programme?: string;
   study_year?: number;
   created_at: string;

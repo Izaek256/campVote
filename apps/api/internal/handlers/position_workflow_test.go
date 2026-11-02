@@ -48,6 +48,19 @@ func positionEngine(t *testing.T, db *gorm.DB) *gin.Engine {
 	return r
 }
 
+// positionApplicationPayload is a complete, valid student application. The
+// apply path requires a date of birth, sex, a passport photo and a partial
+// transcript, so a name alone is no longer accepted.
+func positionApplicationPayload(name string) map[string]any {
+	return map[string]any{
+		"full_name":              name,
+		"date_of_birth":          "2003-05-14",
+		"sex":                    "MALE",
+		"passport_photo_url":     "/uploads/passport.jpg",
+		"partial_transcript_url": "/uploads/transcript.pdf",
+	}
+}
+
 // openPosition writes a standalone position that accepts applications and
 // admits only BSE students on the student domain.
 func openPosition(t *testing.T, db *gorm.DB, title string, maxCandidates int) *models.Position {
@@ -57,7 +70,7 @@ func openPosition(t *testing.T, db *gorm.DB, title string, maxCandidates int) *m
 		QuestionType:   models.QuestionTypeSingleChoice,
 		Status:         models.PositionStatusOpen,
 		MinSelections:  1,
-		MaxSelections: 1,
+		MaxSelections:  1,
 		Seats:          1,
 		MaxCandidates:  maxCandidates,
 		AllowedDomain:  "std.mast.ac.ug",
@@ -114,18 +127,18 @@ func TestApplyToPositionChecksEligibilityAndRejectsDuplicates(t *testing.T) {
 
 	var created models.Candidate
 	client.As(eligibleToken).Post("/api/v1/positions/"+position.ID+"/apply",
-		map[string]any{"full_name": "Synthetic Applicant"}).AssertCreated().BindData(&created)
+		positionApplicationPayload("Synthetic Applicant")).AssertCreated().BindData(&created)
 	if created.ApprovalStatus != models.CandidateStatusNominated || created.Programme != "BSE" {
 		t.Fatalf("application = %s/%s, want NOMINATED/BSE", created.ApprovalStatus, created.Programme)
 	}
 
 	// One live application per applicant per position.
 	client.As(eligibleToken).Post("/api/v1/positions/"+position.ID+"/apply",
-		map[string]any{"full_name": "Synthetic Applicant"}).AssertConflict()
+		positionApplicationPayload("Synthetic Applicant")).AssertConflict()
 
 	// A student outside the position's rule is refused by the server.
 	client.As(outsiderToken).Post("/api/v1/positions/"+position.ID+"/apply",
-		map[string]any{"full_name": "Not Eligible"}).AssertForbidden()
+		positionApplicationPayload("Not Eligible")).AssertForbidden()
 }
 
 func TestApprovalEnforcesMaxCandidates(t *testing.T) {
@@ -143,9 +156,9 @@ func TestApprovalEnforcesMaxCandidates(t *testing.T) {
 
 	var a, b models.Candidate
 	client.As(firstToken).Post("/api/v1/positions/"+position.ID+"/apply",
-		map[string]any{"full_name": "First Applicant"}).AssertCreated().BindData(&a)
+		positionApplicationPayload("First Applicant")).AssertCreated().BindData(&a)
 	client.As(secondToken).Post("/api/v1/positions/"+position.ID+"/apply",
-		map[string]any{"full_name": "Second Applicant"}).AssertCreated().BindData(&b)
+		positionApplicationPayload("Second Applicant")).AssertCreated().BindData(&b)
 
 	client.As(adminToken).Post("/api/v1/positions/"+position.ID+"/applications/"+a.ID+"/approve",
 		map[string]any{"reason": "Documents verified"}).AssertOK()
@@ -185,7 +198,7 @@ func TestLinkingPositionAdoptsItsApplications(t *testing.T) {
 
 	var application models.Candidate
 	client.As(applicantToken).Post("/api/v1/positions/"+position.ID+"/apply",
-		map[string]any{"full_name": "Synthetic Applicant"}).AssertCreated().BindData(&application)
+		positionApplicationPayload("Synthetic Applicant")).AssertCreated().BindData(&application)
 
 	client.As(adminToken).Post("/api/v1/positions/"+position.ID+"/link",
 		map[string]any{"election_id": election.ID}).AssertOK()

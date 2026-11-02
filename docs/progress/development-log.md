@@ -432,3 +432,63 @@ The theme engine (`components/theme-toggle.tsx`, the CSS variables in `globals.c
 - `SIGNUP_ALLOWED_DOMAINS` (`auth.go`) and the `NEXT_PUBLIC_*` defaults still say `std.mast.ac.ug` / `mast.ac.ug`, which look like a typo against `must.ac.ug` in `SRS.md` / `STACK.md` / `ADR.md` / `AGENTS.md`. Left unchanged here (out of scope for this pass); flagged in the debugging doc.
 - Browser (Playwright) evidence for the theme switcher and the simplified form: no Playwright suite exists locally.
 
+---
+
+## [2026-11-03] Three-Stage Election Lifecycle, Rich Candidate Applications, Admin Review Modal, and Election Delete
+
+**Branch:** `feature/mvp-phases-3-7` (continuing work on the same task branch).
+**Goal:** Reduce the election lifecycle to exactly three stages, let a student submit a full candidacy application (personal details, passport photo, partial transcript), let an admin open that application in a modal and approve/reject it, and let an admin delete an election that has not yet collected a ballot.
+
+### 1. Lifecycle reduced to three stages (back-end)
+The lifecycle state machine in `apps/api/internal/lifecycle/lifecycle.go` now has a 3×3 `transitionMatrix`:
+
+| From \ To | DRAFT | OPEN | CLOSED |
+|---|---|---|---|
+| **DRAFT** | — | auto at start time | allowed (close early) |
+| **OPEN** | — | — | auto at end time / close early |
+| **CLOSED** | — | — | terminal |
+
+- Removed `SCHEDULED`, `RESULTS_UNDER_REVIEW`, `FINALIZED`, `ARCHIVED`, `CANCELLED`, `PENDING_APPROVAL`, `REGISTRATION`.
+- `Ensure` auto-opens a `DRAFT` at its start time and auto-closes an `OPEN` at its end time; `SyncAll` sweeps due elections once a minute.
+- A client-initiated `POST /elections/:id/transition {to: "OPEN"}` is **refused** — opening is a clock event, not a manual action.
+- Certification no longer moves the election on: it relabels the current tally snapshot `PROVISIONAL` → `CERTIFIED` and is only accepted while the election is `CLOSED`.
+- `ValidateConfiguration` / `ReadyToOpen` unchanged in spirit; readiness is advisory (it no longer gates a manual open).
+
+### 2. Ballot-safe election delete (back-end)
+`DELETE /elections/:id` (`apps/api/internal/handlers/election_lifecycle.go`):
+1. `lifecycle.Ensure` to reconcile status with the clock first.
+2. Count `AnonymousBallot` rows for the election; if **any** exist → `409 Conflict` and the election must be closed instead (its result stays auditable).
+3. Otherwise, in one transaction: insert the `ELECTION_DELETED` audit row, then delete candidates, positions and the election.
+
+New audit action `AuditActionElectionDeleted = "ELECTION_DELETED"` in `apps/api/internal/models/election_audit.go`. The route is listed in `internal/policy/routes.go` so `TestEveryRouteHasAPolicy` stays green.
+
+### 3. Richer student application (back-end + front-end)
+`POST /positions/:id/apply` (`apps/api/internal/handlers/position_workflow.go`) now **requires**: date of birth, sex, passport photo URL and partial-transcript URL. Identity fields (registration number, programme, study year) are derived from the authenticated student's email rather than typed in. New `Candidate` columns carry `sex`, `religion` and `partial_transcript_url`.
+The apply form (`apps/web/app/positions/page.tsx`) uploads via the existing `POST /uploads` endpoint (`upload()` helper in `lib/api.ts`) and shows a passport/transcript preview.
+
+### 4. Admin application review modal (front-end)
+New `apps/web/components/application-review-dialog.tsx` — a native `<dialog>` (focus-contained, Escape-to-close, focus return) that shows the passport thumbnail, status chip and a `<dl className="kv">` of names / campus id / programme / year / DOB / age / sex / religion / residence / contact, document links (passport, partial transcript, optional student ID), slogan and bio, plus a reviewer note and a reason textarea. It offers **Previous / Next** navigation and **Approve / Reject** actions (reject requires a reason). `apps/web/app/staff/positions/page.tsx` opens it on row click / a **Review** button.
+
+### 5. Delete-election UI (front-end)
+`apps/web/app/staff/elections/[id]/page.tsx` gained a **Delete election** button in the Audit panel that opens a destructive `ConfirmDialog` and, on success, calls `elections.remove(id)` and redirects to `/staff`. The copy states that an election which has already collected a ballot cannot be deleted and should be closed instead.
+
+### 6. Front-end lifecycle sweep
+Every remaining reference to a removed status was cleared from `apps/web` (a repo-wide grep for `RESULTS_UNDER_REVIEW|FINALIZED|ARCHIVED|CANCELLED|SCHEDULED|PENDING_APPROVAL|REGISTRATION` in `*.tsx`/`*.ts` returns no matches): `app/results/page.tsx` and `app/staff/elections/[id]/results/page.tsx` now treat only `CLOSED` as countable; `app/staff/elections/[id]/page.tsx` filters manual transitions down to *close early*; `lib/types.ts`, `lib/format.ts` and their tests are reduced to `DRAFT | OPEN | CLOSED`.
+
+### Checks Run
+- `npm run type-check` — PASS (exit 0).
+- `npm test` — PASS (12/12, 2 files).
+- `npm run build` — PASS (Next.js 16.4.3; 28 routes emitted, incl. `/positions`, `/staff/positions`, `/results`, `/staff/elections/[id]`).
+- `go test ./internal/handlers/... ./internal/lifecycle/... ./internal/policy/... ./internal/results/...` — PASS (all ok, cached).
+- No Playwright/E2E suite exists locally, so the modal and delete flow have no browser-automation evidence.
+
+### Documentation
+- Rewrote `docs/election-lifecycle.md` for the three-stage model (transition matrix, auto open/close, lapsed-draft rule, client-open refusal, certification relabel, freeze/extension/early-close, and a new §6 on `DELETE /elections/:id`).
+- Updated `docs/features/positions-first-workflow.md` (Link refuses a `CLOSED` election; Application-details bullet; "Admin application review" subsection; UI and Checks tables).
+- Updated `docs/rbac.md` (results-visibility table reduced to `DRAFT`/`OPEN`/`CLOSED`; separation-of-duties bullet for CLOSED-only certification).
+
+### Deferred / Known limitations
+- Pre-existing Biome **lint** findings remain untouched: `next.config.ts` (`useNodejsImportProtocol`), `app/layout.tsx` (`noDangerouslySetInnerHtml` on the pre-paint theme script) and `app/staff/elections/[id]/candidates/page.tsx` (`noRedundantAlt`).
+- `npm run lint` (= `biome check .`) also reports **formatter** diffs across many untouched files because the working tree is `i/lf w/crlf` on Windows; this is environmental and no code change was made to mask it.
+- No browser evidence for the review modal or the delete confirm dialog (no local Playwright suite).
+

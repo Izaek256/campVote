@@ -25,12 +25,7 @@ const SystemActor = "system"
 
 // Closed reports whether voting has ended for this election status.
 func Closed(status string) bool {
-	switch status {
-	case models.ElectionStatusClosed, models.ElectionStatusReview,
-		models.ElectionStatusFinalized, models.ElectionStatusArchived:
-		return true
-	}
-	return false
+	return status == models.ElectionStatusClosed
 }
 
 // Compute counts the stored ballots of one election into an aggregate result.

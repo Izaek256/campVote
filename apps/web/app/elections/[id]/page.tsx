@@ -13,26 +13,12 @@ import { ApiError, elections } from "@/lib/api";
 import { categoryLabel, formatEAT, formatNumber, statusLabel } from "@/lib/format";
 import type { Election, EligibilityDecision } from "@/lib/types";
 
-const railStates = [
-  "DRAFT",
-  "REGISTRATION",
-  "PENDING_APPROVAL",
-  "SCHEDULED",
-  "OPEN",
-  "CLOSED",
-  "RESULTS_UNDER_REVIEW",
-  "FINALIZED",
-] as const;
+const railStates = ["DRAFT", "OPEN", "CLOSED"] as const;
 
 const railLabels: Record<string, string> = {
   DRAFT: "Draft",
-  REGISTRATION: "Registration",
-  PENDING_APPROVAL: "Approval",
-  SCHEDULED: "Scheduled",
   OPEN: "Open",
   CLOSED: "Closed",
-  RESULTS_UNDER_REVIEW: "Review",
-  FINALIZED: "Finalized",
 };
 
 function LifecycleRail({ status }: { status: Election["status"] }) {
@@ -115,9 +101,7 @@ function ElectionView({ id }: { id: string }) {
   const canVote = Boolean(eligibility?.eligible) && election.accepting_votes && !voted;
   const applicationsOpen =
     Boolean(eligibility?.eligible) &&
-    !["DRAFT", "CLOSED", "RESULTS_UNDER_REVIEW", "FINALIZED", "ARCHIVED", "CANCELLED"].includes(
-      election.status
-    ) &&
+    election.status === "OPEN" &&
     new Date(election.starts_at).getTime() > Date.now();
 
   return (
@@ -218,8 +202,9 @@ function ElectionView({ id }: { id: string }) {
               <span className="lbl">Status</span>
               <b style={{ fontSize: 20 }}>{statusLabel(election.status)}</b>
               <span className="hint">
-                Voting {election.status === "SCHEDULED" ? "opens" : "opened"}{" "}
-                {formatEAT(election.starts_at)}.
+                {election.status === "CLOSED"
+                  ? `Voting closed ${formatEAT(election.ends_at)}.`
+                  : `Voting opens ${formatEAT(election.starts_at)}.`}
               </span>
               <Link className="btn block" href={`/elections/${election.id}/results`}>
                 <Icon name="chart" />

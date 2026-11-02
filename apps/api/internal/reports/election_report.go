@@ -217,7 +217,7 @@ func ResultsVerification(db *gorm.DB, electionID string) ([]byte, error) {
 	}{
 		{
 			check:   "Election status allows results publication",
-			passed:  election.Status == models.ElectionStatusClosed || election.Status == models.ElectionStatusFinalized,
+			passed:  election.Status == models.ElectionStatusClosed,
 			details: fmt.Sprintf("Current status: %s", election.Status),
 		},
 		{

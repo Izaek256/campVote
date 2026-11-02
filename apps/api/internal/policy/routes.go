@@ -127,6 +127,7 @@ func init() {
 	permitted("elections.create", "POST", "/api/v1/elections")
 	permitted("elections.view", "GET", "/api/v1/elections/:id")
 	permitted("elections.edit", "PUT", "/api/v1/elections/:id")
+	permitted("elections.edit", "DELETE", "/api/v1/elections/:id")
 	permitted("elections.edit", "POST", "/api/v1/elections/:id/transitions")
 	permitted("elections.edit", "GET", "/api/v1/elections/:id/readiness")
 	permitted("elections.roles", "GET", "/api/v1/elections/:id/roles")

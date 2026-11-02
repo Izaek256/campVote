@@ -136,7 +136,7 @@ func TestRoutePolicyMatrixForElectionEndpoints(t *testing.T) {
 		{"admin reads results", adminToken, http.MethodGet, "/api/v1/elections/e-b/results", http.StatusOK},
 		{"candidate cannot list roles", candidateToken, http.MethodGet, "/api/v1/elections/e-a/roles", http.StatusForbidden},
 		{"official cannot assign roles", officialToken, http.MethodPut, "/api/v1/elections/e-a/roles/" + voter.ID, http.StatusForbidden},
-		{"admin cannot read certified-only before certification", adminToken, http.MethodGet, "/api/v1/elections/e-d/results", http.StatusForbidden},
+		{"admin reads certified-only once voting has closed", adminToken, http.MethodGet, "/api/v1/elections/e-d/results", http.StatusOK},
 		{"official cannot certify", officialToken, http.MethodPost, "/api/v1/elections/e-d/results/certify", http.StatusForbidden},
 		{"certify requires a snapshot id", adminToken, http.MethodPost, "/api/v1/elections/e-d/results/certify", http.StatusNotFound},
 	}
@@ -176,9 +176,17 @@ func TestRoutePolicyMatrixForElectionEndpoints(t *testing.T) {
 		t.Errorf("first snapshot status = %q, want PROVISIONAL", history.Snapshots[0].Status)
 	}
 
-	// Certified-only: still forbidden before certification, for everyone.
+	// Certified-only in the three-stage lifecycle: voting has closed, so the
+	// tally is readable, but nothing is certified yet. The reader gets the
+	// uncertified PROVISIONAL snapshot, not a forbidden response.
+	var beforeCertification struct {
+		Label string `json:"label"`
+	}
 	client.As(adminToken).Get("/api/v1/elections/e-d/results").
-		AssertStatus(http.StatusForbidden)
+		AssertOK().BindData(&beforeCertification)
+	if beforeCertification.Label != models.ResultStatusProvisional {
+		t.Errorf("pre-certification label = %q, want PROVISIONAL", beforeCertification.Label)
+	}
 
 	client.As(adminToken).Post("/api/v1/elections/e-d/results/certify", map[string]string{
 		"snapshot_id": history.Snapshots[0].ID,

@@ -13,12 +13,11 @@ import { ApiError, elections } from "@/lib/api";
 import { formatShortEAT } from "@/lib/format";
 import type { Election } from "@/lib/types";
 
-// A closed election is one the count can already run for. The results policy
-// still decides whether the figures are published to a voter.
-const CLOSED_STATES = ["CLOSED", "RESULTS_UNDER_REVIEW", "FINALIZED", "ARCHIVED", "CANCELLED"];
-
+// In the three-stage lifecycle a closed election is one the count can already
+// run for. The results policy still decides whether the figures are published
+// to a voter.
 function isClosed(status: Election["status"]): boolean {
-  return CLOSED_STATES.includes(status);
+  return status === "CLOSED";
 }
 
 function ResultsView() {

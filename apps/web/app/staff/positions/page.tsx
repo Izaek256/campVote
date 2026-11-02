@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { ApplicationReviewDialog } from "@/components/application-review-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Icon } from "@/components/icon";
@@ -73,7 +74,8 @@ function ManagePositions() {
   const [deleting, setDeleting] = useState<PositionWithMeta | null>(null);
 
   const [reviewing, setReviewing] = useState<PositionApplications | null>(null);
-  const [rejecting, setRejecting] = useState<{ candidate: Candidate; reason: string } | null>(null);
+  const [selected, setSelected] = useState<Candidate | null>(null);
+  const [decisionReason, setDecisionReason] = useState("");
   const [linking, setLinking] = useState<PositionWithMeta | null>(null);
   const [linkTarget, setLinkTarget] = useState("");
 
@@ -182,32 +184,49 @@ function ManagePositions() {
     }
   }
 
-  async function approve(candidate: Candidate) {
-    if (!reviewing) return;
-    setBusy(true);
-    try {
-      await positions.approve(reviewing.position.id, candidate.id, "Approved by an administrator");
-      toast.success(`${candidate.full_name} approved as a candidate.`);
-      await openReview(reviewing.position);
-      await load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "The application could not be approved.");
-    } finally {
-      setBusy(false);
-    }
+  function openApplication(candidate: Candidate) {
+    setSelected(candidate);
+    setDecisionReason("");
   }
 
-  async function confirmReject() {
-    if (!reviewing || !rejecting) return;
+  /** Move to the previous or next application without closing the dialog. */
+  function step(delta: number) {
+    if (!reviewing || !selected) return;
+    const at = reviewing.applications.findIndex((item) => item.id === selected.id);
+    const next = reviewing.applications[at + delta];
+    if (next) openApplication(next);
+  }
+
+  async function decide(action: "approve" | "reject") {
+    if (!reviewing || !selected) return;
+    if (action === "reject" && !decisionReason.trim()) {
+      toast.error("Add a reason before rejecting an application.");
+      return;
+    }
     setBusy(true);
     try {
-      await positions.reject(reviewing.position.id, rejecting.candidate.id, rejecting.reason);
-      toast.success("Application rejected.");
-      setRejecting(null);
+      if (action === "approve") {
+        await positions.approve(
+          reviewing.position.id,
+          selected.id,
+          decisionReason.trim() || "Approved by an administrator"
+        );
+        toast.success(`${selected.full_name} approved as a candidate.`);
+      } else {
+        await positions.reject(reviewing.position.id, selected.id, decisionReason.trim());
+        toast.success("Application rejected.");
+      }
+      setSelected(null);
       await openReview(reviewing.position);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "The application could not be rejected.");
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : action === "approve"
+            ? "The application could not be approved."
+            : "The application could not be rejected."
+      );
     } finally {
       setBusy(false);
     }
@@ -496,7 +515,11 @@ function ManagePositions() {
               </thead>
               <tbody>
                 {reviewing.applications.map((candidate) => (
-                  <tr key={candidate.id}>
+                  <tr
+                    key={candidate.id}
+                    onClick={() => openApplication(candidate)}
+                    style={{ cursor: "pointer" }}
+                  >
                     <td>
                       <b>{candidate.full_name}</b>
                       {candidate.programme || candidate.study_year ? (
@@ -514,27 +537,13 @@ function ManagePositions() {
                       </span>
                     </td>
                     <td className="r">
-                      {candidate.approval_status === "NOMINATED" ||
-                      candidate.approval_status === "PENDING" ? (
-                        <span className="row" style={{ justifyContent: "flex-end" }}>
-                          <button
-                            type="button"
-                            className="btn sm"
-                            onClick={() => approve(candidate)}
-                            disabled={busy}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            type="button"
-                            className="btn sm danger-o"
-                            onClick={() => setRejecting({ candidate, reason: "" })}
-                            disabled={busy}
-                          >
-                            Reject
-                          </button>
-                        </span>
-                      ) : null}
+                      <button
+                        type="button"
+                        className="btn sm"
+                        onClick={() => openApplication(candidate)}
+                      >
+                        Review
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -542,7 +551,14 @@ function ManagePositions() {
             </table>
           )}
           <div className="row">
-            <button type="button" className="btn ghost" onClick={() => setReviewing(null)}>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => {
+                setSelected(null);
+                setReviewing(null);
+              }}
+            >
               Close
             </button>
           </div>
@@ -683,33 +699,26 @@ function ManagePositions() {
         </p>
       </ConfirmDialog>
 
-      <ConfirmDialog
-        open={rejecting !== null}
-        title="Reject this application?"
-        confirmLabel="Reject"
-        destructive
-        busy={busy}
-        onClose={() => setRejecting(null)}
-        onConfirm={confirmReject}
-      >
-        <p>
-          Give <b>{rejecting?.candidate.full_name}</b> a reason.
-        </p>
-        <div className="field">
-          <label htmlFor="reject-reason">Reason</label>
-          <textarea
-            id="reject-reason"
-            className="ta"
-            rows={3}
-            value={rejecting?.reason ?? ""}
-            onChange={(event) =>
-              setRejecting((current) =>
-                current ? { ...current, reason: event.target.value } : current
+      <ApplicationReviewDialog
+        candidate={selected}
+        index={
+          reviewing && selected
+            ? Math.max(
+                0,
+                reviewing.applications.findIndex((item) => item.id === selected.id)
               )
-            }
-          />
-        </div>
-      </ConfirmDialog>
+            : 0
+        }
+        total={reviewing?.applications.length ?? 0}
+        reason={decisionReason}
+        onReasonChange={setDecisionReason}
+        busy={busy}
+        onPrev={() => step(-1)}
+        onNext={() => step(1)}
+        onApprove={() => decide("approve")}
+        onReject={() => decide("reject")}
+        onClose={() => setSelected(null)}
+      />
     </StaffShell>
   );
 }

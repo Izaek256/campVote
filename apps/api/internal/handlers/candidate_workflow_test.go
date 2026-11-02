@@ -73,7 +73,7 @@ func candidateElection(t *testing.T, db *gorm.DB, status string, startsAt time.T
 func TestCandidateApplicationChecksRosterAndWindow(t *testing.T) {
 	db := rbacDB(t)
 	now := time.Now().UTC()
-	election, position := candidateElection(t, db, models.ElectionStatusScheduled, now.Add(24*time.Hour))
+	election, position := candidateElection(t, db, models.ElectionStatusOpen, now.Add(24*time.Hour))
 	if err := db.Model(&models.Election{}).Where("id = ?", election.ID).
 		Update("allowed_courses", "bse").Error; err != nil {
 		t.Fatal(err)
@@ -133,7 +133,7 @@ func TestCandidateApplicationClosesWhenVotingOpens(t *testing.T) {
 func TestCandidateApprovalNotifiesAndAssignsBallotNumber(t *testing.T) {
 	db := rbacDB(t)
 	now := time.Now().UTC()
-	election, position := candidateElection(t, db, models.ElectionStatusScheduled, now.Add(24*time.Hour))
+	election, position := candidateElection(t, db, models.ElectionStatusOpen, now.Add(24*time.Hour))
 	voter := testkit.User(t, db, "2023bit001@std.mast.ac.ug", models.RoleStudentVoter)
 	listed(t, db, election.ID, "22/U/0102", voter.Email)
 	officer := testkit.User(t, db, "chief@must.ac.ug", models.RoleChiefElectionAdmin)
@@ -176,7 +176,7 @@ func TestCandidateApprovalNotifiesAndAssignsBallotNumber(t *testing.T) {
 func TestCandidateWithdrawalIsOwnedByApplicant(t *testing.T) {
 	db := rbacDB(t)
 	now := time.Now().UTC()
-	election, position := candidateElection(t, db, models.ElectionStatusScheduled, now.Add(24*time.Hour))
+	election, position := candidateElection(t, db, models.ElectionStatusOpen, now.Add(24*time.Hour))
 	voter := testkit.User(t, db, "2023bed001@std.mast.ac.ug", models.RoleStudentVoter)
 	other := testkit.User(t, db, "2023bba001@std.mast.ac.ug", models.RoleStudentVoter)
 	listed(t, db, election.ID, "22/U/0103", voter.Email)

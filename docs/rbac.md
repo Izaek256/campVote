@@ -115,14 +115,18 @@ Consequences:
 | Policy | Status | Requirement |
 |---|---|---|
 | `LIVE` | `OPEN` | `results.view_live` |
-| `LIVE` | closed/review/finalized | `results.view` |
-| `AFTER_CLOSE` | `OPEN`, `DRAFT`, `SCHEDULED`, `REGISTRATION`, `PENDING_APPROVAL` | refused: "Results are published after voting closes" |
-| `AFTER_CLOSE` | `CLOSED`, `REVIEW`, `FINALIZED`, `ARCHIVED` | `results.view` |
-| `CERTIFIED_ONLY` | before `FINALIZED` | refused: "published only after certification" |
-| `CERTIFIED_ONLY` | `FINALIZED`, `ARCHIVED` | `results.view` |
+| `LIVE` | `CLOSED` | `results.view` |
+| `AFTER_CLOSE` | `DRAFT`, `OPEN` | refused: "Results are published after voting closes" |
+| `AFTER_CLOSE` | `CLOSED` | `results.view` |
+| `CERTIFIED_ONLY` | `DRAFT`, `OPEN` | refused: "Results are published only after voting closes" |
+| `CERTIFIED_ONLY` | `CLOSED` | `results.view` |
 | unrecognised policy | any | refused (fail closed) |
 
-The response labels `FINALIZED`/`ARCHIVED` as `CERTIFIED` and everything else as `PROVISIONAL`; it never uses "winner" (FR-DASH-06, FR-DASH-09). Tallies come from `ElectionTally`, which has no voter identity columns, so a results response cannot join to a voter.
+The three-stage lifecycle has no finalised state, so a `CERTIFIED_ONLY`
+election publishes once voting has closed. The response labels the snapshot
+`CERTIFIED` only after certification and `PROVISIONAL` otherwise; it never uses
+"winner" (FR-DASH-06, FR-DASH-09). Tallies come from `ElectionTally`, which has
+no voter identity columns, so a results response cannot join to a voter.
 
 Candidates and auditors hold `results.view`, so they can read a published tally. Only officials, chiefs and `ADMIN` hold `results.view_live`.
 
@@ -132,7 +136,7 @@ Candidates and auditors hold `results.view`, so they can read a published tally.
 - An official or auditor cannot be made a candidate in an election they administer or observe.
 - Certification requires **at least two distinct users** assigned as official or chief on that election, and the certifying actor must be one of them unless they are global.
 - The election creator cannot certify its own results.
-- Certification is only possible from `CLOSED` or `REVIEW`, writes `FINALIZED` and an `ElectionAuditLog` row (`results_certified`) in one transaction.
+- Certification is only possible when the election is `CLOSED`; it relabels the current snapshot from `PROVISIONAL` to `CERTIFIED` (it does not move the election on) and writes an `ElectionAuditLog` row (`results_certified`) in one transaction.
 
 ## Live role changes
 
