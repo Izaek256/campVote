@@ -99,8 +99,8 @@ func TestRoutePolicyMatrixForElectionEndpoints(t *testing.T) {
 	admin := rbacUser(t, db, "admin@must.ac.ug", models.RoleAdmin)
 	official := rbacUser(t, db, "official@must.ac.ug", models.RoleElectionOfficial)
 	official2 := rbacUser(t, db, "official2@must.ac.ug", models.RoleElectionOfficial)
-	candidate := rbacUser(t, db, "candidate@std.must.ac.ug", models.RoleCandidate)
-	voter := rbacUser(t, db, "voter@std.must.ac.ug", models.RoleStudentVoter)
+	candidate := rbacUser(t, db, "2022bse002@std.mast.ac.ug", models.RoleCandidate)
+	voter := rbacUser(t, db, "2022bse003@std.mast.ac.ug", models.RoleStudentVoter)
 
 	rbacElection(t, db, "e-a", models.ElectionStatusOpen, models.ResultPolicyLive, "creator")
 	rbacElection(t, db, "e-b", models.ElectionStatusOpen, models.ResultPolicyLive, "creator")
@@ -238,7 +238,7 @@ func TestRoleChangeAppliesToExistingSessionAndCrossElection(t *testing.T) {
 
 	// Separation of duties: a candidate cannot be made an official in the same
 	// election they stand in.
-	candidate := rbacUser(t, db, "cand@std.must.ac.ug", models.RoleCandidate)
+	candidate := rbacUser(t, db, "2022bse004@std.mast.ac.ug", models.RoleCandidate)
 	rbacAssign(t, db, "e-a", candidate.ID, models.RoleCandidate)
 	client.As(chiefToken).Put("/api/v1/elections/e-a/roles/"+candidate.ID, map[string]string{
 		"role": models.RoleElectionOfficial,

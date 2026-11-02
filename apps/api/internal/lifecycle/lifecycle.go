@@ -169,8 +169,8 @@ func ValidateBasics(e *models.Election, at time.Time, scheduling bool) error {
 	if !validResultPolicy(e.ResultPolicy) {
 		fields["result_policy"] = "choose LIVE, AFTER_CLOSE or CERTIFIED_ONLY"
 	}
-	if !validDomains(e.AllowedDomains) {
-		fields["allowed_domains"] = "use comma-separated institutional domains such as @std.must.ac.ug"
+	if !validDomains(e.AllowedDomain) {
+		fields["allowed_domain"] = "use a single institutional domain such as std.mast.ac.ug"
 	}
 	switch {
 	case e.StartsAt.IsZero() || e.EndsAt.IsZero():

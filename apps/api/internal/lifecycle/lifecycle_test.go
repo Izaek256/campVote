@@ -99,9 +99,9 @@ func validElection(t *testing.T, db *gorm.DB, status string, start, end time.Tim
 	t.Helper()
 	e := &models.Election{
 		Title: "Synthetic Guild Election", Category: models.ElectionCategoryGuild,
-		OrganizingUnit: "MMU Electoral Commission", Status: status,
+		OrganizingUnit: "Electoral Commission", Status: status,
 		StartsAt: start, EndsAt: end, ResultPolicy: models.ResultPolicyAfterClose,
-		AllowedDomains: "@std.must.ac.ug",
+		AllowedDomain: "std.mast.ac.ug",
 	}
 	if err := db.Create(e).Error; err != nil {
 		t.Fatal(err)
@@ -259,7 +259,7 @@ func TestValidateConfiguration(t *testing.T) {
 		}},
 		{"unknown category", func(e *models.Election) { e.Category = "SPACE" }},
 		{"unknown result policy", func(e *models.Election) { e.ResultPolicy = "SOMETIME" }},
-		{"bad domain", func(e *models.Election) { e.AllowedDomains = "@std.must.ac.ug,not a domain" }},
+		{"bad domain", func(e *models.Election) { e.AllowedDomain = "not a domain!" }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -69,7 +69,7 @@ func createLifecycleElection(t *testing.T, client *testkit.Client, token string,
 		"starts_at":       start.Format(time.RFC3339),
 		"ends_at":         end.Format(time.RFC3339),
 		"result_policy":   models.ResultPolicyAfterClose,
-		"allowed_domains": "@std.must.ac.ug",
+		"allowed_domains": "@std.mast.ac.ug",
 	}).AssertCreated().BindData(&created)
 	return created
 }
@@ -238,11 +238,11 @@ func TestSpoofedDateHeaderCannotExtendVoting(t *testing.T) {
 	clock := now
 	engine := lifecycleEngine(t, db, &clock)
 
-	voter := testkit.User(t, db, "listed@std.must.ac.ug", models.RoleStudentVoter)
+	voter := testkit.User(t, db, "2022bse001@std.mast.ac.ug", models.RoleStudentVoter)
 	election := &models.Election{
 		ID: "spoof", Title: "Spoof Test", Status: models.ElectionStatusOpen,
 		StartsAt: now.Add(-2 * time.Hour), EndsAt: now.Add(-time.Minute),
-		ResultPolicy: models.ResultPolicyAfterClose, AllowedDomains: "@std.must.ac.ug",
+		ResultPolicy: models.ResultPolicyAfterClose, AllowedDomain: "std.mast.ac.ug",
 	}
 	if err := db.Create(election).Error; err != nil {
 		t.Fatal(err)
@@ -305,7 +305,7 @@ func TestTimezoneOffsetsAreNormalizedAndNaiveTimesRejected(t *testing.T) {
 		"starts_at":       "2027-03-14T01:30:00-05:00",
 		"ends_at":         "2027-03-14T04:00:00-04:00",
 		"result_policy":   models.ResultPolicyAfterClose,
-		"allowed_domains": "@std.must.ac.ug",
+		"allowed_domains": "@std.mast.ac.ug",
 	}).AssertCreated().BindData(&created)
 
 	wantStart := time.Date(2027, 3, 14, 6, 30, 0, 0, time.UTC)
@@ -336,7 +336,7 @@ func TestElectionListHidesOtherPeoplesDrafts(t *testing.T) {
 	engine := lifecycleEngine(t, db, &clock)
 	auth := testkit.Auth(testkit.Config(), db)
 	admin := rbacUser(t, db, "list-admin@must.ac.ug", models.RoleAdmin)
-	voter := rbacUser(t, db, "list-voter@std.must.ac.ug", models.RoleStudentVoter)
+	voter := rbacUser(t, db, "list-voter@std.mast.ac.ug", models.RoleStudentVoter)
 	adminToken := testkit.SignIn(t, db, auth, admin)
 	voterToken := testkit.SignIn(t, db, auth, voter)
 	client := testkit.New(t, engine)

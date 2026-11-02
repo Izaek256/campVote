@@ -12,7 +12,6 @@ import (
 
 	"campvote/apps/api/internal/eligibility"
 	"campvote/apps/api/internal/models"
-	"campvote/apps/api/internal/policy"
 	"campvote/apps/api/internal/respond"
 )
 

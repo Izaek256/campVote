@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
+	"campvote/apps/api/internal/eligibility"
 	"campvote/apps/api/internal/models"
 )
 
 func TestCandidateApplicationWithDocuments(t *testing.T) {
 	db := setupTestDB(t)
-	handler := NewCandidateHandler(db)
 
 	// Create test election and position
 	election := models.Election{
@@ -27,27 +27,27 @@ func TestCandidateApplicationWithDocuments(t *testing.T) {
 	require.NoError(t, db.Create(&election).Error)
 
 	position := models.Position{
-		ElectionID:   election.ID,
-		Title:        "Test Position",
-		QuestionType: models.QuestionTypeSingleChoice,
+		ElectionID:    election.ID,
+		Title:         "Test Position",
+		QuestionType:  models.QuestionTypeSingleChoice,
 		MinSelections: 1,
 		MaxSelections: 1,
-		Seats:        1,
+		Seats:         1,
 	}
 	require.NoError(t, db.Create(&position).Error)
 
 	// Test candidate application with new fields
 	dob := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	candidate := models.Candidate{
-		ElectionID:          election.ID,
-		PositionID:          position.ID,
-		FullName:            "Test Candidate",
-		RegistrationNumber:  "22/U/1001/PS",
-		CampusResidence:     "Block A, Room 101",
-		DateOfBirth:         &dob,
-		IDDocumentURL:       "https://example.com/id.pdf",
-		PassportPhotoURL:    "https://example.com/photo.jpg",
-		ApprovalStatus:      models.CandidateStatusNominated,
+		ElectionID:         election.ID,
+		PositionID:         position.ID,
+		FullName:           "Test Candidate",
+		RegistrationNumber: "22/U/1001/PS",
+		CampusResidence:    "Block A, Room 101",
+		DateOfBirth:        &dob,
+		IDDocumentURL:      "https://example.com/id.pdf",
+		PassportPhotoURL:   "https://example.com/photo.jpg",
+		ApprovalStatus:     models.CandidateStatusNominated,
 	}
 
 	err := db.Create(&candidate).Error
@@ -68,7 +68,6 @@ func TestCandidateApplicationWithDocuments(t *testing.T) {
 
 func TestCandidateScreeningWorkflow(t *testing.T) {
 	db := setupTestDB(t)
-	handler := NewCandidateHandler(db)
 
 	// Create test election, position, and candidate
 	election := models.Election{
@@ -82,12 +81,12 @@ func TestCandidateScreeningWorkflow(t *testing.T) {
 	require.NoError(t, db.Create(&election).Error)
 
 	position := models.Position{
-		ElectionID:   election.ID,
-		Title:        "Test Position",
-		QuestionType: models.QuestionTypeSingleChoice,
+		ElectionID:    election.ID,
+		Title:         "Test Position",
+		QuestionType:  models.QuestionTypeSingleChoice,
 		MinSelections: 1,
 		MaxSelections: 1,
-		Seats:        1,
+		Seats:         1,
 	}
 	require.NoError(t, db.Create(&position).Error)
 
@@ -133,20 +132,29 @@ func TestCandidateScreeningWorkflow(t *testing.T) {
 	assert.Equal(t, "Missing required documents", retrieved.ReviewNotes)
 }
 
-func TestDomainEligibilityConfiguration(t *testing.T) {
-	// Test that domains are properly configured
-	domains := GetAllDomains()
-	assert.Greater(t, len(domains), 0, "Should have configured domains")
-
-	// Test year-specific domains
-	year2026 := GetDomainsByYear("YEAR_2026")
-	assert.Greater(t, len(year2026), 0, "Year 2026 should have domains")
-	assert.Contains(t, year2026, "2026.mbr@std.must.ac.ug")
-
-	// Test domain eligibility check
-	assert.True(t, IsDomainEligible("student@2026.mbr@std.must.ac.ug"))
-	assert.True(t, IsDomainEligible("staff@must.ac.ug"))
-	assert.False(t, IsDomainEligible("student@external.com"))
+func TestEligibilityParsing(t *testing.T) {
+	// Test that the new registration-number email parser works.
+	cases := []struct {
+		email string
+		valid bool
+		year  string
+		crs   string
+	}{
+		{"2024bse088@std.mast.ac.ug", true, "2024", "bse"},
+		{"2022bba001@std.mast.ac.ug", true, "2022", "bba"},
+		{"staff@must.ac.ug", false, "", ""},
+		{"student@external.com", false, "", ""},
+	}
+	for _, tc := range cases {
+		id, ok := eligibility.ParseEmail(tc.email)
+		if ok != tc.valid {
+			t.Errorf("ParseEmail(%q) valid=%v, want %v", tc.email, ok, tc.valid)
+			continue
+		}
+		if ok && (id.Year != tc.year || id.Course != tc.crs) {
+			t.Errorf("ParseEmail(%q) = {%s %s}, want {%s %s}", tc.email, id.Year, id.Course, tc.year, tc.crs)
+		}
+	}
 }
 
 func setupTestDB(t *testing.T) *gorm.DB {

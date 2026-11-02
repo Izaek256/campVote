@@ -35,7 +35,7 @@ func TestElectionSummary(t *testing.T) {
 		StartsAt:       time.Now().UTC().Add(24 * time.Hour),
 		EndsAt:         time.Now().UTC().Add(48 * time.Hour),
 		ResultPolicy:   models.ResultPolicyAfterClose,
-		AllowedDomains: "@std.must.ac.ug",
+		AllowedDomains: "std.mast.ac.ug",
 	}
 	if err := db.Create(election).Error; err != nil {
 		t.Fatalf("failed to create election: %v", err)
@@ -43,9 +43,9 @@ func TestElectionSummary(t *testing.T) {
 
 	// Create a position
 	position := &models.Position{
-		ElectionID: election.ID,
-		Title:      "President",
-		Description: "Guild President",
+		ElectionID:    election.ID,
+		Title:         "President",
+		Description:   "Guild President",
 		MaxSelections: 1,
 	}
 	if err := db.Create(position).Error; err != nil {
@@ -117,7 +117,7 @@ func TestResultsVerification(t *testing.T) {
 		StartsAt:       now.Add(-48 * time.Hour),
 		EndsAt:         now.Add(-24 * time.Hour),
 		ResultPolicy:   models.ResultPolicyAfterClose,
-		AllowedDomains: "@std.must.ac.ug",
+		AllowedDomains: "std.mast.ac.ug",
 		EligibilityFrozenAt: func() *time.Time {
 			t := now.Add(-45 * time.Hour)
 			return &t
@@ -130,9 +130,9 @@ func TestResultsVerification(t *testing.T) {
 
 	// Create a position
 	position := &models.Position{
-		ElectionID: election.ID,
-		Title:      "President",
-		Description: "Guild President",
+		ElectionID:    election.ID,
+		Title:         "President",
+		Description:   "Guild President",
 		MaxSelections: 1,
 	}
 	if err := db.Create(position).Error; err != nil {

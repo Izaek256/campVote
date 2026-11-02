@@ -57,7 +57,7 @@ func ballotElection(t *testing.T, db *gorm.DB, id string, start, end time.Time) 
 	t.Helper()
 	election := &models.Election{
 		ID: id, Title: id, Status: models.ElectionStatusOpen,
-		StartsAt: start, EndsAt: end, AllowedDomains: "@std.must.ac.ug,@must.ac.ug",
+		StartsAt: start, EndsAt: end, AllowedDomain: "std.mast.ac.ug",
 		ResultPolicy: models.ResultPolicyAfterClose,
 	}
 	if err := db.Create(election).Error; err != nil {
@@ -83,16 +83,15 @@ func ballotElection(t *testing.T, db *gorm.DB, id string, start, end time.Time) 
 func TestEligibilityGateOnBallotViewStartAndSubmit(t *testing.T) {
 	db := rbacDB(t)
 	now := time.Now().UTC()
+	// Elections a and b allow std.mast.ac.ug domain (any course/year).
 	a := ballotElection(t, db, "e-a", now.Add(-time.Hour), now.Add(time.Hour))
 	b := ballotElection(t, db, "e-b", now.Add(-time.Hour), now.Add(time.Hour))
-	c := ballotElection(t, db, "e-c", now.Add(time.Hour), now.Add(2*time.Hour))
+	ballotElection(t, db, "e-c", now.Add(time.Hour), now.Add(2*time.Hour))
 
-	voter := testkit.User(t, db, "listed@std.must.ac.ug", models.RoleStudentVoter)
-	intruder := testkit.User(t, db, "valid-domain@std.must.ac.ug", models.RoleStudentVoter)
-	other := testkit.User(t, db, "other@std.must.ac.ug", models.RoleStudentVoter)
-	listed(t, db, a.election.ID, "22/U/0001", voter.Email)
-	listed(t, db, b.election.ID, "22/U/0002", other.Email)
-	listed(t, db, c.election.ID, "22/U/0003", voter.Email)
+	// voter has a valid registration-number email → eligible by rule for a and b.
+	voter := testkit.User(t, db, "2022bse001@std.mast.ac.ug", models.RoleStudentVoter)
+	// intruder has a staff-format email (not parseable) → not eligible.
+	intruder := testkit.User(t, db, "staff@must.ac.ug", models.RoleStudentVoter)
 
 	cfg := testkit.Config()
 	auth := testkit.Auth(cfg, db)
@@ -100,20 +99,16 @@ func TestEligibilityGateOnBallotViewStartAndSubmit(t *testing.T) {
 	voterToken := testkit.SignIn(t, db, auth, voter)
 	intruderToken := testkit.SignIn(t, db, auth, intruder)
 
+	// Intruder: not parseable → forbidden everywhere.
 	client.As(intruderToken).Get("/api/v1/elections/e-a/ballot").AssertForbidden()
 	client.As(intruderToken).Post("/api/v1/elections/e-a/ballot/start", nil).AssertForbidden()
 	client.As(intruderToken).Post("/api/v1/elections/e-a/ballot/submit", map[string]any{}).AssertForbidden()
 
+	// Voter: eligible for open elections a and b by rule; c is not open yet.
 	client.As(voterToken).Get("/api/v1/elections/e-a/ballot").AssertOK()
-	client.As(voterToken).Get("/api/v1/elections/e-b/ballot").AssertForbidden()
+	client.As(voterToken).Get("/api/v1/elections/e-b/ballot").AssertOK()
 	client.As(voterToken).Get("/api/v1/elections/e-c/ballot").AssertForbidden() // not open yet
 	client.As(voterToken).Post("/api/v1/elections/e-a/ballot/start", nil).AssertOK()
-	client.As(voterToken).Post("/api/v1/elections/e-b/ballot/start", nil).AssertForbidden()
-
-	// Tamper: a token eligible for e-a cannot submit into e-b.
-	client.As(voterToken).Post("/api/v1/elections/e-b/ballot/submit", map[string]any{
-		"selections": []map[string]string{{"position_id": b.position.ID, "candidate_id": b.candidate.ID}},
-	}).AssertForbidden()
 
 	// Tamper: a candidate from another election is not on this ballot.
 	client.As(voterToken).Post("/api/v1/elections/e-a/ballot/submit", map[string]any{
@@ -124,6 +119,7 @@ func TestEligibilityGateOnBallotViewStartAndSubmit(t *testing.T) {
 	client.As(voterToken).Post("/api/v1/elections/e-a/ballot/submit", map[string]any{
 		"selections": []map[string]string{{"position_id": a.position.ID, "candidate_id": a.candidate.ID}},
 	}).AssertCreated()
+	// Cannot start a second ballot (already voted).
 	client.As(voterToken).Post("/api/v1/elections/e-a/ballot/start", nil).AssertConflict()
 
 	var ballots int64
@@ -142,13 +138,21 @@ func TestEligibilityGateOnBallotViewStartAndSubmit(t *testing.T) {
 	if ballot.CastAt.IsZero() {
 		t.Error("ballot has no cast time")
 	}
+
+	// Explicit suspension overrides rule: suspend voter from election b.
+	entry := listed(t, db, b.election.ID, "22/U/0001", voter.Email)
+	if err := db.Model(&models.ElectionRoster{}).Where("id = ?", entry.ID).
+		Update("status", models.RosterStatusSuspended).Error; err != nil {
+		t.Fatal(err)
+	}
+	client.As(voterToken).Get("/api/v1/elections/e-b/ballot").AssertForbidden()
 }
 
 func TestVoterCannotChangeOwnEligibility(t *testing.T) {
 	db := rbacDB(t)
 	now := time.Now().UTC()
 	a := ballotElection(t, db, "e-a", now.Add(-time.Hour), now.Add(time.Hour))
-	voter := testkit.User(t, db, "listed@std.must.ac.ug", models.RoleStudentVoter)
+	voter := testkit.User(t, db, "2022bse001@std.mast.ac.ug", models.RoleStudentVoter)
 	entry := listed(t, db, a.election.ID, "22/U/0001", voter.Email)
 
 	cfg := testkit.Config()
@@ -184,16 +188,16 @@ func TestUnverifiedEmailChangeCannotBorrowARosterEntry(t *testing.T) {
 	now := time.Now().UTC()
 	a := ballotElection(t, db, "e-a", now.Add(-time.Hour), now.Add(time.Hour))
 	// A roster entry for a student who has not registered an account.
-	listed(t, db, a.election.ID, "22/U/0001", "unclaimed@std.must.ac.ug")
+	listed(t, db, a.election.ID, "22/U/0001", "2022bse005@std.mast.ac.ug")
 
-	attacker := testkit.User(t, db, "attacker@std.must.ac.ug", models.RoleStudentVoter)
+	attacker := testkit.User(t, db, "2022bse004@std.mast.ac.ug", models.RoleStudentVoter)
 	// What UpdateProfile does: the address changes and verification is cleared.
 	if err := db.Model(&models.User{}).Where("id = ?", attacker.ID).Updates(map[string]any{
-		"email": "unclaimed@std.must.ac.ug", "email_verified_at": nil,
+		"email": "2022bse005@std.mast.ac.ug", "email_verified_at": nil,
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
-	attacker.Email = "unclaimed@std.must.ac.ug"
+	attacker.Email = "2022bse005@std.mast.ac.ug"
 
 	cfg := testkit.Config()
 	auth := testkit.Auth(cfg, db)
@@ -234,7 +238,7 @@ func TestMultiChoiceBallotAcceptsDistinctChoicesAndRejectsDuplicates(t *testing.
 		picks = append(picks, candidate)
 	}
 
-	voter := testkit.User(t, db, "listed@std.must.ac.ug", models.RoleStudentVoter)
+	voter := testkit.User(t, db, "2022bse001@std.mast.ac.ug", models.RoleStudentVoter)
 	listed(t, db, a.election.ID, "22/U/0001", voter.Email)
 	cfg := testkit.Config()
 	auth := testkit.Auth(cfg, db)
@@ -266,7 +270,7 @@ func TestRosterImportPreviewCommitFreezeAndReport(t *testing.T) {
 	a := ballotElection(t, db, "e-a", now.Add(-time.Hour), now.Add(time.Hour))
 
 	chief := testkit.User(t, db, "chief@must.ac.ug", models.RoleChiefElectionAdmin)
-	voter := testkit.User(t, db, "listed@std.must.ac.ug", models.RoleStudentVoter)
+	voter := testkit.User(t, db, "2022bse001@std.mast.ac.ug", models.RoleStudentVoter)
 	cfg := testkit.Config()
 	auth := testkit.Auth(cfg, db)
 	client := testkit.New(t, eligibilityEngine(t, db))
@@ -274,10 +278,10 @@ func TestRosterImportPreviewCommitFreezeAndReport(t *testing.T) {
 	voterToken := testkit.SignIn(t, db, auth, voter)
 
 	good := "student_number,email,full_name,study_year,status\n" +
-		"22/U/0001,listed@std.must.ac.ug,Listed Voter,3,ELIGIBLE\n"
+		"22/U/0001,2022bse001@std.mast.ac.ug,Listed Voter,3,ELIGIBLE\n"
 	bad := "student_number,email,full_name\n" +
 		"22/U/0002,not-an-email,Bad Email\n"
-	late := "student_number,email,full_name\n22/U/0009,late@std.must.ac.ug,Late Voter\n"
+	late := "student_number,email,full_name\n22/U/0009,late@std.mast.ac.ug,Late Voter\n"
 
 	preview := postCSV(t, client, chiefToken, "/api/v1/elections/e-a/roster/preview", good, "roll.csv")
 	preview.AssertStatus(http.StatusOK).JSON().Where("data.preview.creates", 1)
@@ -304,7 +308,7 @@ func TestRosterImportPreviewCommitFreezeAndReport(t *testing.T) {
 	report := client.As(chiefToken).Get("/api/v1/elections/e-a/eligibility/report").AssertOK()
 	report.JSON().Where("data.total", 1).Where("data.eligible", 0)
 	body := report.Body()
-	for _, forbidden := range []string{"listed@std.must.ac.ug", "22/U/0001"} {
+	for _, forbidden := range []string{"2022bse001@std.mast.ac.ug", "22/U/0001"} {
 		if strings.Contains(body, forbidden) {
 			t.Errorf("eligibility report leaked %q: %s", forbidden, body)
 		}
