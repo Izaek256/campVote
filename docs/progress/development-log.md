@@ -268,3 +268,118 @@ Chronological record of completed work, verified test results, architecture deci
 ### Deferred / Blocked
 - Browser (Playwright) evidence: no Playwright suite exists and no Docker/browser environment was available locally. The API tests above are the evidence for the same rules; ISSUE-11 owns the browser pass.
 - No fault-injection test forcing a mid-transaction failure; the transaction and the DB constraints are the guarantee, and the duplicate path is covered by the constraint test.
+
+---
+
+## [2026-11-02] Phase 2: Positions-First Workflow, Position Eligibility and Max Candidates
+
+**Branch:** `feature/mvp-phases-3-7`, not yet committed or merged.
+**Goal:** make positions the durable, first-class object. An administrator creates a position, collects applications, reviews them against a max-candidate cap, links the position to an election, and only then is the election scheduled and opened. Roles stay at exactly two: `ADMIN` and `STUDENT_VOTER`.
+
+### Activities Completed
+1. **Schema (`apps/api/internal/models/`):**
+   - `Position.ElectionID` changed from `string` to `*string` (nullable) so a position can exist unlinked; `Status` (`OPEN`/`CLOSED`), `MaxCandidates`, and the applicant eligibility rule (`AllowedDomain`, `AllowedYears`, `AllowedCourses`) added. Helpers `Ptr[T]`, `SetElection`, `ElectionRef`, `AcceptingApplications`.
+   - This repository has **no `migrations/` directory**; the schema is model-driven. `AutoMigrate` applies the change and `internal/migrate/history.go` records the before/after diff in `grit_migrations` / `grit_migration_changes`. The requested versioned migration is satisfied in this idiom (documented in the feature doc).
+2. **Shared eligibility rule (`apps/api/internal/eligibility/identity.go`):** one `Rule` type now decides both an election's voter eligibility and a position's candidate eligibility (`RuleForElection`, `RuleForPosition`, `Allows`), derived from the verified registration-number email. The applicant never supplies their identity.
+3. **Handlers/routes (`apps/api/internal/handlers/position_workflow.go`):**
+   - Admin (staff group): `GET/POST /positions`, `PUT/DELETE /positions/:position_id`, `GET /positions/:position_id/applications`, approve/reject, `POST /positions/:position_id/link`.
+   - Applicant (authenticated): `GET /positions/eligible`, `POST /positions/:position_id/apply`.
+   - Server-enforced rules: eligibility re-checked on apply (`403`), one live application per applicant per position (`409`), max-candidate cap enforced on approval (`409`), linking refuses `FINALIZED`/`ARCHIVED`/`CANCELLED` and moves candidates into the election in one transaction.
+   - Route policy entries added to `internal/policy/routes.go` (`TestEveryRouteHasAPolicy` passes).
+4. **Web (`apps/web`):**
+   - `app/staff/positions/page.tsx` — admin positions page: list/create/edit/delete, eligibility rule + max candidates, application review with approve/reject reason, link panel, `?new=1` deep link.
+   - `app/positions/page.tsx` — student "Run for a position" page: only eligible positions, apply form, "awaiting review" state.
+   - `components/app-shell.tsx` — role-aware sidebar: ADMIN gets **New election** and **New position** quick actions plus a standalone **Positions** item; STUDENT_VOTER gets Elections / Run for a position / My candidacy / Account.
+   - `lib/types.ts`, `lib/api.ts` extended with the position workflow types and calls.
+5. **Tests (`apps/api/internal/handlers/position_workflow_test.go`):** eligibility scoping of the eligible list, ineligible apply rejected, duplicate apply rejected, max-candidate cap enforced server-side, linking adopts applications, standalone creation admin-only.
+
+### Checks Run
+- `go build ./...` — PASS.
+- `go vet ./...` — PASS.
+- `go test ./internal/handlers/... ./internal/routes/... ./internal/policy/... ./internal/eligibility/... ./internal/models/... -count=1` — PASS (handlers 24.273s); new workflow tests 5/5 PASS; `TestEveryRouteHasAPolicy` PASS.
+- `npm run type-check` — PASS.
+- `npx biome check app/staff/positions/page.tsx app/positions/page.tsx components/app-shell.tsx lib/types.ts` — PASS.
+- `npm run test` — 12/12 PASS.
+- `npm run build` — PASS (routes `/positions` and `/staff/positions` emitted).
+
+### Documentation
+- Created `docs/features/positions-first-workflow.md`.
+- Updated `docs/README.md` (Section 4 UI index).
+
+### Deferred (Phase 3)
+- Automatic ballot creation for approved candidates is not yet wired to the ballot compiler.
+- Live admin results dashboard and broadcasting results to students on close.
+- Server-side filtering of the student elections list by eligibility and hiding an election after the student votes (only the positions views filter by eligibility today).
+
+### Notes
+- The pre-existing Biome `format` failure on `apps/web/lib/api.ts` is CRLF noise (293 CRLF lines at `HEAD`), not caused by this work; left untouched to avoid a whole-file diff.
+- An ADMIN holds the `*` grant, so it satisfies `ballots.edit` and `candidates.review` with no extra role wiring.
+
+---
+
+## [2026-11-02] Phase 3: Student Results Tab and Post-Vote Election Handling
+
+**Branch:** `feature/mvp-phases-3-7`, not yet committed or merged.
+**Goal:** finish the student half of the confirmed workflow. After a student votes, that election leaves the Elections page and moves to a Results tab where it stays pending until the count is published. No backend change was required — the server already filters the elections list by eligibility and already tallies and broadcasts on close.
+
+### What was already in place (verified, not rebuilt)
+- **Eligibility filtering of the student list** — `ElectionLifecycleHandler.List` skips elections whose `eligibility.RuleAllows` rule the caller fails, and always shows elections the caller holds a role on.
+- **Automatic ballot generation + admin confirmation** — `handlers.BallotContentFor` compiles the ballot from approved positions and candidates; `POST /elections/:id/ballot/publish` freezes it into an immutable, hashed `BallotVersion` and is driven from the admin **Ballot builder** page. `ApproveApplication` assigns `BallotNumber` automatically.
+- **Live admin dashboard** — the admin **Monitor** page shows turnout and participation while open; the **Results workspace** reads provisional figures for holders of `results.view_live` (an ADMIN holds `*`).
+- **Broadcast on close** — `lifecycle.OnClosed = results.OnClose` records the first snapshot when the election closes and `results.NotifySnapshot` publishes on `public-election-results.<election_id>`, which the voter results page already subscribes to.
+
+### Changes made (frontend only)
+1. **New page `apps/web/app/results/page.tsx`** — the student Results tab. Loads `elections.list()` (already eligibility-filtered), keeps only elections where `my_vote_status.voted`, and splits them into **Awaiting results** (not yet closed: "vote recorded" + closing time) and **Published results** (closed: a link to `/elections/:id/results`, which applies the election's publication policy).
+2. **`apps/web/components/app-shell.tsx`** — added **Results** (`/results`) to the student sidebar between Elections and Run for a position.
+3. **`apps/web/app/elections/page.tsx`** — elections the voter has already voted in are filtered out of the list and the vote-status button branch was removed (that flow now lives in Results). An "you have voted" empty state with a link to Results appears when every visible election is already voted, and the header gained a **My results** link.
+
+### Checks Run
+- `npm run type-check` — PASS.
+- `npx biome check app/results/page.tsx app/elections/page.tsx components/app-shell.tsx` — PASS.
+- `npm run test` — 12/12 PASS.
+- `npm run build` — PASS; the route list now includes `/results`.
+- No backend file changed in this phase, so no backend suite was re-run.
+
+### Documentation
+- Updated `docs/ui-views.md` (My Elections row; new My Results row).
+
+### Deferred / Blocked
+- The admin Monitor page deliberately hides candidate totals while voting is open; provisional figures are available to an ADMIN on the Results workspace (`results.view_live`). Showing live shares on the Monitor page itself would be a privacy-visible change and was left as-is pending an explicit decision.
+- No automated UI test covers the new Results tab; the existing Vitest suite is limited to ballot and format helpers.
+
+---
+
+## [2026-11-02] Toast Notifications Replace Inline Banners
+
+**Branch:** `feature/mvp-phases-3-7`, not yet committed or merged.
+**Goal:** make confirmations and errors more visible. Requested by the maintainer as "errors and confirmation banners should be changed to Toasts for more visibility", with the scope explicitly widened (on being asked) to every banner in the app and an 8-second auto-dismiss for failures.
+
+### What was wrong before
+`app/globals.css` already carried `.toasts` / `.toast` / `.toast.bad` / `.toast.ok` / `.toast.out` and the `tin` / `tout` keyframes, but **no component ever rendered them** — dead template CSS. There was no `useToast`, no provider, and no `className="toasts"` anywhere.
+
+### Changes made (frontend only)
+1. **New `apps/web/components/toast.tsx`** — a `ToastProvider` plus a `useToast()` hook returning `success`, `error` and `warn`. Toasts auto-dismiss (4s for confirmations, 8s for failures), can be dismissed by hand, animate out over 250ms, and use `role="alert"` for failures and `role="status"` otherwise. All timers are cleared on unmount.
+2. **`apps/web/app/layout.tsx`** — `ToastProvider` mounted inside `AuthProvider`, so `useToast()` works in any client component without prop drilling.
+3. **`apps/web/app/globals.css`** — added the missing `.toast.warn` variant beside the existing rules.
+4. **`apps/web/components/load-error.tsx`** (new) — see the regression below.
+5. **~60 banner sites across the app converted to toasts.** Deliberately left inline, because they are not notifications: static instructional copy (privacy/ballot-secrecy notices), render-derived "why this is unavailable" panels (`banner hatch`, e.g. "Positions are locked", "Applications are closed", "Turnout is hidden to protect privacy"), and receipts the user must keep on screen (`VoteRecordedNotice`, the register page's development verification code).
+
+### Regression found and fixed in the same change
+Converting the banners also deleted the `if (error) { return <banner bad …> }` early returns. Because several pages guard their loading skeleton on the data itself (`if (!items)`, `{!results ? …}`), a **failed initial load left the loading skeleton on screen for ever** — the toast is gone after 8 seconds, so the page looked hung. An audit found **13 further pages** with this defect beyond the 4 fixed by hand.
+
+Decision recorded with the maintainer: a failed page load gets a **persistent inline panel in addition to the toast**, not a toast alone. `components/load-error.tsx` implements that panel (message, `Try again`, and a back link or a caller-supplied action such as `Sign in again`), and it is now used by every page that loads its own data. The loading skeleton can no longer outlive a failed request.
+
+Also fixed while converting: `app/staff/elections/[id]/results/page.tsx` had turned a *restricted results* message into a green success toast; the 403 case is now `toast.warn` and a genuine load failure is `toast.error`. On the maintainer's decision the recount summary stays toast-only (the per-position differences table below it is unchanged).
+
+### Checks Run
+- `npm run type-check` — PASS (exit 0).
+- `npx biome lint` — 1 error, the pre-existing `noRedundantAlt` on `alt="Passport photo"` in `app/staff/elections/[id]/candidates/page.tsx` (untouched; verified as pre-existing with `git diff`). No new findings from this work.
+- `npm run test` — 12/12 PASS.
+- `npm run build` — PASS, all 28 routes emitted.
+- No backend file changed, so no backend suite was re-run.
+
+### Notes / Deferred
+- `apps/web/app/login/page.tsx` and `apps/web/app/register/page.tsx` keep their `error` state because it also drives the invalid-input styling; each message is therefore produced twice (one `setError`, one `toast.error`). Behaviour is correct but the expression is duplicated — a tidy-up, not a defect.
+- CRLF: many files in this repository are `i/lf w/crlf`, so Biome `format` reports whole-file noise on them. Only the three genuinely mis-formatted files were formatted; the rest were left alone rather than rewriting line endings.
+- No automated test covers toasts; the Vitest suite is limited to ballot and format helpers. Verification is the type check, lint, build and the manual pass above.
+

@@ -178,14 +178,16 @@ docker compose --profile container exec -e BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.u
   - Admin pages: `/staff`, `/staff/elections/[id]`
 - **API**: http://localhost:8080
 
-### Demo accounts
+### Accounts
 
-When `APP_ENV=development`, the following demo accounts are created:
+No demo accounts or demo elections are seeded. Create the first administrator
+with `cmd/bootstrap`, then register voters at `/register`:
 
-- **Student voter**: `ivan.mugisha@std.must.ac.ug` / `admin123`
-- **Staff admin**: `admin@must.ac.ug` (use the password you set during bootstrap)
+- **Staff admin**: the email and password you set in `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`
+- **Student voter**: register a campus email such as `2024bse088@std.mast.ac.ug`
 
-**Warning:** Demo accounts and data are for local development only. Never use them in production.
+Demo seeding is opt-in only (both `APP_ENV=development` **and** `SEED_DEMO_DATA=true`).
+Never use demo data in production.
 
 ### Stopping Docker Compose
 
@@ -321,11 +323,12 @@ docker compose -f compose.dev.yaml down
 docker compose -f compose.dev.yaml down -v
 ```
 
-### Demo accounts
+### Accounts
 
-Same as Docker setup:
-- **Student voter**: `ivan.mugisha@std.must.ac.ug` / `admin123`
-- **Staff admin**: `admin@must.ac.ug` (use your bootstrap password)
+No demo accounts are seeded. Continue with the manual setup in this section:
+
+- **Staff admin**: the email and password you set with `cmd/bootstrap`
+- **Student voter**: register a campus email such as `2024bse088@std.mast.ac.ug`
 
 ---
 
@@ -424,10 +427,12 @@ cd apps/admin && pnpm dev
 # PostgreSQL stays running as a Windows service
 ```
 
-### Demo accounts
+### Accounts
 
-- **Student voter**: `ivan.mugisha@std.must.ac.ug` / `admin123`
-- **Staff admin**: Your bootstrap email and password
+No demo accounts are seeded.
+
+- **Staff admin**: the email and password you set with `cmd/bootstrap`
+- **Student voter**: register a campus email such as `2024bse088@std.mast.ac.ug`
 
 ---
 
