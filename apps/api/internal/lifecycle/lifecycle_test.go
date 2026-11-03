@@ -216,7 +216,7 @@ func TestValidateConfiguration(t *testing.T) {
 		}},
 		{"shorter than the minimum", func(e *models.Election) {
 			e.StartsAt = now
-			e.EndsAt = now.Add(30 * time.Minute)
+			e.EndsAt = now.Add(time.Minute)
 		}},
 		{"already ended when scheduling", func(e *models.Election) {
 			e.StartsAt = now.Add(-3 * time.Hour)

@@ -492,3 +492,51 @@ Every remaining reference to a removed status was cleared from `apps/web` (a rep
 - `npm run lint` (= `biome check .`) also reports **formatter** diffs across many untouched files because the working tree is `i/lf w/crlf` on Windows; this is environmental and no code change was made to mask it.
 - No browser evidence for the review modal or the delete confirm dialog (no local Playwright suite).
 
+---
+
+## [2026-11-03] Single-Choice Ballot, Complete Application Intake, Ballot Photos, Short Elections, and Post-Vote Confetti
+
+**Branch:** `feature/mvp-phases-3-7` (continuing work on the same task branch).
+**Goal:** a batch of maintainer-reported fixes — (1) a ballot should be a single pick per position with no review step, (2) the admin must actually receive every uploaded file and detail from a candidacy application, (3) the candidate's passport photo should appear on the ballot, an approved candidate may not withdraw but may upload a replacement ballot image, (4) after voting a confetti + tick modal replaces the ballot then returns home, (5) "Vote now" becomes an end-time-gated "View results", (6) positions lock once voting begins, (7) elections may be any length, e.g. 2 minutes or 20 hours.
+
+### 1. Single-choice ballot, cast without a review screen (front-end)
+`apps/web/app/elections/[id]/ballot/page.tsx`: the `reviewing` / `confirmed` states were removed. `choose()` now replaces the current pick for a non-multi position (and tapping the same option clears it); a `MULTI_CHOICE` position keeps its toggle behaviour. "Cast vote" validates and opens the existing `ConfirmDialog`, then submits directly. Copy now reads *"Choose one candidate per position."* The server rule (max 1 for a non-multi position) was already enforced by `validateSelectionsAgainst`.
+
+### 2. Every application detail reaches the admin (back-end + front-end)
+The student apply form (`apps/web/app/elections/[id]/candidate/apply/page.tsx`) now collects **sex**, **religion** and a **partial-transcript PDF** in addition to date of birth, passport photo and student ID, and posts `sex`, `religion` and `partial_transcript_url`. `POST /elections/:id/candidates/apply` (`apps/api/internal/handlers/candidate.go`) validates and persists all of them.
+The admin review page (`apps/web/app/staff/elections/[id]/candidates/page.tsx`) now shows **sex** and **religion**, a **Partial transcript (PDF)** link and, when present, a **Ballot photo** link, alongside the existing passport/ID thumbnails (each of which is already a link).
+
+### 3. Passport photo on the ballot; approved candidates cannot withdraw but may replace the ballot image
+- `apps/api/internal/models/candidate.go` gained `BallotPhotoURL`; `apps/api/internal/handlers/ballot_version.go` renders `photo_url` with precedence **BallotPhotoURL → PassportPhotoURL → PhotoURL**, so the passport photo is the default ballot image.
+- New route `POST /candidates/my/:candidate_id/ballot-photo` (`SetBallotPhoto`, `apps/api/internal/routes/routes.go`): approved-only, refused once voting has opened, audited.
+- `WithdrawMine` now also refuses `APPROVED` (`"An approved application can no longer be withdrawn."`).
+- The candidacy page (`apps/web/app/candidate/page.tsx`) hides **Withdraw** for `APPROVED` and shows a **Replace image** upload for approved candidates (uses `candidates.setBallotPhoto`). `ballot_photo_url` was added to the shared `Candidate` type and `setBallotPhoto` to `lib/api.ts`.
+- The ballot page renders `candidate.photo_url` as `<img className="ballot-photo">` (falls back to the ballot-number placeholder).
+
+### 4. Post-vote confetti + tick modal (front-end)
+New `apps/web/components/vote-success.tsx` (72 seeded confetti pieces, an SVG tick, `.stamp`/`.badge` styling, auto-continues after ~3.2s, plus a "Go home now" button). Once `submit()` succeeds, the ballot page renders this overlay in place of the ballot and calls `router.replace("/")` when done. New `.vote-success` / `.vote-confetti` styles and a `prefers-reduced-motion` guard were added to `globals.css`.
+
+### 5. "Vote now" → end-time-gated "View results"
+`apps/web/app/elections/page.tsx` and `.../elections/[id]/page.tsx` now show **View results** only once the election has ended (`status === "CLOSED"` or `ends_at <= now`) and **Vote now** only while `accepting_votes`; before that the card links to the election page. The results link is hidden before the close time.
+
+### 6. Positions lock when voting begins
+Already enforced server-side: `GET /positions/eligible` (`position_workflow.go`) drops positions whose linked election has started or is closed, and `POST /positions/:id/apply` refuses once the election has begun. Confirmed unchanged; the student positions page consumes `positions.eligible()`.
+
+### 7. Elections of any length (back-end + front-end)
+`apps/api/internal/lifecycle/lifecycle.go`: `MinimumDuration` lowered from `time.Hour` to `2 * time.Minute`, so a two-minute poll is accepted; the corresponding `lifecycle_test.go` case was changed from 30 minutes to 1 minute (previously below the old floor). The staff create form (`app/staff/page.tsx`) and election edit form (`app/staff/elections/[id]/page.tsx`) gained **quick-length** buttons (2 minutes, 1 hour, 6 hours, 20 hours, 1 day, 1 week) that compute `ends_at` from `starts_at`; arbitrary custom lengths remain possible.
+
+### Checks Run
+- `go build ./...` — PASS.
+- `go test ./internal/handlers/... ./internal/lifecycle/... ./internal/models/...` — PASS.
+- `npm run type-check` — PASS (exit 0).
+- `npm run test` — PASS (12/12, 2 files).
+- Formatted the touched front-end files with `biome check --write`; no new lint findings (the pre-existing `noRedundantAlt` and the environmental CRLF formatter noise remain, as above).
+
+### Documentation
+- Appended this entry to `docs/progress/development-log.md`. The single-choice rule, ballot-photo precedence and the 2-minute minimum are behaviour changes other docs may eventually restate; only the progress log was updated in this pass.
+
+### Deferred / Known limitations
+- `BallotCandidate` (the ballot payload) still types the image as `photo_url` only; the precedence is resolved on the server, so no separate `ballot_photo_url` field is exposed to the voter payload.
+- No browser/Playwright evidence for the confetti modal, the ballot-photo upload or the duration presets (no local Playwright suite).
+- The apply form keeps **Ballot photo** as an optional extra on top of the required **Passport photo**; the two remain distinct columns.
+

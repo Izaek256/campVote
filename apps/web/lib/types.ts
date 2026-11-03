@@ -281,6 +281,8 @@ export interface Candidate {
   religion?: string;
   id_document_url?: string;
   passport_photo_url?: string;
+  /** Replacement image an approved candidate uploads for the ballot. */
+  ballot_photo_url?: string;
   partial_transcript_url?: string;
   programme?: string;
   study_year?: number;

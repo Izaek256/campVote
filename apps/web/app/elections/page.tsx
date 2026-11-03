@@ -145,12 +145,21 @@ function ElectionsView() {
                 </span>
                 <span className="hint">{election.organizing_unit}</span>
                 <div style={{ marginTop: "auto", paddingTop: 8 }}>
-                  <Link
-                    className={`btn block${election.accepting_votes ? " primary" : ""}`}
-                    href={`/elections/${election.id}`}
-                  >
-                    {election.accepting_votes ? "Vote now" : "View election"}
-                  </Link>
+                  {election.accepting_votes ? (
+                    <Link className="btn block primary" href={`/elections/${election.id}`}>
+                      Vote now
+                    </Link>
+                  ) : election.status === "CLOSED" ||
+                    new Date(election.ends_at).getTime() <= Date.now() ? (
+                    <Link className="btn block" href={`/elections/${election.id}/results`}>
+                      <Icon name="chart" size="s" />
+                      View results
+                    </Link>
+                  ) : (
+                    <Link className="btn block" href={`/elections/${election.id}`}>
+                      View election
+                    </Link>
+                  )}
                 </div>
               </div>
             </article>

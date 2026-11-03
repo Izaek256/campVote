@@ -40,6 +40,28 @@ function toISO(value: string): string {
   return value ? `${value}:00+03:00` : "";
 }
 
+const pad = (value: number) => String(value).padStart(2, "0");
+
+/** Add a length to a datetime-local value (both stay in the same local wall clock). */
+function addMinutes(value: string, minutes: number): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setMinutes(date.getMinutes() + minutes);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
+const durationPresets = [
+  { label: "2 minutes", minutes: 2 },
+  { label: "1 hour", minutes: 60 },
+  { label: "6 hours", minutes: 6 * 60 },
+  { label: "20 hours", minutes: 20 * 60 },
+  { label: "1 day", minutes: 24 * 60 },
+  { label: "1 week", minutes: 7 * 24 * 60 },
+];
+
 function transitionLabel(to: string): string {
   switch (to) {
     case "CLOSED":
@@ -546,6 +568,25 @@ function Manage({ id }: { id: string }) {
                     onChange={(event) => setForm({ ...form, ends_at: event.target.value })}
                   />
                   {fields.ends_at ? <span className="err">{fields.ends_at}</span> : null}
+                </div>
+                <div className="field full">
+                  <span className="lbl">Quick length from the opening time</span>
+                  <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                    {durationPresets.map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        className="btn sm"
+                        disabled={!form.starts_at}
+                        onClick={() =>
+                          setForm({ ...form, ends_at: addMinutes(form.starts_at, preset.minutes) })
+                        }
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="hint">Any custom length is allowed too.</span>
                 </div>
               </div>
               <div className="field">

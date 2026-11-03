@@ -9,7 +9,7 @@ import { Icon } from "@/components/icon";
 import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { useToast } from "@/components/toast";
-import { ApiError, candidates } from "@/lib/api";
+import { ApiError, candidates, upload } from "@/lib/api";
 import { candidateStatusClass, candidateStatusLabel, formatEAT } from "@/lib/format";
 import type { MyCandidate } from "@/lib/types";
 
@@ -21,13 +21,15 @@ function MyCandidacy() {
   const toast = useToast();
   const [withdrawing, setWithdrawing] = useState<MyCandidate | null>(null);
   const [reason, setReason] = useState("");
+  const [photoBusy, setPhotoBusy] = useState("");
 
   const load = useCallback(async () => {
     try {
       const data = await candidates.mine();
       setItems(data.candidates ?? []);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Your applications could not be loaded.";
+      const message =
+        err instanceof ApiError ? err.message : "Your applications could not be loaded.";
       setLoadError(message);
       toast.error(message);
     }
@@ -54,6 +56,21 @@ function MyCandidacy() {
       toast.error(err instanceof ApiError ? err.message : "The withdrawal was refused.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function changeBallotPhoto(candidateId: string, file: File | undefined) {
+    if (!file) return;
+    setPhotoBusy(candidateId);
+    try {
+      const ref = await upload(file, { accepts: "image", maxSize: 2 * 1024 * 1024 });
+      await candidates.setBallotPhoto(candidateId, ref.url);
+      toast.success("Ballot photo updated.");
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The ballot photo could not be updated.");
+    } finally {
+      setPhotoBusy("");
     }
   }
 
@@ -102,7 +119,10 @@ function MyCandidacy() {
         <div className="stack">
           {items.map(({ candidate, election_title, position_title }) => {
             const canWithdraw =
-              candidate.approval_status !== "WITHDRAWN" && candidate.approval_status !== "REJECTED";
+              candidate.approval_status !== "WITHDRAWN" &&
+              candidate.approval_status !== "REJECTED" &&
+              candidate.approval_status !== "APPROVED";
+            const approved = candidate.approval_status === "APPROVED";
             return (
               <article className="panel" key={candidate.id}>
                 <div className="row-between" style={{ alignItems: "flex-start", gap: 16 }}>
@@ -160,6 +180,43 @@ function MyCandidacy() {
                     <div>
                       <b>Reviewer note</b>
                       {candidate.review_notes}
+                    </div>
+                  </div>
+                ) : null}
+                {approved ? (
+                  <div
+                    className="panel stack"
+                    style={{ marginTop: 14, background: "var(--sunken)" }}
+                  >
+                    <span className="lbl">Ballot photo</span>
+                    <p className="hint" style={{ margin: 0 }}>
+                      Approved candidates cannot withdraw. You may replace the image shown on the
+                      ballot until voting opens — otherwise your passport photo is used.
+                    </p>
+                    <div className="row" style={{ alignItems: "center", gap: 12 }}>
+                      {candidate.ballot_photo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={candidate.ballot_photo_url}
+                          alt=""
+                          width={56}
+                          height={56}
+                          style={{ objectFit: "cover", border: "1px solid var(--line)" }}
+                        />
+                      ) : null}
+                      <label className="btn sm" style={{ cursor: "pointer" }}>
+                        <Icon name="up" size="s" />
+                        {photoBusy === candidate.id ? "Uploading…" : "Replace image"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png"
+                          hidden
+                          disabled={photoBusy !== ""}
+                          onChange={(event) =>
+                            changeBallotPhoto(candidate.id, event.target.files?.[0])
+                          }
+                        />
+                      </label>
                     </div>
                   </div>
                 ) : null}

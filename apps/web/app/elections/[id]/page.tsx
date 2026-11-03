@@ -99,6 +99,7 @@ function ElectionView({ id }: { id: string }) {
 
   const voted = Boolean(election.my_vote_status?.voted);
   const canVote = Boolean(eligibility?.eligible) && election.accepting_votes && !voted;
+  const ended = election.status === "CLOSED" || new Date(election.ends_at).getTime() <= Date.now();
   const applicationsOpen =
     Boolean(eligibility?.eligible) &&
     election.status === "OPEN" &&
@@ -202,14 +203,16 @@ function ElectionView({ id }: { id: string }) {
               <span className="lbl">Status</span>
               <b style={{ fontSize: 20 }}>{statusLabel(election.status)}</b>
               <span className="hint">
-                {election.status === "CLOSED"
+                {ended
                   ? `Voting closed ${formatEAT(election.ends_at)}.`
                   : `Voting opens ${formatEAT(election.starts_at)}.`}
               </span>
-              <Link className="btn block" href={`/elections/${election.id}/results`}>
-                <Icon name="chart" />
-                View results
-              </Link>
+              {ended ? (
+                <Link className="btn block" href={`/elections/${election.id}/results`}>
+                  <Icon name="chart" />
+                  View results
+                </Link>
+              ) : null}
             </div>
           )}
 

@@ -16,11 +16,13 @@ import (
 
 func applicationPayload(positionID, name string) map[string]any {
 	return map[string]any{
-		"position_id":        positionID,
-		"full_name":          name,
-		"date_of_birth":      "2003-05-14",
-		"passport_photo_url": "/uploads/passport.jpg",
-		"id_document_url":    "/uploads/student-id.jpg",
+		"position_id":            positionID,
+		"full_name":              name,
+		"date_of_birth":          "2003-05-14",
+		"sex":                    "MALE",
+		"passport_photo_url":     "/uploads/passport.jpg",
+		"id_document_url":        "/uploads/student-id.jpg",
+		"partial_transcript_url": "/uploads/transcript.pdf",
 	}
 }
 

@@ -208,11 +208,44 @@ function Review({ id }: { id: string }) {
                   <span>{candidate.date_of_birth?.slice(0, 10) || "—"}</span>
                 </div>
                 <div className="field">
+                  <span className="lbl">Sex</span>
+                  <span>{candidate.sex || "—"}</span>
+                </div>
+                <div className="field">
+                  <span className="lbl">Religion</span>
+                  <span>{candidate.religion || "—"}</span>
+                </div>
+                <div className="field">
                   <span className="lbl">Position requirements</span>
                   <span style={{ whiteSpace: "pre-wrap" }}>
                     {positionFor(candidate.position_id)?.requirements || "—"}
                   </span>
                 </div>
+              </div>
+
+              <div className="row" style={{ marginTop: 12, flexWrap: "wrap", gap: 8 }}>
+                {candidate.partial_transcript_url ? (
+                  <a
+                    className="btn sm"
+                    href={candidate.partial_transcript_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Icon name="file" size="s" />
+                    Partial transcript (PDF)
+                  </a>
+                ) : null}
+                {candidate.ballot_photo_url ? (
+                  <a
+                    className="btn sm"
+                    href={candidate.ballot_photo_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Icon name="eye" size="s" />
+                    Ballot photo
+                  </a>
+                ) : null}
               </div>
 
               {candidate.passport_photo_url || candidate.id_document_url ? (

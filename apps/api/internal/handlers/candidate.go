@@ -160,11 +160,15 @@ func (h *CandidateHandler) Apply(c *gin.Context) {
 		ContactEmail string `json:"contact_email"`
 		ContactPhone string `json:"contact_phone"`
 		// Additional fields from comprehensive system
-		DateOfBirth        string `json:"date_of_birth"`
-		RegistrationNumber string `json:"registration_number"`
-		CampusResidence    string `json:"campus_residence"`
-		IDDocumentURL      string `json:"id_document_url"`
-		PassportPhotoURL   string `json:"passport_photo_url"`
+		DateOfBirth          string `json:"date_of_birth"`
+		RegistrationNumber   string `json:"registration_number"`
+		CampusResidence      string `json:"campus_residence"`
+		Sex                  string `json:"sex"`
+		Religion             string `json:"religion"`
+		IDDocumentURL        string `json:"id_document_url"`
+		PassportPhotoURL     string `json:"passport_photo_url"`
+		PartialTranscriptURL string `json:"partial_transcript_url"`
+		BallotPhotoURL       string `json:"ballot_photo_url"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		respond.BadRequest(c, "Choose a position and add your name")
@@ -195,7 +199,8 @@ func (h *CandidateHandler) Apply(c *gin.Context) {
 		}
 	}
 	if !storedFileURL(input.PhotoURL) || !storedFileURL(input.ManifestoURL) ||
-		!storedFileURL(input.IDDocumentURL) || !storedFileURL(input.PassportPhotoURL) {
+		!storedFileURL(input.IDDocumentURL) || !storedFileURL(input.PassportPhotoURL) ||
+		!storedFileURL(input.PartialTranscriptURL) || !storedFileURL(input.BallotPhotoURL) {
 		respond.BadRequest(c, "Uploaded files must be links to this site or an https address")
 		return
 	}
@@ -212,12 +217,25 @@ func (h *CandidateHandler) Apply(c *gin.Context) {
 		respond.BadRequest(c, "Your date of birth must be in the past")
 		return
 	}
+	sex := strings.ToUpper(strings.TrimSpace(input.Sex))
+	if sex != "MALE" && sex != "FEMALE" {
+		respond.Validation(c, "Choose your sex", map[string]string{
+			"sex": "must be MALE or FEMALE",
+		})
+		return
+	}
 	if strings.TrimSpace(input.PassportPhotoURL) == "" {
 		respond.BadRequest(c, "A passport photo is required")
 		return
 	}
 	if strings.TrimSpace(input.IDDocumentURL) == "" {
 		respond.BadRequest(c, "A photo of your student ID is required")
+		return
+	}
+	if strings.TrimSpace(input.PartialTranscriptURL) == "" {
+		respond.Validation(c, "A partial transcript is required", map[string]string{
+			"partial_transcript_url": "upload a partial transcript first",
+		})
 		return
 	}
 
@@ -257,14 +275,18 @@ func (h *CandidateHandler) Apply(c *gin.Context) {
 		ContactEmail: contactEmail,
 		ContactPhone: strings.TrimSpace(input.ContactPhone),
 		// Registration identity is derived from the verified email, not typed.
-		RegistrationNumber: strings.ToUpper(identity.Year + identity.Course + identity.Number),
-		Programme:          identity.Programme(),
-		StudyYear:          identity.StudyYear(h.now()),
-		CampusResidence:    strings.TrimSpace(input.CampusResidence),
-		IDDocumentURL:      strings.TrimSpace(input.IDDocumentURL),
-		PassportPhotoURL:   strings.TrimSpace(input.PassportPhotoURL),
-		ApprovalStatus:     models.CandidateStatusNominated,
-		NominatedBy:        user.ID,
+		RegistrationNumber:   strings.ToUpper(identity.Year + identity.Course + identity.Number),
+		Programme:            identity.Programme(),
+		StudyYear:            identity.StudyYear(h.now()),
+		CampusResidence:      strings.TrimSpace(input.CampusResidence),
+		Sex:                  sex,
+		Religion:             strings.TrimSpace(input.Religion),
+		IDDocumentURL:        strings.TrimSpace(input.IDDocumentURL),
+		PassportPhotoURL:     strings.TrimSpace(input.PassportPhotoURL),
+		PartialTranscriptURL: strings.TrimSpace(input.PartialTranscriptURL),
+		BallotPhotoURL:       strings.TrimSpace(input.BallotPhotoURL),
+		ApprovalStatus:       models.CandidateStatusNominated,
+		NominatedBy:          user.ID,
 	}
 	if candidate.PhotoURL == "" {
 		candidate.PhotoURL = candidate.PassportPhotoURL
@@ -309,6 +331,13 @@ func (h *CandidateHandler) WithdrawMine(c *gin.Context) {
 		respond.Conflict(c, "A rejected application cannot be withdrawn")
 		return
 	}
+	// Once approved a candidate is on the ballot: withdrawing would change the
+	// contest after officials signed it off. Only a draft-stage application may
+	// be withdrawn.
+	if candidate.ApprovalStatus == models.CandidateStatusApproved {
+		respond.Conflict(c, "An approved application can no longer be withdrawn. Contact an election official.")
+		return
+	}
 
 	now := h.now()
 	candidate.ApprovalStatus = models.CandidateStatusWithdrawn
@@ -321,6 +350,60 @@ func (h *CandidateHandler) WithdrawMine(c *gin.Context) {
 	h.audit(c, candidate.ElectionID, models.AuditActionCandidateWithdrawn,
 		"Application withdrawn: "+candidate.FullName+" - "+input.Reason)
 	respond.OK(c, candidate, "Application withdrawn")
+}
+
+// SetBallotPhoto lets an approved candidate replace the image shown on the
+// ballot. The passport photo is used by default; this stores an override. It is
+// refused once voting has opened so a published ballot definition cannot change
+// underneath voters.
+func (h *CandidateHandler) SetBallotPhoto(c *gin.Context) {
+	userID := c.GetString("user_id")
+	var input struct {
+		BallotPhotoURL string `json:"ballot_photo_url" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		respond.BadRequest(c, "A ballot photo is required")
+		return
+	}
+	photo := strings.TrimSpace(input.BallotPhotoURL)
+	if !storedFileURL(photo) || photo == "" {
+		respond.BadRequest(c, "Uploaded files must be links to this site or an https address")
+		return
+	}
+
+	var candidate models.Candidate
+	if err := h.DB.Where("id = ? AND nominated_by = ?", c.Param("candidate_id"), userID).
+		First(&candidate).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			respond.NotFound(c, "Application not found")
+			return
+		}
+		respond.Internal(c, err)
+		return
+	}
+	if candidate.ApprovalStatus != models.CandidateStatusApproved {
+		respond.Conflict(c, "Only an approved candidate may set a ballot photo")
+		return
+	}
+
+	var election models.Election
+	if err := h.DB.Where("id = ?", candidate.ElectionID).First(&election).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	if !h.now().Before(election.StartsAt) {
+		respond.Conflict(c, "The ballot photo can no longer be changed because voting has opened")
+		return
+	}
+
+	if err := h.DB.Model(&candidate).Update("ballot_photo_url", photo).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	candidate.BallotPhotoURL = photo
+	h.audit(c, candidate.ElectionID, models.AuditActionCandidateUpdated,
+		"Ballot photo updated: "+candidate.FullName)
+	respond.OK(c, candidate, "Ballot photo saved")
 }
 
 // applicationWindow decides whether candidates may still apply. Voting opening
@@ -401,13 +484,17 @@ func (h *CandidateHandler) Create(c *gin.Context) {
 		Manifesto  string `json:"manifesto"`
 		Bio        string `json:"bio"`
 		// Additional fields from comprehensive system
-		DateOfBirth        string `json:"date_of_birth"`
-		RegistrationNumber string `json:"registration_number"`
-		CampusResidence    string `json:"campus_residence"`
-		IDDocumentURL      string `json:"id_document_url"`
-		PassportPhotoURL   string `json:"passport_photo_url"`
-		Programme          string `json:"programme"`
-		StudyYear          int    `json:"study_year"`
+		DateOfBirth          string `json:"date_of_birth"`
+		RegistrationNumber   string `json:"registration_number"`
+		CampusResidence      string `json:"campus_residence"`
+		Sex                  string `json:"sex"`
+		Religion             string `json:"religion"`
+		IDDocumentURL        string `json:"id_document_url"`
+		PassportPhotoURL     string `json:"passport_photo_url"`
+		PartialTranscriptURL string `json:"partial_transcript_url"`
+		BallotPhotoURL       string `json:"ballot_photo_url"`
+		Programme            string `json:"programme"`
+		StudyYear            int    `json:"study_year"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -427,20 +514,24 @@ func (h *CandidateHandler) Create(c *gin.Context) {
 	}
 
 	candidate := models.Candidate{
-		ElectionID:         electionID,
-		PositionID:         input.PositionID,
-		FullName:           input.FullName,
-		PhotoURL:           input.PhotoURL,
-		Manifesto:          input.Manifesto,
-		Bio:                input.Bio,
-		ApprovalStatus:     models.CandidateStatusNominated,
-		NominatedBy:        userID,
-		RegistrationNumber: input.RegistrationNumber,
-		CampusResidence:    input.CampusResidence,
-		IDDocumentURL:      input.IDDocumentURL,
-		PassportPhotoURL:   input.PassportPhotoURL,
-		Programme:          strings.TrimSpace(input.Programme),
-		StudyYear:          input.StudyYear,
+		ElectionID:           electionID,
+		PositionID:           input.PositionID,
+		FullName:             input.FullName,
+		PhotoURL:             input.PhotoURL,
+		Manifesto:            input.Manifesto,
+		Bio:                  input.Bio,
+		ApprovalStatus:       models.CandidateStatusNominated,
+		NominatedBy:          userID,
+		RegistrationNumber:   input.RegistrationNumber,
+		CampusResidence:      input.CampusResidence,
+		Sex:                  strings.ToUpper(strings.TrimSpace(input.Sex)),
+		Religion:             strings.TrimSpace(input.Religion),
+		IDDocumentURL:        input.IDDocumentURL,
+		PassportPhotoURL:     input.PassportPhotoURL,
+		PartialTranscriptURL: strings.TrimSpace(input.PartialTranscriptURL),
+		BallotPhotoURL:       strings.TrimSpace(input.BallotPhotoURL),
+		Programme:            strings.TrimSpace(input.Programme),
+		StudyYear:            input.StudyYear,
 	}
 
 	// Parse date of birth if provided
@@ -500,11 +591,15 @@ func (h *CandidateHandler) Update(c *gin.Context) {
 		ContactEmail string `json:"contact_email"`
 		ContactPhone string `json:"contact_phone"`
 		// Additional fields from comprehensive system
-		DateOfBirth        string `json:"date_of_birth"`
-		RegistrationNumber string `json:"registration_number"`
-		CampusResidence    string `json:"campus_residence"`
-		IDDocumentURL      string `json:"id_document_url"`
-		PassportPhotoURL   string `json:"passport_photo_url"`
+		DateOfBirth          string `json:"date_of_birth"`
+		RegistrationNumber   string `json:"registration_number"`
+		CampusResidence      string `json:"campus_residence"`
+		Sex                  string `json:"sex"`
+		Religion             string `json:"religion"`
+		IDDocumentURL        string `json:"id_document_url"`
+		PassportPhotoURL     string `json:"passport_photo_url"`
+		PartialTranscriptURL string `json:"partial_transcript_url"`
+		BallotPhotoURL       string `json:"ballot_photo_url"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -549,6 +644,18 @@ func (h *CandidateHandler) Update(c *gin.Context) {
 	}
 	if input.PassportPhotoURL != "" {
 		updates["passport_photo_url"] = input.PassportPhotoURL
+	}
+	if input.PartialTranscriptURL != "" {
+		updates["partial_transcript_url"] = input.PartialTranscriptURL
+	}
+	if input.BallotPhotoURL != "" {
+		updates["ballot_photo_url"] = input.BallotPhotoURL
+	}
+	if input.Sex != "" {
+		updates["sex"] = strings.ToUpper(strings.TrimSpace(input.Sex))
+	}
+	if input.Religion != "" {
+		updates["religion"] = strings.TrimSpace(input.Religion)
 	}
 	if input.DateOfBirth != "" {
 		dob, err := time.Parse("2006-01-02", input.DateOfBirth)

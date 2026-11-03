@@ -1383,6 +1383,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.GET("/elections/:id/candidate-application", candidateHandler.Application)
 		protected.POST("/elections/:id/candidates/apply", candidateHandler.Apply)
 		protected.POST("/candidates/my/:candidate_id/withdraw", candidateHandler.WithdrawMine)
+		protected.POST("/candidates/my/:candidate_id/ballot-photo", candidateHandler.SetBallotPhoto)
 
 		// Standalone position applications. A student sees only the positions
 		// their email domain, year and course make them eligible for, and may

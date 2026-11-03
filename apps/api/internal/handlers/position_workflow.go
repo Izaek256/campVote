@@ -230,9 +230,16 @@ func (h *PositionHandler) Eligible(c *gin.Context) {
 
 	titles := h.electionTitles(positions)
 
+	// A position attached to an election stops accepting applications the
+	// moment that election begins, even if the position itself is still OPEN.
+	startedElections := h.startedElectionIDs(positions, h.now())
+
 	out := make([]eligiblePosition, 0, len(positions))
 	for i := range positions {
 		position := positions[i]
+		if ref := position.ElectionRef(); ref != "" && startedElections[ref] {
+			continue
+		}
 		if !eligibility.RuleForPosition(&position).Allows(identity) {
 			continue
 		}
@@ -243,6 +250,30 @@ func (h *PositionHandler) Eligible(c *gin.Context) {
 		})
 	}
 	respond.OK(c, gin.H{"positions": out})
+}
+
+// startedElectionIDs returns the set of election ids for the given positions
+// whose voting window has opened (or which are closed). Such a position is no
+// longer available for candidacy once the election it belongs to has begun.
+func (h *PositionHandler) startedElectionIDs(positions []models.Position, now time.Time) map[string]bool {
+	ids := make([]string, 0, len(positions))
+	for i := range positions {
+		if ref := positions[i].ElectionRef(); ref != "" {
+			ids = append(ids, ref)
+		}
+	}
+	started := map[string]bool{}
+	if len(ids) == 0 {
+		return started
+	}
+	var elections []models.Election
+	h.DB.Where("id IN ?", ids).Find(&elections)
+	for _, election := range elections {
+		if !now.Before(election.StartsAt) || election.Status == models.ElectionStatusClosed {
+			started[election.ID] = true
+		}
+	}
+	return started
 }
 
 // CreateStandalone creates a position that is not yet attached to any
@@ -499,6 +530,17 @@ func (h *PositionHandler) Apply(c *gin.Context) {
 	if !position.AcceptingApplications() {
 		respond.Conflict(c, "This position is not accepting applications")
 		return
+	}
+	// Once the election this position belongs to has begun, candidacy closes
+	// even though the position's own status may still read OPEN.
+	if ref := position.ElectionRef(); ref != "" {
+		var election models.Election
+		if err := h.DB.Where("id = ?", ref).First(&election).Error; err == nil {
+			if !h.now().Before(election.StartsAt) {
+				respond.Conflict(c, "Applications closed when the election began")
+				return
+			}
+		}
 	}
 
 	identity, parsed := eligibility.ParseEmail(user.Email)

@@ -24,6 +24,7 @@ const (
 	AuditActionCandidateRejected   = "CANDIDATE_REJECTED"
 	AuditActionCandidateNominated  = "CANDIDATE_NOMINATED"
 	AuditActionCandidateWithdrawn  = "CANDIDATE_WITHDRAWN"
+	AuditActionCandidateUpdated    = "CANDIDATE_UPDATED"
 	AuditActionPositionCreated     = "POSITION_CREATED"
 	AuditActionPositionUpdated     = "POSITION_UPDATED"
 	AuditActionPositionDeleted     = "POSITION_DELETED"

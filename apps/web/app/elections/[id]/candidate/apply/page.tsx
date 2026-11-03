@@ -22,6 +22,8 @@ function Apply({ id }: { id: string }) {
   const [positionId, setPositionId] = useState("");
   const [fullName, setFullName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
+  const [sex, setSex] = useState("");
+  const [religion, setReligion] = useState("");
   const [slogan, setSlogan] = useState("");
   const [bio, setBio] = useState("");
   const [manifesto, setManifesto] = useState("");
@@ -31,8 +33,9 @@ function Apply({ id }: { id: string }) {
   const [manifestoUrl, setManifestoUrl] = useState("");
   const [passportPhotoUrl, setPassportPhotoUrl] = useState("");
   const [idDocumentUrl, setIdDocumentUrl] = useState("");
+  const [transcriptUrl, setTranscriptUrl] = useState("");
   const [uploading, setUploading] = useState<
-    "photo" | "manifesto" | "passport" | "id" | ""
+    "photo" | "manifesto" | "passport" | "id" | "transcript" | ""
   >("");
 
   useEffect(() => {
@@ -51,13 +54,13 @@ function Apply({ id }: { id: string }) {
   }, [id, toast]);
 
   async function pickFile(
-    kind: "photo" | "manifesto" | "passport" | "id",
+    kind: "photo" | "manifesto" | "passport" | "id" | "transcript",
     file: File | undefined
   ) {
     if (!file) return;
     setUploading(kind);
     try {
-      const isPdf = kind === "manifesto";
+      const isPdf = kind === "manifesto" || kind === "transcript";
       const ref = await upload(file, {
         accepts: isPdf ? "pdf" : "image",
         maxSize: (isPdf ? 5 : 2) * 1024 * 1024,
@@ -65,15 +68,10 @@ function Apply({ id }: { id: string }) {
       if (kind === "photo") setPhotoUrl(ref.url);
       else if (kind === "manifesto") setManifestoUrl(ref.url);
       else if (kind === "passport") setPassportPhotoUrl(ref.url);
+      else if (kind === "transcript") setTranscriptUrl(ref.url);
       else setIdDocumentUrl(ref.url);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError
-          ? err.message
-          : kind === "manifesto"
-            ? "The manifesto could not be uploaded."
-            : "That document could not be uploaded."
-      );
+      toast.error(err instanceof ApiError ? err.message : "That document could not be uploaded.");
     } finally {
       setUploading("");
     }
@@ -93,6 +91,14 @@ function Apply({ id }: { id: string }) {
       toast.error("Enter your date of birth.");
       return;
     }
+    if (sex !== "MALE" && sex !== "FEMALE") {
+      toast.error("Select your sex.");
+      return;
+    }
+    if (!transcriptUrl) {
+      toast.error("Upload your partial transcript.");
+      return;
+    }
     if (!passportPhotoUrl) {
       toast.error("Upload your passport photo.");
       return;
@@ -107,6 +113,8 @@ function Apply({ id }: { id: string }) {
         position_id: positionId,
         full_name: fullName.trim(),
         date_of_birth: dateOfBirth,
+        sex,
+        religion: religion.trim(),
         slogan: slogan.trim(),
         bio: bio.trim(),
         manifesto: manifesto.trim(),
@@ -114,6 +122,7 @@ function Apply({ id }: { id: string }) {
         photo_url: photoUrl,
         passport_photo_url: passportPhotoUrl,
         id_document_url: idDocumentUrl,
+        partial_transcript_url: transcriptUrl,
         contact_email: contactEmail.trim(),
         contact_phone: contactPhone.trim(),
       });
@@ -308,6 +317,35 @@ function Apply({ id }: { id: string }) {
 
           <div className="form-grid">
             <div className="field">
+              <label htmlFor="sex">Sex *</label>
+              <select
+                id="sex"
+                className="sel"
+                value={sex}
+                onChange={(event) => setSex(event.target.value)}
+                disabled={blocked}
+                required
+              >
+                <option value="">Select…</option>
+                <option value="MALE">Male</option>
+                <option value="FEMALE">Female</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="religion">Religion (optional)</label>
+              <input
+                id="religion"
+                className="in"
+                value={religion}
+                onChange={(event) => setReligion(event.target.value)}
+                disabled={blocked}
+                maxLength={100}
+              />
+            </div>
+          </div>
+
+          <div className="form-grid">
+            <div className="field">
               <label htmlFor="slogan">Slogan (optional)</label>
               <input
                 id="slogan"
@@ -418,9 +456,7 @@ function Apply({ id }: { id: string }) {
                 onChange={(event) => pickFile("id", event.target.files?.[0])}
                 required
               />
-              {uploading === "id" ? (
-                <span className="hint">Uploading student ID…</span>
-              ) : null}
+              {uploading === "id" ? <span className="hint">Uploading student ID…</span> : null}
               {idDocumentUrl ? (
                 <span className="fileline">
                   <Icon name="check" size="s" />
@@ -433,20 +469,23 @@ function Apply({ id }: { id: string }) {
 
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="photo">Ballot photo (optional, JPEG or PNG, max 2 MB)</label>
+              <label htmlFor="transcript-file">Partial transcript (PDF, max 5 MB) *</label>
               <input
-                id="photo"
+                id="transcript-file"
                 className="in"
                 type="file"
-                accept="image/jpeg,image/png"
+                accept="application/pdf"
                 disabled={blocked || uploading !== ""}
-                onChange={(event) => pickFile("photo", event.target.files?.[0])}
+                onChange={(event) => pickFile("transcript", event.target.files?.[0])}
+                required
               />
-              {uploading === "photo" ? <span className="hint">Uploading photo…</span> : null}
-              {photoUrl ? (
+              {uploading === "transcript" ? (
+                <span className="hint">Uploading transcript…</span>
+              ) : null}
+              {transcriptUrl ? (
                 <span className="fileline">
                   <Icon name="check" size="s" />
-                  Photo uploaded
+                  Transcript uploaded
                   <span className="mono">ready</span>
                 </span>
               ) : null}
@@ -472,6 +511,26 @@ function Apply({ id }: { id: string }) {
                 </span>
               ) : null}
             </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="photo">Ballot photo (optional, JPEG or PNG, max 2 MB)</label>
+            <input
+              id="photo"
+              className="in"
+              type="file"
+              accept="image/jpeg,image/png"
+              disabled={blocked || uploading !== ""}
+              onChange={(event) => pickFile("photo", event.target.files?.[0])}
+            />
+            {uploading === "photo" ? <span className="hint">Uploading photo…</span> : null}
+            {photoUrl ? (
+              <span className="fileline">
+                <Icon name="check" size="s" />
+                Photo uploaded
+                <span className="mono">ready</span>
+              </span>
+            ) : null}
           </div>
 
           <div className="row">

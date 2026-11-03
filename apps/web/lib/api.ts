@@ -189,6 +189,15 @@ export const candidates = {
   mine: () => api<{ candidates: MyCandidate[] }>("/candidates/my"),
   withdraw: (candidateId: string, reason: string) =>
     api<Candidate>(`/candidates/my/${candidateId}/withdraw`, { method: "POST", body: { reason } }),
+  /**
+   * Replace the image shown on the ballot (approved candidates only, before
+   * voting opens). When unset the passport photo is used.
+   */
+  setBallotPhoto: (candidateId: string, ballotPhotoUrl: string) =>
+    api<Candidate>(`/candidates/my/${candidateId}/ballot-photo`, {
+      method: "POST",
+      body: { ballot_photo_url: ballotPhotoUrl },
+    }),
   list: (electionId: string, status?: string) =>
     api<{ candidates: Candidate[] }>(
       `/elections/${electionId}/candidates${status ? `?status=${status}` : ""}`
@@ -246,7 +255,10 @@ export const positions = {
       body: { reason },
     }),
   link: (positionId: string, electionId: string) =>
-    api<Position>(`/positions/${positionId}/link`, { method: "POST", body: { election_id: electionId } }),
+    api<Position>(`/positions/${positionId}/link`, {
+      method: "POST",
+      body: { election_id: electionId },
+    }),
 
   // Applicant-facing.
   eligible: () => api<{ positions: EligiblePosition[] }>("/positions/eligible"),

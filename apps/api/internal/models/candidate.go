@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"campvote/apps/api/internal/ids"
+
 	"gorm.io/gorm"
 )
 
@@ -50,6 +51,9 @@ type Candidate struct {
 	Religion           string     `gorm:"size:100" json:"religion,omitempty"`
 	IDDocumentURL      string     `gorm:"size:500" json:"id_document_url,omitempty"`
 	PassportPhotoURL   string     `gorm:"size:500" json:"passport_photo_url,omitempty"`
+	// BallotPhotoURL is the optional replacement an approved candidate uploads
+	// for the ballot. When empty the passport photo is shown instead.
+	BallotPhotoURL string `gorm:"size:500" json:"ballot_photo_url,omitempty"`
 	// PartialTranscriptURL is the uploaded academic transcript an official
 	// inspects during screening.
 	PartialTranscriptURL string `gorm:"size:500" json:"partial_transcript_url,omitempty"`

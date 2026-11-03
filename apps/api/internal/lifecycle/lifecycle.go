@@ -17,9 +17,10 @@ import (
 	"campvote/apps/api/internal/models"
 )
 
-// MinimumDuration is the shortest schedule an election may be given. A shorter
-// window is almost always a timezone or typo mistake, not a real contest.
-const MinimumDuration = time.Hour
+// MinimumDuration is the shortest schedule an election may be given. Officials
+// run short demonstration or runoff polls, so a couple of minutes is allowed;
+// anything shorter is almost always a typo.
+const MinimumDuration = 2 * time.Minute
 
 // DisplayTimezone is the human-facing zone for MMU. Timestamps are stored and
 // returned in UTC; clients format them in this zone for display only.

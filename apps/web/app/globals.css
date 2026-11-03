@@ -1525,6 +1525,65 @@ svg.i.l {
   }
 }
 
+/* ===== post-vote confirmation ===== */
+.vote-success {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--scrim);
+  animation: fade 0.2s;
+  overflow: hidden;
+}
+.vote-success-card {
+  position: relative;
+  z-index: 2;
+  width: min(440px, 100%);
+  padding: 28px 32px 26px;
+  text-align: center;
+  background: var(--surface);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--r);
+  animation: pop 0.3s var(--ease);
+}
+.vote-success-card h2 {
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+.vote-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.vote-confetti i {
+  position: absolute;
+  top: -12vh;
+  width: 9px;
+  height: 15px;
+  will-change: transform;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-12vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(112vh) rotate(720deg);
+    opacity: 0.85;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vote-confetti {
+    display: none;
+  }
+}
+
 /* ===== navigation ===== */
 .crumbs {
   display: flex;
@@ -3254,6 +3313,14 @@ body {
   flex-direction: column;
   gap: 10px;
   margin-top: 12px;
+}
+.ballot-photo {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  flex: none;
 }
 .candidate-meta {
   display: block;
