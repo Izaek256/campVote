@@ -174,6 +174,14 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
+	// Following the link proves control of the mailbox, so it also settles an
+	// unverified address. Without this an invited administrator who set their
+	// first password could still be refused by REQUIRE_EMAIL_VERIFICATION.
+	if err := h.DB.Model(&models.User{}).Where("id = ?", userID).
+		Update("email_verified_at", time.Now().UTC()).Error; err != nil {
+		log.Printf("password reset: marking %s verified: %v", userID, err)
+	}
+
 	// The reason someone resets a password is to evict whoever they think is in
 	// their account. Leaving that person's session alive would defeat the entire
 	// exercise, so every device is signed out — including any the attacker holds.

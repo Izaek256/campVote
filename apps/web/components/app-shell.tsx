@@ -28,7 +28,6 @@ const ELECTION_STEPS: { key: string; label: string; icon: IconName; hash?: strin
   { key: "", label: "Eligibility", icon: "shield", hash: "#eligibility" },
   { key: "positions", label: "Positions", icon: "ballot" },
   { key: "candidates", label: "Candidates", icon: "users" },
-  { key: "ballot", label: "Ballot", icon: "check" },
   { key: "", label: "Schedule", icon: "cal", hash: "#schedule" },
   { key: "monitor", label: "Monitor", icon: "eye" },
   { key: "results", label: "Results", icon: "chart" },
@@ -47,7 +46,6 @@ const ADMIN_SECTIONS: NavSection[] = [
   {
     heading: "My activity",
     items: [
-      { href: "/candidate", label: "My candidacy", icon: "user" },
       { href: "/account", label: "Account", icon: "shield" },
     ],
   },

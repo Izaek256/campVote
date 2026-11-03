@@ -90,6 +90,26 @@ func main() {
 		}
 	}
 
+	// Bootstrap the first administrator if none exists and env vars are set.
+	// This is a one-time operation: once an admin is in the database, this does
+	// nothing. The environment variables should be removed after bootstrapping.
+	bootstrapEmail := os.Getenv("BOOTSTRAP_ADMIN_EMAIL")
+	bootstrapPassword := os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
+	if bootstrapEmail != "" && bootstrapPassword != "" {
+		admin, err := database.CreateFirstAdmin(context.Background(), db, bootstrapEmail, bootstrapPassword,
+			os.Getenv("BOOTSTRAP_ADMIN_FIRST_NAME"), os.Getenv("BOOTSTRAP_ADMIN_LAST_NAME"))
+		if err != nil {
+			if errors.Is(err, database.ErrAdministratorExists) {
+				log.Println("Bootstrap: an administrator already exists; skipping")
+			} else {
+				log.Printf("Bootstrap: failed to create first administrator: %v", err)
+			}
+		} else {
+			log.Printf("Bootstrap: created first administrator %s (%s %s)", admin.Email, admin.FirstName, admin.LastName)
+			log.Println("Bootstrap: remove BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD from your environment now")
+		}
+	}
+
 	// ── Phase 4 Services ─────────────────────────────────────────
 
 	// Redis cache

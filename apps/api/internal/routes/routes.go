@@ -1434,6 +1434,10 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.PUT("/users/:id/roles", middleware.RequireRole("ADMIN", "perm:users.edit"), roleHandler.AssignUserRoles)
 		staff.POST("/users/:id/unlock", middleware.RequireRole("ADMIN", "perm:users.edit"), userHandler.Unlock)
 
+		// Administrator invitation: creates an admin without a password and emails
+		// a set-password link. The invited user must have an admin email domain.
+		staff.POST("/admins/invite", middleware.RequireRole("ADMIN", "perm:users.create"), authHandler.InviteAdmin)
+
 		// GDPR right-to-erasure: anonymize a user and hard-delete their PII, with
 		// the erasure recorded in a tamper-evident deletion journal.
 		staff.POST("/users/:id/gdpr-erase", middleware.RequireRole("ADMIN", "perm:users.delete"), gdprHandler.Erase)

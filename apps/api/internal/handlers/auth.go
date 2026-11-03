@@ -2,13 +2,10 @@ package handlers
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"log"
-	"math/big"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -163,6 +160,15 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		respond.Fail(c, respond.CodeValidationError, err.Error())
 		return
 	}
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	// Only the student domain may self-register. Staff accounts are created by
+	// an administrator invitation, so a staff address on this form is refused
+	// rather than quietly turned into a voter.
+	if !h.Config.IsStudentEmail(req.Email) {
+		respond.Fail(c, respond.CodeForbidden, "Self-service registration is only available for @"+h.Config.StudentDomain()+" student addresses. Ask an administrator for a staff account.")
+		return
+	}
 
 	// The same four rules the admin shows while somebody types, checked here
 	// because a checklist the server ignores is decoration. Their own name and
@@ -256,81 +262,79 @@ func (h *AuthHandler) SignupInitiate(c *gin.Context) {
 		respond.Fail(c, respond.CodeValidationError, err.Error())
 		return
 	}
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Enforce signup domain allowlist. Default is the student domain; staff
-	// accounts are created via the bootstrap command or admin role assignment.
-	// SIGNUP_ALLOWED_DOMAINS is a comma-separated list of email domains (no @).
-	allowedDomains := strings.Split(
-		getenvDefault("SIGNUP_ALLOWED_DOMAINS", "std.mast.ac.ug"),
-		",",
-	)
-	emailLower := strings.ToLower(strings.TrimSpace(req.Email))
-	domainOK := false
-	for _, d := range allowedDomains {
-		d = strings.ToLower(strings.TrimSpace(d))
-		if d != "" && strings.HasSuffix(emailLower, "@"+d) {
-			domainOK = true
-			break
+	// Only the exact student domain, tested after the final "@". A suffix
+	// match let "someone@evilstd.must.ac.ug" through.
+	if !h.Config.IsStudentEmail(req.Email) {
+		respond.Fail(c, respond.CodeForbidden, "Self-service registration is only available for @"+h.Config.StudentDomain()+" student addresses. Ask an administrator for a staff account.")
+		return
+	}
+
+	// A pending signup is a passwordless, inactive row. Re-requesting a code
+	// is allowed so a person who mistyped their name or let the code expire
+	// is not locked out of an address they own.
+	var user models.User
+	err := h.DB.Where("LOWER(email) = ?", req.Email).First(&user).Error
+	switch {
+	case err == nil:
+		if user.Password != "" && user.Active {
+			c.JSON(http.StatusConflict, gin.H{
+				"error": gin.H{
+					"code":    "EMAIL_EXISTS",
+					"message": "An account with this email already exists",
+				},
+			})
+			return
 		}
-	}
-	if !domainOK {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": gin.H{
-				"code":    "DOMAIN_NOT_ALLOWED",
-				"message": "Self-service registration is only available for institutional student email addresses. Contact your administrator to create a staff account.",
-			},
-		})
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		user = models.User{
+			Email:  req.Email,
+			Role:   models.RoleStudentVoter,
+			Active: false,
+		}
+		if err := services.CreateUser(c.Request.Context(), h.DB, &user); err != nil {
+			if errors.Is(err, services.ErrEmailExists) {
+				c.JSON(http.StatusConflict, gin.H{
+					"error": gin.H{
+						"code":    "EMAIL_EXISTS",
+						"message": "An account with this email already exists",
+					},
+				})
+				return
+			}
+			respond.Internal(c, err)
+			return
+		}
+	default:
+		respond.Internal(c, err)
 		return
 	}
 
-	// Check if email already exists
-	var existingUser models.User
-	if err := h.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{
-			"error": gin.H{
-				"code":    "EMAIL_EXISTS",
-				"message": "An account with this email already exists",
-			},
-		})
-		return
-	}
-
-	// Generate verification code
-	code, err := generateRandomCode(6)
+	// A fresh hashed, single-use, ten-minute code in the database. The old
+	// in-memory map lost every pending signup on restart and could not be
+	// shared between replicas.
+	code, err := services.GenerateVerificationCode()
 	if err != nil {
 		log.Printf("auth: failed to generate verification code: %v", err)
 		respond.Fail(c, respond.CodeInternalError, "Failed to generate verification code")
 		return
 	}
-	token := req.Email + ":" + code
-
-	// Store the code with 10 minute expiry
-	signupCodesMutex.Lock()
-	signupCodes[token] = signupCodeEntry{
-		code:      code,
-		email:     req.Email,
-		expiresAt: time.Now().UTC().Add(10 * time.Minute),
-	}
-	signupCodesMutex.Unlock()
-
-	// In production, send email. In development, expose the code in response.
-	if h.Config.AppEnv == "production" {
-		if err := h.deliverSignupVerificationEmail(c.Request.Context(), req.Email, code); err != nil {
-			log.Printf("auth: failed to send signup verification email to %s: %v", req.Email, err)
-			// Don't fail the request - the user can request a new code
-		}
+	if _, err := services.CreateEmailVerificationToken(h.DB, user.ID, req.Email, code, h.Config.JWTSecret); err != nil {
+		log.Printf("auth: failed to store signup verification code: %v", err)
+		respond.Fail(c, respond.CodeInternalError, "Failed to generate verification code")
+		return
 	}
 
-	response := gin.H{
-		"message": "Verification code sent to your email",
+	// A mail failure does not fail the request: the person can ask again, and
+	// the response must not reveal whether the address was already pending.
+	if err := h.deliverSignupVerificationEmail(c.Request.Context(), req.Email, code); err != nil {
+		log.Printf("auth: failed to send signup verification email to %s: %v", req.Email, err)
 	}
 
-	// In development, include the code for testing
-	if h.Config.AppEnv != "production" {
-		response["verification_code"] = code
-	}
-
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "If that address can be registered, a verification code has been sent to it. The code expires in 10 minutes.",
+	})
 }
 
 
@@ -342,48 +346,15 @@ func (h *AuthHandler) SignupComplete(c *gin.Context) {
 		respond.Fail(c, respond.CodeValidationError, err.Error())
 		return
 	}
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Verify the code
-	token := req.Email + ":" + req.VerificationCode
-	signupCodesMutex.RLock()
-	entry, exists := signupCodes[token]
-	signupCodesMutex.RUnlock()
-
-	if !exists {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"code":    "INVALID_CODE",
-				"message": "Invalid or expired verification code",
-			},
-		})
+	if !h.Config.IsStudentEmail(req.Email) {
+		respond.Fail(c, respond.CodeForbidden, "Self-service registration is only available for @"+h.Config.StudentDomain()+" student addresses.")
 		return
 	}
 
-	if time.Now().UTC().After(entry.expiresAt) {
-		signupCodesMutex.Lock()
-		delete(signupCodes, token)
-		signupCodesMutex.Unlock()
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"code":    "CODE_EXPIRED",
-				"message": "Verification code has expired",
-			},
-		})
-		return
-	}
-
-	// Verify email matches
-	if entry.email != req.Email {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"code":    "EMAIL_MISMATCH",
-				"message": "Email does not match the one that requested the code",
-			},
-		})
-		return
-	}
-
-	// Password strength check
+	// Password strength check before anything is consumed: a weak choice must
+	// not burn the code the person is holding.
 	if failed := password.Check(req.Password, req.Email, req.FirstName, req.LastName); len(failed) > 0 {
 		respond.Fail(c, respond.CodeValidationError, password.Message(failed))
 		return
@@ -394,41 +365,50 @@ func (h *AuthHandler) SignupComplete(c *gin.Context) {
 		return
 	}
 
-	user := models.User{
-		FirstName:  req.FirstName,
-		LastName:   req.LastName,
-		Email:      req.Email,
-		Password:   req.Password,
-		Role:       models.RoleStudentVoter,
-		Active:     true,
-		IPAddress:  c.ClientIP(),
-		MACAddress: req.MACAddress,
-		EmailVerifiedAt: func() *time.Time { t := time.Now().UTC(); return &t }(),
-	}
-
-	if err := services.CreateUser(c.Request.Context(), h.DB, &user); err != nil {
-		if errors.Is(err, services.ErrEmailExists) {
-			c.JSON(http.StatusConflict, gin.H{
-				"error": gin.H{
-					"code":    "EMAIL_EXISTS",
-					"message": "A user with this email already exists",
-				},
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
+	// Consume the hashed, single-use code. It also marks the address verified.
+	userID, err := services.ConsumeEmailVerificationToken(h.DB, req.VerificationCode, h.Config.JWTSecret)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
-				"code":    "INTERNAL_ERROR",
-				"message": "Failed to create user",
+				"code":    "INVALID_CODE",
+				"message": "Invalid or expired verification code. Request a new one.",
 			},
 		})
 		return
 	}
 
-	// Remove the used code
-	signupCodesMutex.Lock()
-	delete(signupCodes, token)
-	signupCodesMutex.Unlock()
+	var user models.User
+	if err := h.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+		respond.Fail(c, respond.CodeInternalError, "Failed to load the pending account")
+		return
+	}
+	if !strings.EqualFold(user.Email, req.Email) {
+		respond.Fail(c, respond.CodeInvalidLink, "That verification code is for a different address.")
+		return
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		respond.Fail(c, respond.CodeInternalError, "Failed to secure the password")
+		return
+	}
+	if err := h.DB.Model(&user).Updates(map[string]interface{}{
+		"first_name":        strings.TrimSpace(req.FirstName),
+		"last_name":         strings.TrimSpace(req.LastName),
+		"password":          string(hashed),
+		"role":              models.RoleStudentVoter,
+		"active":            true,
+		"ip_address":        c.ClientIP(),
+		"mac_address":       req.MACAddress,
+		"email_verified_at": time.Now().UTC(),
+	}).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	if err := h.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
 
 	tokens, err := h.AuthService.GenerateTokenPair(user.ID, user.Email, user.Role)
 	if err != nil {
@@ -501,28 +481,6 @@ func plainTextSignupVerification(code string) string {
 	return fmt.Sprintf("Your campVote verification code is: %s\n\nThis code will expire in 10 minutes.\n\nIf you did not request this code, please ignore this email.", code)
 }
 
-// generateRandomCode generates a random numeric code of specified length
-func generateRandomCode(length int) (string, error) {
-	const digits = "0123456789"
-	result := make([]byte, length)
-	for i := range result {
-		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
-		if err != nil {
-			return "", err
-		}
-		result[i] = digits[n.Int64()]
-	}
-	return string(result), nil
-}
-
-// getenvDefault returns the environment variable value or a fallback.
-func getenvDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
 
 // invalidCredentials is the one answer a sign-in gets until its password has
 // been checked and found right. An unknown address, a wrong password, a locked
@@ -536,17 +494,7 @@ func invalidCredentials(c *gin.Context) {
 var (
 	timingHashOnce sync.Once
 	timingHash     []byte
-	// Simple in-memory storage for signup verification codes (MVP)
-	// TODO: Replace with Redis or database storage for production
-	signupCodes     = make(map[string]signupCodeEntry)
-	signupCodesMutex sync.RWMutex
 )
-
-type signupCodeEntry struct {
-	code      string
-	email     string
-	expiresAt time.Time
-}
 
 // spendPasswordCheck does the bcrypt work of a password comparison when there is
 // no hash to compare against. Without it an unknown address answered in a
@@ -744,6 +692,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respond.Fail(c, respond.CodeValidationError, err.Error())
+		return
+	}
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	// Only the two campus domains may sign in. The answer is the same generic
+	// refusal as a wrong password so the form cannot be used to probe domains.
+	if !h.Config.IsStudentEmail(req.Email) && !h.Config.IsAdminEmail(req.Email) {
+		spendPasswordCheck(req.Password)
+		invalidCredentials(c)
 		return
 	}
 

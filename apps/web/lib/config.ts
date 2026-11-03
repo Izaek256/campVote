@@ -9,8 +9,8 @@ export const CAMPUS_NAME = process.env.NEXT_PUBLIC_CAMPUS_NAME?.trim() || "Campu
 export const ELECTION_AUTHORITY =
   process.env.NEXT_PUBLIC_ELECTION_AUTHORITY?.trim() || "Campus Electoral Commission";
 export const STUDENT_EMAIL_DOMAIN =
-  process.env.NEXT_PUBLIC_STUDENT_EMAIL_DOMAIN?.trim() || "std.mast.ac.ug";
+  process.env.NEXT_PUBLIC_STUDENT_EMAIL_DOMAIN?.trim() || "std.must.ac.ug";
 export const STAFF_EMAIL_DOMAIN =
-  process.env.NEXT_PUBLIC_STAFF_EMAIL_DOMAIN?.trim() || "mast.ac.ug";
+  process.env.NEXT_PUBLIC_STAFF_EMAIL_DOMAIN?.trim() || "must.ac.ug";
 export const STUDENT_EMAIL_EXAMPLE =
   process.env.NEXT_PUBLIC_STUDENT_EMAIL_EXAMPLE?.trim() || `2024BSE088@${STUDENT_EMAIL_DOMAIN}`;

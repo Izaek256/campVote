@@ -2,18 +2,29 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Icon } from "@/components/icon";
 import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
+import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/toast";
 import { ApiError, candidates, upload } from "@/lib/api";
 import { candidateStatusClass, candidateStatusLabel, formatEAT } from "@/lib/format";
 import type { MyCandidate } from "@/lib/types";
 
 function MyCandidacy() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  // Administrators do not have candidacies; redirect to staff dashboard
+  useEffect(() => {
+    if (user?.role === "ADMIN") {
+      router.replace("/staff");
+    }
+  }, [user, router]);
   const [items, setItems] = useState<MyCandidate[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);

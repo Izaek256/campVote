@@ -32,20 +32,9 @@ func (h *AuthHandler) SendVerificationEmail(c *gin.Context) {
 		return
 	}
 
-	code := h.deliverVerificationEmail(c.Request.Context(), *user)
+	_ = h.deliverVerificationEmail(c.Request.Context(), *user)
 
 	body := gin.H{"message": "Verification code sent. It is valid for 10 minutes."}
-
-	// In development the code comes back with the response, so the banner can
-	// show it. Verifying an email in development otherwise means opening the
-	// log or digging a .html file out of storage/mail, which is enough friction
-	// that the warning banner simply stays up forever in every dev project.
-	// Guarded on APP_ENV: anywhere else this would hand a working code to
-	// whoever asked, which is the whole secret.
-	if h.Config.AppEnv == "development" && code != "" {
-		body["verify_code"] = code
-		body["message"] = "Development: the code is below rather than in your inbox."
-	}
 
 	c.JSON(http.StatusOK, body)
 }

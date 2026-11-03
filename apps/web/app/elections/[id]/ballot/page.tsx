@@ -9,6 +9,7 @@ import { Icon } from "@/components/icon";
 import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
+import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/toast";
 import { VoteSuccess } from "@/components/vote-success";
 import { ApiError, elections } from "@/lib/api";
@@ -27,6 +28,14 @@ import type { Ballot, BallotPosition, SubmitResult } from "@/lib/types";
 function BallotForm({ id }: { id: string }) {
   const toast = useToast();
   const router = useRouter();
+  const { user } = useAuth();
+
+  // Administrators do not vote; redirect to staff dashboard
+  useEffect(() => {
+    if (user?.role === "ADMIN") {
+      router.replace("/staff");
+    }
+  }, [user, router]);
   const [ballot, setBallot] = useState<Ballot | null>(null);
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});

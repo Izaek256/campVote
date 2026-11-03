@@ -126,6 +126,12 @@ type Config struct {
 	AppURL      string
 	DatabaseURL string
 
+	// StudentEmailDomain is the only domain that may self-register, and
+	// AdminEmailDomain is the domain administrators sign in with. Both are
+	// matched exactly after the final "@", never by suffix.
+	StudentEmailDomain string
+	AdminEmailDomain   string
+
 	JWTSecret string
 	// Asymmetric signing, opt-in. With JWTPrivateKey set the API signs RS256
 	// and publishes the public half at /.well-known/jwks.json, so another
@@ -303,6 +309,8 @@ func Load() (*Config, error) {
 		Port:               firstNonEmpty(os.Getenv("PORT"), os.Getenv("APP_PORT"), "8080"),
 		AppURL:             resolveAppURL(firstNonEmpty(os.Getenv("PORT"), os.Getenv("APP_PORT"), "8080")),
 		DatabaseURL:        resolveDatabaseURL(),
+		StudentEmailDomain: NormalizeDomain(getEnv("STUDENT_EMAIL_DOMAIN", DefaultStudentEmailDomain)),
+		AdminEmailDomain:   NormalizeDomain(getEnv("ADMIN_EMAIL_DOMAIN", DefaultAdminEmailDomain)),
 		JWTSecret:          getEnv("JWT_SECRET", ""),
 		FieldEncryptionKey: getEnv("FIELD_ENCRYPTION_KEY", ""),
 		RedisURL:           resolveRedisURL(),
