@@ -42,7 +42,7 @@ type User struct {
 	LastName  string                 `gorm:"size:255;not null" json:"last_name" binding:"required"`
 	Email     string                 `gorm:"size:255;uniqueIndex;not null" json:"email" binding:"required,email"`
 	Password  string                 `gorm:"size:255" json:"-"`
-	Role      string                 `gorm:"size:20;default:USER" json:"role"`
+	Role      string                 `gorm:"size:20;default:USER;index" json:"role"`
 	Avatar    string                 `gorm:"size:500" json:"avatar"`
 	JobTitle  string                 `gorm:"size:255" json:"job_title"`
 	Bio       crypto.EncryptedString `gorm:"type:text" json:"bio"`

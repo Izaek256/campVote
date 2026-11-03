@@ -98,6 +98,11 @@ export default function LoginPage() {
             Create one
           </Link>
         </p>
+        <p style={{ marginTop: 8, fontSize: 14, textAlign: "center", color: "var(--ink-3)" }}>
+          <Link href="/forgot-password" style={{ color: "var(--ink-3)" }}>
+            Forgot password?
+          </Link>
+        </p>
 
         <div className="banner" style={{ marginTop: 20 }}>
           <Icon name="lock" />

@@ -6,8 +6,9 @@ import { Icon } from "@/components/icon";
 import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
+import { FilePicker } from "@/components/file-picker";
 import { useToast } from "@/components/toast";
-import { ApiError, candidates, upload } from "@/lib/api";
+import { ApiError, candidates } from "@/lib/api";
 import { STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 import { formatEAT } from "@/lib/format";
 import type { CandidateApplicationView } from "@/lib/types";
@@ -34,9 +35,6 @@ function Apply({ id }: { id: string }) {
   const [passportPhotoUrl, setPassportPhotoUrl] = useState("");
   const [idDocumentUrl, setIdDocumentUrl] = useState("");
   const [transcriptUrl, setTranscriptUrl] = useState("");
-  const [uploading, setUploading] = useState<
-    "photo" | "manifesto" | "passport" | "id" | "transcript" | ""
-  >("");
 
   useEffect(() => {
     candidates
@@ -52,30 +50,6 @@ function Apply({ id }: { id: string }) {
         toast.error(message);
       });
   }, [id, toast]);
-
-  async function pickFile(
-    kind: "photo" | "manifesto" | "passport" | "id" | "transcript",
-    file: File | undefined
-  ) {
-    if (!file) return;
-    setUploading(kind);
-    try {
-      const isPdf = kind === "manifesto" || kind === "transcript";
-      const ref = await upload(file, {
-        accepts: isPdf ? "pdf" : "image",
-        maxSize: (isPdf ? 5 : 2) * 1024 * 1024,
-      });
-      if (kind === "photo") setPhotoUrl(ref.url);
-      else if (kind === "manifesto") setManifestoUrl(ref.url);
-      else if (kind === "passport") setPassportPhotoUrl(ref.url);
-      else if (kind === "transcript") setTranscriptUrl(ref.url);
-      else setIdDocumentUrl(ref.url);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "That document could not be uploaded.");
-    } finally {
-      setUploading("");
-    }
-  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -423,60 +397,36 @@ function Apply({ id }: { id: string }) {
           </div>
 
           <div className="form-grid">
-            <div className="field">
-              <label htmlFor="passport-photo">Passport photo (JPEG or PNG, max 2 MB) *</label>
-              <input
-                id="passport-photo"
-                className="in"
-                type="file"
-                accept="image/jpeg,image/png"
-                disabled={blocked || uploading !== ""}
-                onChange={(event) => pickFile("passport", event.target.files?.[0])}
-                required
-              />
-              {uploading === "passport" ? (
-                <span className="hint">Uploading passport photo…</span>
-              ) : null}
-              {passportPhotoUrl ? (
-                <span className="fileline">
-                  <Icon name="check" size="s" />
-                  Passport photo uploaded
-                  <span className="mono">ready</span>
-                </span>
-              ) : null}
-            </div>
-            <div className="field">
-              <label htmlFor="student-id">Student ID photo (JPEG or PNG, max 2 MB) *</label>
-              <input
-                id="student-id"
-                className="in"
-                type="file"
-                accept="image/jpeg,image/png"
-                disabled={blocked || uploading !== ""}
-                onChange={(event) => pickFile("id", event.target.files?.[0])}
-                required
-              />
-              {uploading === "id" ? <span className="hint">Uploading student ID…</span> : null}
-              {idDocumentUrl ? (
-                <span className="fileline">
-                  <Icon name="check" size="s" />
-                  Student ID uploaded
-                  <span className="mono">ready</span>
-                </span>
-              ) : null}
-            </div>
+            <FilePicker
+              accepts="image"
+              maxSize={2 * 1024 * 1024}
+              value={passportPhotoUrl}
+              onChange={setPassportPhotoUrl}
+              label="Passport photo *"
+              hint="JPEG, PNG, GIF, WebP · max 2 MB"
+              disabled={blocked}
+            />
+            <FilePicker
+              accepts="image"
+              maxSize={2 * 1024 * 1024}
+              value={idDocumentUrl}
+              onChange={setIdDocumentUrl}
+              label="Student ID photo *"
+              hint="JPEG, PNG, GIF, WebP · max 2 MB"
+              disabled={blocked}
+            />
           </div>
 
           <div className="form-grid">
-            <div className="field">
-              <label htmlFor="transcript-file">Partial transcript (PDF, max 5 MB) *</label>
-              <input
-                id="transcript-file"
-                className="in"
-                type="file"
-                accept="application/pdf"
-                disabled={blocked || uploading !== ""}
-                onChange={(event) => pickFile("transcript", event.target.files?.[0])}
+            <FilePicker
+              accepts="pdf"
+              maxSize={5 * 1024 * 1024}
+              value={transcriptUrl}
+              onChange={setTranscriptUrl}
+              label="Partial transcript *"
+              hint="PDF · max 5 MB"
+              disabled={blocked}
+            />
                 required
               />
               {uploading === "transcript" ? (

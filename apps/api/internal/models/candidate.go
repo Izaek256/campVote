@@ -39,6 +39,7 @@ type Candidate struct {
 	// Nomination tracking (ISSUE-06)
 	NominatedBy      string     `gorm:"size:36;index" json:"nominated_by,omitempty"` // User ID who nominated
 	ReviewedBy       string     `gorm:"size:36;index" json:"reviewed_by,omitempty"`  // User ID who reviewed
+	UserID          string     `gorm:"size:36;index" json:"user_id,omitempty"`      // User ID of the candidate
 	ReviewedAt       *time.Time `json:"reviewed_at,omitempty"`
 	WithdrawnAt      *time.Time `json:"withdrawn_at,omitempty"`
 	WithdrawalReason string     `gorm:"type:text" json:"withdrawal_reason,omitempty"`

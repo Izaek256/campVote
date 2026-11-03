@@ -148,6 +148,12 @@ export const auth = {
   /** Re-send the email verification link to the signed-in user. */
   resendVerification: () =>
     api<{ message: string }>("/auth/verify-email/resend", { method: "POST" }),
+  /** Request a password reset link via email. */
+  forgotPassword: (email: string) =>
+    api<{ message: string }>("/auth/forgot-password", { method: "POST", body: { email } }),
+  /** Reset password using the token from the email link. */
+  resetPassword: (body: { token: string; password: string }) =>
+    api<{ message: string }>("/auth/reset-password", { method: "POST", body }),
   /** Invite an administrator (creates account without password, emails reset link). */
   inviteAdmin: (body: { first_name: string; last_name: string; email: string }) =>
     api<{ data: User; message: string }>("/staff/admins/invite", { method: "POST", body }),

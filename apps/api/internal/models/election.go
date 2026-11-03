@@ -53,6 +53,9 @@ type Election struct {
 	StartsAt time.Time `gorm:"not null;index" json:"starts_at"`
 	EndsAt   time.Time `gorm:"not null;index" json:"ends_at"`
 
+	// Composite index for querying open elections by time
+	// This optimizes queries like: WHERE status='OPEN' AND starts_at <= NOW() AND ends_at > NOW()
+
 	// Policies and access rules
 	ResultPolicy string `gorm:"size:50;not null;default:'AFTER_CLOSE'" json:"result_policy"`
 
