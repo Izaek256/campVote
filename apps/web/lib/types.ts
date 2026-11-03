@@ -47,7 +47,11 @@ export interface Election {
   starts_at: string;
   ends_at: string;
   result_policy: "LIVE" | "AFTER_CLOSE" | "CERTIFIED_ONLY";
-  allowed_domains: string;
+  /** @deprecated use allowed_domain instead */
+  allowed_domains?: string;
+  allowed_domain: string;
+  allowed_years?: string;
+  allowed_courses?: string;
   eligibility_frozen_at?: string | null;
   eligibility_frozen_count: number;
   created_by_id: string;

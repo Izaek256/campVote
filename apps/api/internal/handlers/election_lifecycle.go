@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"campvote/apps/api/internal/eligibility"
 	"campvote/apps/api/internal/lifecycle"
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/policy"
@@ -70,7 +71,10 @@ type createElectionRequest struct {
 	StartsAt       string `json:"starts_at"`
 	EndsAt         string `json:"ends_at"`
 	ResultPolicy   string `json:"result_policy"`
-	AllowedDomains string `json:"allowed_domains"`
+	// New eligibility fields (replaces AllowedDomains)
+	AllowedDomain  string `json:"allowed_domain"`
+	AllowedYears   string `json:"allowed_years"`
+	AllowedCourses string `json:"allowed_courses"`
 }
 
 // Create writes a new DRAFT election. Scheduling is a separate, validated
@@ -100,20 +104,22 @@ func (h *ElectionLifecycleHandler) Create(c *gin.Context) {
 		StartsAt:       startsAt,
 		EndsAt:         endsAt,
 		ResultPolicy:   strings.ToUpper(strings.TrimSpace(in.ResultPolicy)),
-		AllowedDomains: strings.TrimSpace(in.AllowedDomains),
+		AllowedDomain:  strings.ToLower(strings.TrimPrefix(strings.TrimSpace(in.AllowedDomain), "@")),
+		AllowedYears:   strings.TrimSpace(in.AllowedYears),
+		AllowedCourses: strings.ToLower(strings.TrimSpace(in.AllowedCourses)),
 		CreatedByID:    c.GetString("user_id"),
 	}
 	if election.Category == "" {
 		election.Category = models.ElectionCategoryGuild
 	}
 	if election.OrganizingUnit == "" {
-		election.OrganizingUnit = "MMU Electoral Commission"
+		election.OrganizingUnit = "Electoral Commission"
 	}
 	if election.ResultPolicy == "" {
 		election.ResultPolicy = models.ResultPolicyAfterClose
 	}
-	if election.AllowedDomains == "" {
-		election.AllowedDomains = "@std.must.ac.ug,@must.ac.ug"
+	if election.AllowedDomain == "" {
+		election.AllowedDomain = "std.mast.ac.ug"
 	}
 	if err := lifecycle.ValidateBasics(election, now, false); err != nil {
 		respond.WriteError(c, err, "Election configuration is invalid")
@@ -146,8 +152,8 @@ func (h *ElectionLifecycleHandler) Create(c *gin.Context) {
 }
 
 // List returns the elections a signed-in caller may see. A draft is visible
-// only to its creator; every other state is visible to any signed-in caller so
-// the voter portal can show what is scheduled, open or closed.
+// only to its creator. For non-staff/non-admin callers with a parseable
+// registration-number email, only elections whose rule allows them are returned.
 func (h *ElectionLifecycleHandler) List(c *gin.Context) {
 	actor := policy.ActorFrom(c)
 	query := h.DB.Order("starts_at DESC").Limit(100)
@@ -161,11 +167,35 @@ func (h *ElectionLifecycleHandler) List(c *gin.Context) {
 		return
 	}
 	now := h.now()
+
+	// Parse the caller's email once for eligibility filtering.
+	var callerID eligibility.Identity
+	var callerParsed bool
+	if !actor.Admin {
+		var user models.User
+		if err := h.DB.Where("id = ?", actor.UserID).First(&user).Error; err == nil {
+			callerID, callerParsed = eligibility.ParseEmail(user.Email)
+		}
+	}
+
 	out := make([]electionView, 0, len(elections))
 	for i := range elections {
 		if err := lifecycle.Ensure(h.DB, &elections[i], now); err != nil {
 			respond.Internal(c, err)
 			return
+		}
+		// Filter non-admin, non-role-holder students to elections they are eligible for.
+		if !actor.Admin && callerParsed {
+			// If this caller has a role on this specific election, always show it.
+			hasRole := false
+			var roleCount int64
+			h.DB.Model(&models.ElectionRole{}).
+				Where("election_id = ? AND user_id = ?", elections[i].ID, actor.UserID).
+				Count(&roleCount)
+			hasRole = roleCount > 0
+			if !hasRole && !eligibility.RuleAllows(&elections[i], callerID) {
+				continue // skip elections the caller cannot see
+			}
 		}
 		out = append(out, h.view(&elections[i], now))
 	}
@@ -241,7 +271,9 @@ type updateElectionRequest struct {
 	StartsAt       *string `json:"starts_at"`
 	EndsAt         *string `json:"ends_at"`
 	ResultPolicy   *string `json:"result_policy"`
-	AllowedDomains *string `json:"allowed_domains"`
+	AllowedDomain  *string `json:"allowed_domain"`
+	AllowedYears   *string `json:"allowed_years"`
+	AllowedCourses *string `json:"allowed_courses"`
 	Reason         string  `json:"reason"`
 }
 
@@ -280,8 +312,14 @@ func (h *ElectionLifecycleHandler) Update(c *gin.Context) {
 	if in.ResultPolicy != nil {
 		updated.ResultPolicy = strings.ToUpper(strings.TrimSpace(*in.ResultPolicy))
 	}
-	if in.AllowedDomains != nil {
-		updated.AllowedDomains = strings.TrimSpace(*in.AllowedDomains)
+	if in.AllowedDomain != nil {
+		updated.AllowedDomain = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(*in.AllowedDomain), "@"))
+	}
+	if in.AllowedYears != nil {
+		updated.AllowedYears = strings.TrimSpace(*in.AllowedYears)
+	}
+	if in.AllowedCourses != nil {
+		updated.AllowedCourses = strings.ToLower(strings.TrimSpace(*in.AllowedCourses))
 	}
 	if in.StartsAt != nil {
 		startsAt, ok := scheduleField(c, "starts_at", *in.StartsAt)
@@ -550,8 +588,14 @@ func changedElectionFields(before, after models.Election) []string {
 	if before.ResultPolicy != after.ResultPolicy {
 		changed = append(changed, "result_policy")
 	}
-	if before.AllowedDomains != after.AllowedDomains {
-		changed = append(changed, "allowed_domains")
+	if before.AllowedDomain != after.AllowedDomain {
+		changed = append(changed, "allowed_domain")
+	}
+	if before.AllowedYears != after.AllowedYears {
+		changed = append(changed, "allowed_years")
+	}
+	if before.AllowedCourses != after.AllowedCourses {
+		changed = append(changed, "allowed_courses")
 	}
 	return changed
 }
@@ -565,7 +609,9 @@ func electionUpdateValues(e *models.Election) map[string]interface{} {
 		"starts_at":       e.StartsAt.UTC(),
 		"ends_at":         e.EndsAt.UTC(),
 		"result_policy":   e.ResultPolicy,
-		"allowed_domains": e.AllowedDomains,
+		"allowed_domain":  e.AllowedDomain,
+		"allowed_years":   e.AllowedYears,
+		"allowed_courses": e.AllowedCourses,
 	}
 }
 

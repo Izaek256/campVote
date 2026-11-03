@@ -11,25 +11,21 @@ import (
 )
 
 // SeedElections is DISABLED for production use.
-// All mock/demo data has been removed to prepare the system for real production data.
-// To re-enable demo data for local development only, set SEED_DEMO_DATA=true in .env
+// Set SEED_DEMO_DATA=true in .env (and APP_ENV=development) to activate.
 func SeedElections(db *gorm.DB) error {
-	// Demo data is now disabled by default. Only seed if explicitly enabled
-	// via SEED_DEMO_DATA=true environment variable for local development.
+	// Demo data gate 1: explicit opt-in
 	if os.Getenv("SEED_DEMO_DATA") != "true" {
-		log.Println("Skipping demo elections: SEED_DEMO_DATA is not set to 'true'. System is ready for production data.")
+		log.Println("Skipping demo elections: set SEED_DEMO_DATA=true to enable (development only).")
 		return nil
 	}
 
-	// Demo elections include demo voter accounts with a shared password. They
-	// are development fixtures, never production data, so they follow the same
-	// APP_ENV=development gate as the demo users.
+	// Demo data gate 2: must not be production
 	if !seedDevDefaults() {
 		log.Printf("Skipping demo elections: APP_ENV is %q, not development", os.Getenv("APP_ENV"))
 		return nil
 	}
 
-	// Only seed if no elections exist yet
+	// Idempotent: skip if elections already exist
 	var count int64
 	db.Model(&models.Election{}).Count(&count)
 	if count > 0 {
@@ -37,69 +33,87 @@ func SeedElections(db *gorm.DB) error {
 		return nil
 	}
 
-	log.Println("Seeding MMU campus elections, positions, candidates, and eligibility roster...")
+	log.Println("Seeding campus demo elections, positions, and candidates...")
 
 	now := time.Now().UTC()
 
-	// 1. Seed MMU student demo accounts. No administrator is seeded: the first
-	// administrator comes from cmd/bootstrap, so no demo run plants an ADMIN
-	// with a known password.
+	// ── Demo voter accounts ────────────────────────────────────────────────────
+	// Emails use the registration-number format: YYYY<course><serial>@<domain>
+	// Domain: std.mast.ac.ug (as per the prompt). No admin is seeded here;
+	// the first admin comes from cmd/bootstrap.
 	demoAccounts := []models.User{
 		{
 			FirstName: "Ivan",
 			LastName:  "Mugisha",
-			Email:     "ivan.mugisha@std.must.ac.ug",
-			Password:  "admin123",
+			Email:     "2022bse001@std.mast.ac.ug",
+			Password:  "Demo1234!",
 			Role:      models.RoleUser,
 			Active:    true,
 		},
 		{
 			FirstName: "Doreen",
 			LastName:  "Kemigisa",
-			Email:     "doreen.kemigisa@std.must.ac.ug",
-			Password:  "admin123",
+			Email:     "2022bba002@std.mast.ac.ug",
+			Password:  "Demo1234!",
+			Role:      models.RoleUser,
+			Active:    true,
+		},
+		{
+			FirstName: "Faith",
+			LastName:  "Tusiime",
+			Email:     "2023bed003@std.mast.ac.ug",
+			Password:  "Demo1234!",
+			Role:      models.RoleUser,
+			Active:    true,
+		},
+		{
+			FirstName: "Emmanuel",
+			LastName:  "Katusabe",
+			Email:     "2023bit004@std.mast.ac.ug",
+			Password:  "Demo1234!",
 			Role:      models.RoleUser,
 			Active:    true,
 		},
 	}
 
-	for _, acc := range demoAccounts {
+	for i := range demoAccounts {
+		acc := &demoAccounts[i]
 		var userCount int64
 		db.Model(&models.User{}).Where("email = ?", acc.Email).Count(&userCount)
 		if userCount == 0 {
-			// The roster trusts this address, so the demo account owns it.
+			// Mark as verified so they can vote immediately in the demo.
 			acc.EmailVerifiedAt = &now
-			if err := db.Create(&acc).Error; err != nil {
+			if err := db.Create(acc).Error; err != nil {
 				log.Printf("Warning: failed to seed demo account %s: %v", acc.Email, err)
 			} else {
-				log.Printf("Created campus demo account: %s", acc.Email)
+				log.Printf("Created demo voter account: %s", acc.Email)
 			}
 		}
 	}
 
-	// 2. Active Guild Election
+	// ── Guild Election (OPEN) ─────────────────────────────────────────────────
 	guildElection := models.Election{
-		Title:          "MMU Guild Representative Council Elections 2026/2027",
-		Description:    "Annual democratic election of the MMU Guild President, Vice Guild President, and student referendum.",
+		Title:          "Guild Representative Council Elections 2026/2027",
+		Description:    "Annual democratic election of the Guild President, Vice Guild President, and student referendum.",
 		Category:       models.ElectionCategoryGuild,
-		OrganizingUnit: "MMU Electoral Commission",
+		OrganizingUnit: "Campus Electoral Commission",
 		Status:         models.ElectionStatusOpen,
 		StartsAt:       now.Add(-24 * time.Hour),
 		EndsAt:         now.Add(48 * time.Hour),
 		ResultPolicy:   models.ResultPolicyAfterClose,
-		AllowedDomains: "@std.must.ac.ug,@must.ac.ug",
-		RequireRoster:  true,
+		AllowedDomain:  "std.mast.ac.ug",
+		AllowedYears:   "",  // any year
+		AllowedCourses: "",  // any course
 	}
-
 	if err := db.Create(&guildElection).Error; err != nil {
 		return fmt.Errorf("creating guild election: %w", err)
 	}
 
-	// 3. Positions for Guild Election
+	// ── Positions for Guild Election ──────────────────────────────────────────
 	posPresident := models.Position{
 		ElectionID:    guildElection.ID,
 		Title:         "Guild President",
-		Description:   "Chief executive officer of the MMU Guild Government.",
+		Description:   "Chief executive officer of the Guild Government.",
 		QuestionType:  models.QuestionTypeSingleChoice,
 		MinSelections: 1,
 		MaxSelections: 1,
@@ -114,7 +128,7 @@ func SeedElections(db *gorm.DB) error {
 	posVicePresident := models.Position{
 		ElectionID:    guildElection.ID,
 		Title:         "Vice Guild President",
-		Description:   "Principal deputy to the MMU Guild President.",
+		Description:   "Principal deputy to the Guild President.",
 		QuestionType:  models.QuestionTypeSingleChoice,
 		MinSelections: 1,
 		MaxSelections: 1,
@@ -129,7 +143,7 @@ func SeedElections(db *gorm.DB) error {
 	posReferendum := models.Position{
 		ElectionID:    guildElection.ID,
 		Title:         "Referendum: Guild Constitution Article 42 Amendment",
-		Description:   "Do you approve the amendment to extend the electoral preparation window from 14 to 21 days?",
+		Description:   "Do you approve extending the electoral preparation window from 14 to 21 days?",
 		QuestionType:  models.QuestionTypeReferendum,
 		MinSelections: 1,
 		MaxSelections: 1,
@@ -141,14 +155,14 @@ func SeedElections(db *gorm.DB) error {
 		return fmt.Errorf("creating referendum position: %w", err)
 	}
 
-	// 4. Candidates for Positions
+	// ── Candidates ────────────────────────────────────────────────────────────
 	candidates := []models.Candidate{
 		{
 			ElectionID:     guildElection.ID,
 			PositionID:     posPresident.ID,
 			FullName:       "Akiki Brenda",
-			Manifesto:      "Empowering student innovation, reliable campus WiFi, and transparent guild bursary allocation.",
-			Bio:            "Year 3, Bachelor of Science in Computer Science. Former Speaker of the Science Faculty.",
+			Manifesto:      "Empowering student innovation, reliable campus WiFi, and transparent bursary allocation.",
+			Bio:            "Year 4, BSE. Former Speaker of the Science Faculty.",
 			BallotNumber:   1,
 			ApprovalStatus: models.CandidateStatusApproved,
 		},
@@ -156,8 +170,8 @@ func SeedElections(db *gorm.DB) error {
 			ElectionID:     guildElection.ID,
 			PositionID:     posPresident.ID,
 			FullName:       "Mugisha Davis",
-			Manifesto:      "Revitalizing student welfare, healthcare access on campus, and expanded sports facilities.",
-			Bio:            "Year 3, Bachelor of Business Administration. President of the Debate Society.",
+			Manifesto:      "Revitalizing student welfare, healthcare access, and expanded sports facilities.",
+			Bio:            "Year 4, BBA. President of the Debate Society.",
 			BallotNumber:   2,
 			ApprovalStatus: models.CandidateStatusApproved,
 		},
@@ -165,8 +179,8 @@ func SeedElections(db *gorm.DB) error {
 			ElectionID:     guildElection.ID,
 			PositionID:     posPresident.ID,
 			FullName:       "Tusiime Faith",
-			Manifesto:      "Academic integrity, modernized library research resources, and active student representation.",
-			Bio:            "Year 2, Bachelor of Education. Faculty representative.",
+			Manifesto:      "Academic integrity, modernized library resources, and active student representation.",
+			Bio:            "Year 3, BED. Faculty representative.",
 			BallotNumber:   3,
 			ApprovalStatus: models.CandidateStatusApproved,
 		},
@@ -175,7 +189,7 @@ func SeedElections(db *gorm.DB) error {
 			PositionID:     posVicePresident.ID,
 			FullName:       "Katusabe Emmanuel",
 			Manifesto:      "Fostering inter-faculty collaboration and transparent student accountability.",
-			Bio:            "Year 2, Bachelor of Information Technology.",
+			Bio:            "Year 3, BIT.",
 			BallotNumber:   1,
 			ApprovalStatus: models.CandidateStatusApproved,
 		},
@@ -184,14 +198,14 @@ func SeedElections(db *gorm.DB) error {
 			PositionID:     posVicePresident.ID,
 			FullName:       "Natukunda Peace",
 			Manifesto:      "Promoting female student leadership and career mentorship partnerships.",
-			Bio:            "Year 3, Bachelor of Public Administration.",
+			Bio:            "Year 4, BPA.",
 			BallotNumber:   2,
 			ApprovalStatus: models.CandidateStatusApproved,
 		},
 		{
 			ElectionID:     guildElection.ID,
 			PositionID:     posReferendum.ID,
-			FullName:       "YES (Approve Amendment)",
+			FullName:       "YES — Approve Amendment",
 			Manifesto:      "Vote YES to approve extending the electoral preparation window.",
 			BallotNumber:   1,
 			ApprovalStatus: models.CandidateStatusApproved,
@@ -199,70 +213,37 @@ func SeedElections(db *gorm.DB) error {
 		{
 			ElectionID:     guildElection.ID,
 			PositionID:     posReferendum.ID,
-			FullName:       "NO (Reject Amendment)",
+			FullName:       "NO — Reject Amendment",
 			Manifesto:      "Vote NO to retain the existing 14-day window.",
 			BallotNumber:   2,
 			ApprovalStatus: models.CandidateStatusApproved,
 		},
 	}
 
-	for _, cand := range candidates {
-		if err := db.Create(&cand).Error; err != nil {
-			return fmt.Errorf("creating candidate %s: %w", cand.FullName, err)
+	for i := range candidates {
+		if err := db.Create(&candidates[i]).Error; err != nil {
+			return fmt.Errorf("creating candidate %s: %w", candidates[i].FullName, err)
 		}
 	}
 
-	// 5. Seed sample eligibility roster entries
-	rosterEntries := []models.ElectionRoster{
-		{
-			ElectionID:    guildElection.ID,
-			StudentNumber: "22/U/1001/PS",
-			RegNumber:     "MMU/22/01001",
-			Email:         "ivan.mugisha@std.must.ac.ug",
-			FullName:      "Ivan Mugisha",
-			Faculty:       "Faculty of Science & Technology",
-			Department:    "Computer Science",
-			Programme:     "Bachelor of Science in Computer Science",
-			StudyYear:     3,
-			Status:        models.RosterStatusEligible,
-		},
-		{
-			ElectionID:    guildElection.ID,
-			StudentNumber: "22/U/1002/PS",
-			RegNumber:     "MMU/22/01002",
-			Email:         "doreen.kemigisa@std.must.ac.ug",
-			FullName:      "Doreen Kemigisa",
-			Faculty:       "Faculty of Business & Management",
-			Department:    "Accounting and Finance",
-			Programme:     "Bachelor of Business Administration",
-			StudyYear:     2,
-			Status:        models.RosterStatusEligible,
-		},
-	}
-
-	for _, r := range rosterEntries {
-		if err := db.Create(&r).Error; err != nil {
-			log.Printf("Warning: creating roster entry %s: %v", r.StudentNumber, err)
-		}
-	}
-
-	// 6. Seed a Scheduled Faculty Election
+	// ── Faculty Election (SCHEDULED) ──────────────────────────────────────────
 	facultyElection := models.Election{
-		Title:          "Faculty of Science & Technology Student Representative",
-		Description:    "Election of faculty representatives to the MMU Academic Board.",
+		Title:          "Faculty of Science & Technology Student Representative 2026",
+		Description:    "Election of faculty representatives to the Academic Board.",
 		Category:       models.ElectionCategoryFaculty,
 		OrganizingUnit: "Dean of Science & Technology",
 		Status:         models.ElectionStatusScheduled,
 		StartsAt:       now.Add(72 * time.Hour),
 		EndsAt:         now.Add(120 * time.Hour),
 		ResultPolicy:   models.ResultPolicyLive,
-		AllowedDomains: "@std.must.ac.ug",
-		RequireRoster:  true,
+		AllowedDomain:  "std.mast.ac.ug",
+		AllowedCourses: "bse,bcs,bit,bist",
+		AllowedYears:   "",
 	}
 	if err := db.Create(&facultyElection).Error; err != nil {
 		log.Printf("Warning: creating faculty election: %v", err)
 	}
 
-	log.Println("MMU campus elections seeding completed successfully.")
+	log.Println("Campus demo elections seeded successfully.")
 	return nil
 }

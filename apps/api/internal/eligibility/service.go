@@ -60,138 +60,73 @@ func CheckElection(db *gorm.DB, election *models.Election, user *models.User, at
 	return CheckRoster(db, election, user)
 }
 
-// CheckRoster answers whether this account is on the election's eligibility
-// roster, without requiring the voting window to be open. Candidate
-// applications happen before polls open, so they need the roster evidence but
-// not the ballot gate.
+// CheckRoster answers whether this account may participate in the election,
+// without requiring the voting window to be open. Candidate applications happen
+// before polls open, so they need eligibility evidence but not the ballot gate.
+//
+// Decision logic:
+//  1. Email must be verified.
+//  2. ParseEmail must succeed and RuleAllows must return true for the election.
+//  3. If a roster row exists with a non-ELIGIBLE status, access is denied
+//     (explicit exclusion). No row means allowed (inclusion by rule).
 func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Decision, error) {
 	if election == nil {
 		return Decision{Reason: "Election not found"}, nil
 	}
 	if user == nil || strings.TrimSpace(user.Email) == "" {
-		return Decision{Reason: "Sign in with your institutional email to vote"}, nil
+		return Decision{Reason: "Sign in with your institutional email to participate"}, nil
 	}
 	if user.EmailVerifiedAt == nil {
-		return Decision{Reason: "Confirm your email address before voting"}, nil
-	}
-	email := user.Email
-	if !domainAllowed(election.AllowedDomains, email) {
-		return Decision{Reason: "Your institutional email is not allowed in this election"}, nil
+		return Decision{Reason: "Confirm your email address before participating"}, nil
 	}
 
-	var entry models.ElectionRoster
-	err := db.Where("election_id = ? AND LOWER(email) = ?", election.ID, strings.ToLower(strings.TrimSpace(email))).
-		First(&entry).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		// This is the acceptance case: a valid domain is not enough.
-		return Decision{Reason: "You are not on this election's eligibility roster"}, nil
+	// Parse the email to extract enrolment year, course, and domain.
+	id, ok := ParseEmail(user.Email)
+	if !ok {
+		return Decision{Reason: "Your email address does not match the expected student registration format (e.g. 2024BSE088@std.mast.ac.ug)"}, nil
 	}
-	if err != nil {
+
+	// Check the election rule.
+	if !RuleAllows(election, id) {
+		reason := "This election is restricted"
+		if election.AllowedYears != "" && election.AllowedCourses != "" {
+			reason = fmt.Sprintf("This election is for %s / %s students",
+				election.AllowedYears, strings.ToUpper(election.AllowedCourses))
+		} else if election.AllowedYears != "" {
+			reason = fmt.Sprintf("This election is for enrolment year %s students", election.AllowedYears)
+		} else if election.AllowedCourses != "" {
+			reason = fmt.Sprintf("This election is for %s students", strings.ToUpper(election.AllowedCourses))
+		} else if election.AllowedDomain != "" {
+			reason = fmt.Sprintf("This election is for %s email accounts", election.AllowedDomain)
+		}
+		return Decision{Reason: reason}, nil
+	}
+
+	// Check for an explicit roster exclusion. A non-ELIGIBLE status (e.g.
+	// SUSPENDED, GRADUATED, INELIGIBLE) denies even when the rule matches.
+	// No roster row → allowed by rule.
+	var entry models.ElectionRoster
+	err := db.Where("election_id = ? AND LOWER(email) = ?", election.ID,
+		strings.ToLower(strings.TrimSpace(user.Email))).
+		First(&entry).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return Decision{}, err
 	}
-	if !models.IsEligibleStatus(entry.Status) {
-		return Decision{Reason: "Your eligibility for this election is " + strings.ToLower(entry.Status)}, nil
+	if err == nil {
+		// Row found — check its status.
+		if !models.IsEligibleStatus(entry.Status) {
+			return Decision{Reason: "Your eligibility for this election is " + strings.ToLower(entry.Status)}, nil
+		}
+		if election.EligibilityFrozenAt != nil && entry.CreatedAt.After(*election.EligibilityFrozenAt) {
+			return Decision{Reason: "Your eligibility evidence was added after voting opened"}, nil
+		}
+		return Decision{Eligible: true, RosterID: entry.ID}, nil
 	}
-	if election.EligibilityFrozenAt != nil && entry.CreatedAt.After(*election.EligibilityFrozenAt) {
-		// Defence in depth: import refuses this, but a direct database write
-		// must not become a vote after the snapshot.
-		return Decision{Reason: "Your eligibility evidence was added after voting opened"}, nil
-	}
-	return Decision{Eligible: true, RosterID: entry.ID}, nil
+
+	// No roster row and rule allows → eligible.
+	return Decision{Eligible: true}, nil
 }
 
-// domainAllowed implements the SRS domain prerequisite. An empty list does not
-// grant access; it simply leaves the roster as the only evidence.
-//
-// Supports:
-// - Simple domain suffixes: "@std.must.ac.ug" matches any @std.must.ac.ug email
-// - Class patterns: "*.bse@std.must.ac.ug" matches any year for BSE program
-// - Specific class: "2026.bse@std.must.ac.ug" matches exactly that class
-// - Wildcard patterns: "*@std.must.ac.ug" matches any @std.must.ac.ug email
-func domainAllowed(allowed, email string) bool {
-	email = strings.ToLower(strings.TrimSpace(email))
-	allowed = strings.ToLower(strings.TrimSpace(allowed))
-	if allowed == "" {
-		return true
-	}
-	for _, pattern := range strings.Split(allowed, ",") {
-		pattern = strings.ToLower(strings.TrimSpace(pattern))
-		if pattern == "" {
-			continue
-		}
-		if matchesPattern(pattern, email) {
-			return true
-		}
-	}
-	return false
-}
-
-// matchesPattern checks if an email matches a domain pattern.
-// Both pattern and email are assumed to be already lowercased by domainAllowed.
-// Patterns can be:
-// - Simple domain: "@std.must.ac.ug" or "std.must.ac.ug"
-// - Class pattern: "*.bse@std.must.ac.ug" (wildcard for year)
-// - Specific class: "2026.bse@std.must.ac.ug" (exact match)
-// - Wildcard: "*@std.must.ac.ug" (matches anything at that domain)
-func matchesPattern(pattern, email string) bool {
-	pattern = strings.TrimSpace(pattern)
-	email = strings.TrimSpace(email)
-
-	// Simple domain suffix match (no wildcard)
-	if !strings.Contains(pattern, "*") {
-		// If pattern is just a domain (no @), add @ for suffix matching
-		if !strings.Contains(pattern, "@") {
-			pattern = "@" + pattern
-		}
-		// If pattern starts with @ and has no local part, it's a domain suffix
-		if strings.HasPrefix(pattern, "@") && pattern[0] == '@' && strings.Count(pattern, "@") == 1 {
-			return strings.HasSuffix(email, pattern)
-		}
-		// If pattern is a full email without wildcards, it's an exact match
-		if strings.Contains(pattern, "@") {
-			return email == pattern
-		}
-		// Pattern is just a domain part
-		return strings.HasSuffix(email, "@"+pattern)
-	}
-
-	// Handle wildcard patterns
-	// Extract the domain part after @
-	atIndex := strings.LastIndex(pattern, "@")
-	if atIndex == -1 {
-		return false
-	}
-
-	domain := pattern[atIndex:]  // @std.must.ac.ug
-	localPart := pattern[:atIndex] // *.bse or 2026.bse or *
-
-	// Extract email parts
-	emailAtIndex := strings.LastIndex(email, "@")
-	if emailAtIndex == -1 {
-		return false
-	}
-	emailDomain := email[emailAtIndex:]    // @std.must.ac.ug
-	emailLocal := email[:emailAtIndex]     // 2026.bse
-
-	// Domain must match exactly
-	if emailDomain != domain {
-		return false
-	}
-
-	// Match local part pattern
-	if localPart == "*" {
-		return true // Wildcard matches anything
-	}
-
-	if strings.HasPrefix(localPart, "*.") {
-		// Pattern like *.bse - matches anything ending with .bse
-		suffix := strings.TrimPrefix(localPart, "*.")
-		return strings.HasSuffix(emailLocal, suffix)
-	}
-
-	// Exact match for specific class
-	return emailLocal == localPart
-}
 
 // Freeze snapshots the eligible count when an election opens. After it, new
 // roster entries are refused and only revocations are accepted; that keeps the
@@ -211,11 +146,20 @@ func Freeze(db *gorm.DB, electionID, actorID string, at time.Time) (*models.Elec
 	if election.EligibilityFrozenAt != nil {
 		return &election, nil
 	}
+	// Count rule-matching users from the users table. We count all verified
+	// users whose email matches the election rule. Roster exclusions are not
+	// subtracted here (they are a minority and hard to count efficiently);
+	// the frozen count is advisory for the officer report.
 	var eligible int64
-	if err := db.Model(&models.ElectionRoster{}).
-		Where("election_id = ? AND status = ?", election.ID, models.RosterStatusEligible).
-		Count(&eligible).Error; err != nil {
+	var allUsers []models.User
+	if err := db.Where("email_verified_at IS NOT NULL").Find(&allUsers).Error; err != nil {
 		return nil, err
+	}
+	for _, u := range allUsers {
+		id, ok := ParseEmail(u.Email)
+		if ok && RuleAllows(&election, id) {
+			eligible++
+		}
 	}
 
 	err := db.Transaction(func(tx *gorm.DB) error {
@@ -360,10 +304,26 @@ func BuildReport(db *gorm.DB, electionID string) (*Report, error) {
 	for _, row := range rows {
 		report.ByStatus[row.Status] = row.Count
 		report.Total += row.Count
-		if row.Status == models.RosterStatusEligible {
-			report.Eligible = row.Count
+	}
+
+	// Count rule-eligible users (the authoritative eligible number).
+	// Use the frozen count if already frozen, otherwise derive from users table.
+	if election.EligibilityFrozenAt != nil {
+		report.Eligible = int64(election.EligibilityFrozenCount)
+	} else {
+		var allUsers []models.User
+		if err := db.Where("email_verified_at IS NOT NULL").Find(&allUsers).Error; err != nil {
+			return nil, err
+		}
+		for _, u := range allUsers {
+			id, ok := ParseEmail(u.Email)
+			if ok && RuleAllows(&election, id) {
+				report.Eligible++
+			}
 		}
 	}
+	report.Total = report.Eligible // total eligible, not total roster rows
+
 	if err := db.Model(&models.VoterParticipation{}).
 		Where("election_id = ?", election.ID).Count(&report.Participated).Error; err != nil {
 		return nil, err
@@ -380,6 +340,7 @@ func BuildReport(db *gorm.DB, electionID string) (*Report, error) {
 	}
 	return report, nil
 }
+
 
 func validStatus(status string) bool {
 	switch status {
