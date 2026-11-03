@@ -164,6 +164,38 @@ func TestRuleAllows_EmptyDomainAllowsAll(t *testing.T) {
 	}
 }
 
+func TestRuleAllows_DomainList_FirstMatch(t *testing.T) {
+	e := makeElection("std.must.ac.ug, std.mast.ac.ug", "", "")
+	id, _ := ParseEmail("2024bse088@std.must.ac.ug")
+	if !RuleAllows(e, id) {
+		t.Error("RuleAllows: expected eligible when domain is first in the list")
+	}
+}
+
+func TestRuleAllows_DomainList_SecondMatch(t *testing.T) {
+	e := makeElection("std.must.ac.ug, std.mast.ac.ug", "", "")
+	id, _ := ParseEmail("2024bse087@std.mast.ac.ug")
+	if !RuleAllows(e, id) {
+		t.Error("RuleAllows: expected eligible when domain is later in the list")
+	}
+}
+
+func TestRuleAllows_DomainList_NoMatch(t *testing.T) {
+	e := makeElection("std.must.ac.ug, std.mast.ac.ug", "", "")
+	id, _ := ParseEmail("2024bse001@gmail.com")
+	if RuleAllows(e, id) {
+		t.Error("RuleAllows: expected ineligible when domain is absent from the list")
+	}
+}
+
+func TestRuleAllows_DomainList_WithAtSigns(t *testing.T) {
+	e := makeElection("@std.must.ac.ug, @std.mast.ac.ug", "", "")
+	id, _ := ParseEmail("2024bse087@std.mast.ac.ug")
+	if !RuleAllows(e, id) {
+		t.Error("RuleAllows: expected leading @ on list entries to be stripped")
+	}
+}
+
 func TestIdentityProgrammeAndStudyYear(t *testing.T) {
 	id, ok := ParseEmail("2024BSE088@std.mast.ac.ug")
 	if !ok {

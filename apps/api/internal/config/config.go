@@ -625,12 +625,14 @@ func (c *Config) IsDevelopment() bool {
 func resolveRedisURL() string {
 	v, ok := os.LookupEnv("REDIS_URL")
 	if !ok {
-		// Built from the port docker-compose binds, so moving REDIS_PORT in
-		// .env moves the connection with it. This used to be a fixed 6380,
-		// so a project that moved its port kept dialling the old one, which
-		// on a machine running a second Grit project is that project's
-		// Redis: the two then shared a cache and a job queue.
-		return fmt.Sprintf("redis://%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6380"))
+		// Built from the port the rest of this repo uses for Redis, so moving
+		// REDIS_PORT in .env moves the connection with it. The default is 6379
+		// because that is what .env.example, the docs and docker-compose.yaml
+		// all use. It was 6380 — the Grit scaffold's own convention — which on
+		// a machine with Redis on 6379 meant every dev box dialled a port with
+		// nothing on it: cache, background jobs and cron silently switched off,
+		// and the realtime backplane retried a dead address forever.
+		return fmt.Sprintf("redis://%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6379"))
 	}
 	if strings.TrimSpace(v) == "" {
 		log.Println("REDIS_URL is empty: cache, background jobs and cron are disabled")

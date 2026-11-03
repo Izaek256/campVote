@@ -69,14 +69,14 @@ func RuleForPosition(p *models.Position) Rule {
 }
 
 // Allows reports whether the identity is permitted by the rule:
-//   - AllowedDomain must match id.Domain (leading "@" is stripped if present).
+//   - AllowedDomain is a comma-separated allow-list; empty means any domain.
+//     A leading "@" on an entry is stripped. Matching is case-insensitive.
 //   - AllowedYears is a comma-separated list; empty means any year.
 //   - AllowedCourses is a comma-separated list; empty means any course.
 //     Matching is case-insensitive.
 func (r Rule) Allows(id Identity) bool {
-	// Domain check — required
-	wantDomain := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(r.AllowedDomain), "@"))
-	if wantDomain != "" && id.Domain != wantDomain {
+	// Domain check — required, comma-separated allow-list; empty means any.
+	if !domainAllowed(id.Domain, r.AllowedDomain) {
 		return false
 	}
 
@@ -126,6 +126,25 @@ func (id Identity) StudyYear(at time.Time) int {
 		return 1
 	}
 	return studyYear
+}
+
+// domainAllowed reports whether domain appears in a comma-separated allow-list.
+// An entry may carry a leading "@". An empty list (no non-empty entries) means
+// any domain is allowed. Matching is case-insensitive.
+func domainAllowed(domain, list string) bool {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	any := false
+	for _, item := range strings.Split(list, ",") {
+		item = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(item), "@"))
+		if item == "" {
+			continue
+		}
+		any = true
+		if item == domain {
+			return true
+		}
+	}
+	return !any
 }
 
 // inList checks whether val appears in a comma-separated list, case-insensitively.

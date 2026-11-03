@@ -377,7 +377,7 @@ function ManagePositions() {
           </div>
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="p-domain">Student domain (optional)</label>
+              <label htmlFor="p-domain">Student domain (optional, comma separated)</label>
               <input
                 id="p-domain"
                 className="in"

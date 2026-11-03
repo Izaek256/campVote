@@ -399,7 +399,9 @@ function Manage({ id }: { id: string }) {
         <form className="form-stack" onSubmit={saveEligibility}>
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="eligibility-domain">Student email domain</label>
+              <label htmlFor="eligibility-domain">
+                Student email domain (comma separated, blank = any)
+              </label>
               <input
                 id="eligibility-domain"
                 className="in"
