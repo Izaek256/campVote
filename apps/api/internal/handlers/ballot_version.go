@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -40,6 +41,18 @@ func (h *BallotVersionHandler) BuildBallotContent(electionID string) (string, er
 		return "", err
 	}
 	return string(jsonBytes), nil
+}
+
+// ballotPhoto picks the image shown on the ballot: an approved candidate's
+// replacement photo if one was uploaded, otherwise the passport photo they
+// applied with, and finally the general profile photo.
+func ballotPhoto(candidate models.Candidate) string {
+	for _, value := range []string{candidate.BallotPhotoURL, candidate.PassportPhotoURL, candidate.PhotoURL} {
+		if v := strings.TrimSpace(value); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // BallotContentFor loads the approved positions and candidates as the ballot
@@ -81,7 +94,7 @@ func BallotContentFor(db *gorm.DB, electionID string) (models.BallotContent, err
 				ID:           candidate.ID,
 				FullName:     candidate.FullName,
 				Slogan:       candidate.Slogan,
-				PhotoURL:     candidate.PhotoURL,
+				PhotoURL:     ballotPhoto(candidate),
 				Manifesto:    candidate.Manifesto,
 				ManifestoURL: candidate.ManifestoURL,
 				Bio:          candidate.Bio,

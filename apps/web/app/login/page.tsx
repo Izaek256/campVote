@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { useToast } from "@/components/toast";
 import { ApiError } from "@/lib/api";
+import { CAMPUS_NAME, STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 
 export default function LoginPage() {
   const { user, loading, signIn } = useAuth();
@@ -14,6 +17,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const toast = useToast();
 
   useEffect(() => {
     if (!loading && user) router.replace("/elections");
@@ -28,6 +33,7 @@ export default function LoginPage() {
       router.replace("/elections");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "We could not sign you in. Try again.");
+      toast.error(err instanceof ApiError ? err.message : "We could not sign you in. Try again.");
     } finally {
       setBusy(false);
     }
@@ -36,6 +42,9 @@ export default function LoginPage() {
   return (
     <main className="auth-wrap">
       <div className="auth-card">
+        <div className="row" style={{ justifyContent: "flex-end", marginBottom: 4 }}>
+          <ThemeToggle />
+        </div>
         <Link className="brand row" href="/login" style={{ marginBottom: 24 }}>
           <span className="mark">
             <Icon name="moon" size="l" />
@@ -44,9 +53,9 @@ export default function LoginPage() {
             camp<b style={{ fontWeight: 400 }}>Vote</b>
           </span>
         </Link>
-        <h1>Guild elections</h1>
+        <h1>Campus elections</h1>
         <p className="lead">
-          Sign in with your MMU account to see the elections you are eligible for.
+          Sign in with your {CAMPUS_NAME} account to see the elections you are eligible for.
         </p>
 
         <form className="form-stack" onSubmit={handleSubmit} noValidate>
@@ -59,10 +68,12 @@ export default function LoginPage() {
               autoComplete="username"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@std.must.ac.ug"
+              placeholder={`you@${STUDENT_EMAIL_DOMAIN}`}
               required
             />
-            <span className="hint">Use your verified @std.must.ac.ug or @must.ac.ug address.</span>
+            <span className="hint">
+              Use your verified @{STUDENT_EMAIL_DOMAIN} or @{STAFF_EMAIL_DOMAIN} address.
+            </span>
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>
@@ -76,12 +87,6 @@ export default function LoginPage() {
               required
             />
           </div>
-          {error ? (
-            <span className="field err" role="alert">
-              <Icon name="alert" size="s" />
-              {error}
-            </span>
-          ) : null}
           <button className="btn primary block lg" type="submit" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
@@ -105,8 +110,9 @@ export default function LoginPage() {
 
         {process.env.NODE_ENV !== "production" ? (
           <p className="hint" style={{ marginTop: 16 }}>
-            Local demo voter: <span className="mono">ivan.mugisha@std.must.ac.ug</span> /{" "}
-            <span className="mono">admin123</span>. Development data only.
+            No demo accounts are seeded. Create the first administrator with{" "}
+            <span className="mono">go run ./cmd/bootstrap</span>, then register voters at{" "}
+            <Link href="/register">/register</Link>.
           </p>
         ) : null}
       </div>

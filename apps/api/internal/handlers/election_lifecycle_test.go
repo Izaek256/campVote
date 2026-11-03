@@ -41,6 +41,7 @@ func lifecycleEngine(t *testing.T, db *gorm.DB, clock *time.Time) *gin.Engine {
 	staff.POST("/api/v1/elections", h.Create)
 	staff.GET("/api/v1/elections/:id", h.Get)
 	staff.PUT("/api/v1/elections/:id", h.Update)
+	staff.DELETE("/api/v1/elections/:id", h.Delete)
 	staff.POST("/api/v1/elections/:id/transitions", h.Transition)
 	return r
 }
@@ -69,7 +70,7 @@ func createLifecycleElection(t *testing.T, client *testkit.Client, token string,
 		"starts_at":       start.Format(time.RFC3339),
 		"ends_at":         end.Format(time.RFC3339),
 		"result_policy":   models.ResultPolicyAfterClose,
-		"allowed_domains": "@std.must.ac.ug",
+		"allowed_domains": "@std.mast.ac.ug",
 	}).AssertCreated().BindData(&created)
 	return created
 }
@@ -93,14 +94,14 @@ func TestElectionLifecycleAPIValidatesSchedulesFreezesAndAudits(t *testing.T) {
 		t.Errorf("schedule was not stored exactly: %s - %s", e.StartsAt, e.EndsAt)
 	}
 
-	// No positions yet: scheduling must be refused.
+	// A client cannot force an election open; only the server clock does that.
 	client.As(token).Post("/api/v1/elections/"+e.ID+"/transitions", map[string]string{
-		"to": models.ElectionStatusScheduled,
-	}).AssertUnprocessable()
+		"to": models.ElectionStatusOpen,
+	}).AssertConflict()
 
 	// Build a valid ballot directly: position/candidate endpoints are ISSUE-06.
 	position := &models.Position{
-		ElectionID: e.ID, Title: "President", QuestionType: models.QuestionTypeSingleChoice,
+		ElectionID: models.Ptr(e.ID), Title: "President", QuestionType: models.QuestionTypeSingleChoice,
 		MinSelections: 1, MaxSelections: 1, Seats: 1,
 	}
 	if err := db.Create(position).Error; err != nil {
@@ -113,33 +114,18 @@ func TestElectionLifecycleAPIValidatesSchedulesFreezesAndAudits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var scheduled lifecycleElection
-	client.As(token).Post("/api/v1/elections/"+e.ID+"/transitions", map[string]string{
-		"to": models.ElectionStatusScheduled,
-	}).AssertOK().BindData(&scheduled)
-	if scheduled.Status != models.ElectionStatusScheduled {
-		t.Fatalf("status = %s, want SCHEDULED", scheduled.Status)
-	}
-	var scheduledAudit int64
-	db.Model(&models.ElectionAuditLog{}).
-		Where("election_id = ? AND action = ?", e.ID, models.AuditActionElectionScheduled).Count(&scheduledAudit)
-	if scheduledAudit != 1 {
-		t.Fatalf("scheduling audit rows = %d, want 1", scheduledAudit)
-	}
-
-	// Configuration is editable before the window opens.
+	// Configuration is editable while the election is still a draft.
 	client.As(token).Put("/api/v1/elections/"+e.ID, map[string]any{
 		"title": "Renamed Guild Election",
 	}).AssertOK()
 
-	// A scheduled election cannot have its end moved into the past; that would
-	// silently close it on the next read.
+	// An end moved before the start leaves the window invalid.
 	client.As(token).Put("/api/v1/elections/"+e.ID, map[string]any{
 		"ends_at": now.Add(-time.Hour).Format(time.RFC3339),
 	}).AssertUnprocessable()
 
-	// Move server time to the start. A GET reconciles the schedule; no client
-	// header is involved.
+	// Move server time to the start. A GET reconciles the schedule; the clock
+	// opens the fully configured draft with no client involvement.
 	clock = start
 	var opened lifecycleElection
 	client.As(token).Get("/api/v1/elections/" + e.ID).AssertOK().BindData(&opened)
@@ -228,7 +214,24 @@ func TestOfficialCanEditButCannotCancelOrExtend(t *testing.T) {
 		"reason":  "official wants more time",
 	}).AssertForbidden()
 	client.As(officialToken).Post("/api/v1/elections/"+e.ID+"/transitions", map[string]string{
-		"to": models.ElectionStatusCancelled, "reason": "official decision",
+		"to": models.ElectionStatusClosed, "reason": "official decision",
+	}).AssertForbidden()
+}
+
+func TestPlainStudentCannotCreateElection(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	clock := now
+	engine := lifecycleEngine(t, db, &clock)
+	student := rbacUser(t, db, "2024bse088@std.mast.ac.ug", models.RoleStudentVoter)
+	token := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), student)
+	client := testkit.New(t, engine)
+
+	client.As(token).Post("/api/v1/elections", map[string]any{
+		"title":         "Student-run election",
+		"starts_at":     now.Add(time.Hour).Format(time.RFC3339),
+		"ends_at":       now.Add(3 * time.Hour).Format(time.RFC3339),
+		"result_policy": models.ResultPolicyAfterClose,
 	}).AssertForbidden()
 }
 
@@ -238,17 +241,17 @@ func TestSpoofedDateHeaderCannotExtendVoting(t *testing.T) {
 	clock := now
 	engine := lifecycleEngine(t, db, &clock)
 
-	voter := testkit.User(t, db, "listed@std.must.ac.ug", models.RoleStudentVoter)
+	voter := testkit.User(t, db, "2022bse001@std.mast.ac.ug", models.RoleStudentVoter)
 	election := &models.Election{
 		ID: "spoof", Title: "Spoof Test", Status: models.ElectionStatusOpen,
 		StartsAt: now.Add(-2 * time.Hour), EndsAt: now.Add(-time.Minute),
-		ResultPolicy: models.ResultPolicyAfterClose, AllowedDomains: "@std.must.ac.ug",
+		ResultPolicy: models.ResultPolicyAfterClose, AllowedDomain: "std.mast.ac.ug",
 	}
 	if err := db.Create(election).Error; err != nil {
 		t.Fatal(err)
 	}
 	position := &models.Position{
-		ElectionID: election.ID, Title: "President", QuestionType: models.QuestionTypeSingleChoice,
+		ElectionID: models.Ptr(election.ID), Title: "President", QuestionType: models.QuestionTypeSingleChoice,
 		MinSelections: 1, MaxSelections: 1, Seats: 1,
 	}
 	if err := db.Create(position).Error; err != nil {
@@ -305,7 +308,7 @@ func TestTimezoneOffsetsAreNormalizedAndNaiveTimesRejected(t *testing.T) {
 		"starts_at":       "2027-03-14T01:30:00-05:00",
 		"ends_at":         "2027-03-14T04:00:00-04:00",
 		"result_policy":   models.ResultPolicyAfterClose,
-		"allowed_domains": "@std.must.ac.ug",
+		"allowed_domains": "@std.mast.ac.ug",
 	}).AssertCreated().BindData(&created)
 
 	wantStart := time.Date(2027, 3, 14, 6, 30, 0, 0, time.UTC)
@@ -336,7 +339,7 @@ func TestElectionListHidesOtherPeoplesDrafts(t *testing.T) {
 	engine := lifecycleEngine(t, db, &clock)
 	auth := testkit.Auth(testkit.Config(), db)
 	admin := rbacUser(t, db, "list-admin@must.ac.ug", models.RoleAdmin)
-	voter := rbacUser(t, db, "list-voter@std.must.ac.ug", models.RoleStudentVoter)
+	voter := rbacUser(t, db, "list-voter@std.mast.ac.ug", models.RoleStudentVoter)
 	adminToken := testkit.SignIn(t, db, auth, admin)
 	voterToken := testkit.SignIn(t, db, auth, voter)
 	client := testkit.New(t, engine)
@@ -357,12 +360,106 @@ func TestElectionListHidesOtherPeoplesDrafts(t *testing.T) {
 	}
 
 	if err := db.Model(&models.Election{}).Where("id = ?", created.ID).
-		Update("status", models.ElectionStatusScheduled).Error; err != nil {
+		Update("status", models.ElectionStatusOpen).Error; err != nil {
 		t.Fatal(err)
 	}
 	var visible []lifecycleElection
 	client.As(voterToken).Get("/api/v1/elections").AssertOK().BindData(&visible)
 	if len(visible) != 1 || visible[0].ID != created.ID {
-		t.Fatalf("voter list = %+v, want the scheduled election", visible)
+		t.Fatalf("voter list = %+v, want the open election", visible)
+	}
+}
+
+// TestElectionCreateLeavesDomainOpenToAnyStudent guards the bug where creating
+// an election silently defaulted the voter domain to one campus address space,
+// hiding the election from every voter whose email used a different domain.
+func TestElectionCreateLeavesDomainOpenToAnyStudent(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	clock := now
+	engine := lifecycleEngine(t, db, &clock)
+	auth := testkit.Auth(testkit.Config(), db)
+	admin := rbacUser(t, db, "domain-admin@must.ac.ug", models.RoleAdmin)
+	voter := rbacUser(t, db, "2024bse088@std.must.ac.ug", models.RoleStudentVoter)
+	adminToken := testkit.SignIn(t, db, auth, admin)
+	voterToken := testkit.SignIn(t, db, auth, voter)
+	client := testkit.New(t, engine)
+
+	created := createLifecycleElection(t, client, adminToken,
+		now.Add(24*time.Hour), now.Add(30*time.Hour))
+
+	var stored models.Election
+	if err := db.Where("id = ?", created.ID).First(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.AllowedDomain != "" {
+		t.Fatalf("allowed_domain = %q, want empty so any registration email qualifies", stored.AllowedDomain)
+	}
+
+	// Drafts are creator-only, so publish the election to test the visibility
+	// rule itself rather than the draft filter.
+	if err := db.Model(&models.Election{}).Where("id = ?", created.ID).
+		Update("status", models.ElectionStatusOpen).Error; err != nil {
+		t.Fatal(err)
+	}
+	var visible []lifecycleElection
+	client.As(voterToken).Get("/api/v1/elections").AssertOK().BindData(&visible)
+	if len(visible) != 1 || visible[0].ID != created.ID {
+		t.Fatalf("voter list = %+v, want the domain-agnostic election", visible)
+	}
+}
+
+// TestAdminCanDeleteDraftButNotAnElectionWithBallots covers the delete rule:
+// a draft that has recorded no ballot may be removed, but an election that
+// already holds ballots must be closed instead so the evidence survives.
+func TestAdminCanDeleteDraftButNotAnElectionWithBallots(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	clock := now
+	engine := lifecycleEngine(t, db, &clock)
+	auth := testkit.Auth(testkit.Config(), db)
+	admin := rbacUser(t, db, "delete-admin@must.ac.ug", models.RoleAdmin)
+	token := testkit.SignIn(t, db, auth, admin)
+	client := testkit.New(t, engine)
+
+	created := createLifecycleElection(t, client, token, now.Add(24*time.Hour), now.Add(30*time.Hour))
+	position := &models.Position{
+		ElectionID: models.Ptr(created.ID), Title: "President", QuestionType: models.QuestionTypeSingleChoice,
+		MinSelections: 1, MaxSelections: 1, Seats: 1,
+	}
+	if err := db.Create(position).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	client.As(token).Delete("/api/v1/elections/" + created.ID).AssertOK()
+	var remaining int64
+	db.Model(&models.Election{}).Where("id = ?", created.ID).Count(&remaining)
+	if remaining != 0 {
+		t.Fatalf("election rows after delete = %d, want 0", remaining)
+	}
+	var audit models.ElectionAuditLog
+	if err := db.Where("election_id = ? AND action = ?", created.ID, models.AuditActionElectionDeleted).
+		First(&audit).Error; err != nil {
+		t.Fatal("the deletion was not audited")
+	}
+
+	// An election that has already recorded a ballot is refused.
+	open := &models.Election{
+		ID: "e-open", Title: "Open Election", Status: models.ElectionStatusOpen,
+		StartsAt: now.Add(-time.Hour), EndsAt: now.Add(time.Hour),
+		ResultPolicy: models.ResultPolicyAfterClose, AllowedDomain: "std.mast.ac.ug",
+	}
+	if err := db.Create(open).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.AnonymousBallot{ElectionID: open.ID, Status: "VALID", CastAt: now}).Error; err != nil {
+		t.Fatal(err)
+	}
+	client.As(token).Delete("/api/v1/elections/" + open.ID).AssertConflict()
+
+	var kept int64
+	db.Model(&models.Election{}).Where("id = ?", open.ID).Count(&kept)
+	if kept != 1 {
+		t.Fatalf("election with ballots was removed: count = %d, want 1", kept)
 	}
 }

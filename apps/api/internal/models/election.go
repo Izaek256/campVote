@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"campvote/apps/api/internal/ids"
+
 	"gorm.io/gorm"
 )
 
@@ -20,18 +21,16 @@ const (
 	ElectionCategoryReferendum  = "REFERENDUM"
 )
 
-// Election lifecycle status constants (FR-CMS-05)
+// Election lifecycle status constants (FR-CMS-05).
+//
+// The lifecycle has three stages only:
+//   - DRAFT:  being built; private to its creator.
+//   - OPEN:   published. Voting is accepted only within [StartsAt, EndsAt).
+//   - CLOSED: voting has ended; the final tally is available.
 const (
-	ElectionStatusDraft        = "DRAFT"
-	ElectionStatusRegistration = "REGISTRATION"
-	ElectionStatusPending      = "PENDING_APPROVAL"
-	ElectionStatusScheduled    = "SCHEDULED"
-	ElectionStatusOpen         = "OPEN"
-	ElectionStatusClosed       = "CLOSED"
-	ElectionStatusReview       = "RESULTS_UNDER_REVIEW"
-	ElectionStatusFinalized    = "FINALIZED"
-	ElectionStatusArchived     = "ARCHIVED"
-	ElectionStatusCancelled    = "CANCELLED"
+	ElectionStatusDraft  = "DRAFT"
+	ElectionStatusOpen   = "OPEN"
+	ElectionStatusClosed = "CLOSED"
 )
 
 // Result visibility policy constants (FR-DASH-06, FR-DASH-07)
@@ -55,14 +54,16 @@ type Election struct {
 	EndsAt   time.Time `gorm:"not null;index" json:"ends_at"`
 
 	// Policies and access rules
-	ResultPolicy   string `gorm:"size:50;not null;default:'AFTER_CLOSE'" json:"result_policy"`
+	ResultPolicy string `gorm:"size:50;not null;default:'AFTER_CLOSE'" json:"result_policy"`
 
-	// AllowedDomain is the student email domain for this election,
-	// e.g. "std.mast.ac.ug". Leading "@" is accepted and stripped.
-	AllowedDomain  string `gorm:"size:255;default:'std.mast.ac.ug'" json:"allowed_domain"`
+	// AllowedDomain is the optional student email domain for this election.
+	// Leading "@" is accepted and stripped. Empty means any student with a
+	// parseable registration email. It must not carry a database default: a
+	// wrong campus domain silently hides the election from every other voter.
+	AllowedDomain string `gorm:"size:255" json:"allowed_domain"`
 	// AllowedYears is a comma-separated list of enrolment years, e.g. "2024,2025".
 	// Empty means any year.
-	AllowedYears   string `gorm:"size:255" json:"allowed_years"`
+	AllowedYears string `gorm:"size:255" json:"allowed_years"`
 	// AllowedCourses is a comma-separated list of course codes, e.g. "bse,bcs".
 	// Empty means any course.
 	AllowedCourses string `gorm:"size:255" json:"allowed_courses"`

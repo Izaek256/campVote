@@ -127,7 +127,6 @@ func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Dec
 	return Decision{Eligible: true}, nil
 }
 
-
 // Freeze snapshots the eligible count when an election opens. After it, new
 // roster entries are refused and only revocations are accepted; that keeps the
 // electorate fixed while still allowing suspension or graduation to take effect
@@ -146,23 +145,13 @@ func Freeze(db *gorm.DB, electionID, actorID string, at time.Time) (*models.Elec
 	if election.EligibilityFrozenAt != nil {
 		return &election, nil
 	}
-	// Count rule-matching users from the users table. We count all verified
-	// users whose email matches the election rule. Roster exclusions are not
-	// subtracted here (they are a minority and hard to count efficiently);
-	// the frozen count is advisory for the officer report.
-	var eligible int64
-	var allUsers []models.User
-	if err := db.Where("email_verified_at IS NOT NULL").Find(&allUsers).Error; err != nil {
+	// Snapshot the rule-based electorate, minus explicit roster exclusions.
+	eligible, err := EligibleCount(db, &election)
+	if err != nil {
 		return nil, err
 	}
-	for _, u := range allUsers {
-		id, ok := ParseEmail(u.Email)
-		if ok && RuleAllows(&election, id) {
-			eligible++
-		}
-	}
 
-	err := db.Transaction(func(tx *gorm.DB) error {
+	err = db.Transaction(func(tx *gorm.DB) error {
 		now := at.UTC()
 		if err := tx.Model(&models.Election{}).Where("id = ?", election.ID).
 			Updates(map[string]interface{}{
@@ -211,9 +200,7 @@ func SetStatus(db *gorm.DB, electionID, rosterID, actorID, status, reason string
 		return nil, err
 	}
 	switch election.Status {
-	case models.ElectionStatusClosed, models.ElectionStatusReview,
-		models.ElectionStatusFinalized, models.ElectionStatusArchived,
-		models.ElectionStatusCancelled:
+	case models.ElectionStatusClosed:
 		return nil, ErrElectionClosed
 	}
 	if !now.Before(election.EndsAt) {
@@ -257,6 +244,46 @@ func SetStatus(db *gorm.DB, electionID, rosterID, actorID, status, reason string
 	entry.StatusReason = strings.TrimSpace(reason)
 	entry.StatusChangedAt = &now
 	return &entry, nil
+}
+
+// EligibleCount returns the number of verified accounts matching the election
+// rule, minus accounts with an explicit non-ELIGIBLE roster row. The roster is
+// an exclusion list under rule-based eligibility, not an inclusion list.
+func EligibleCount(db *gorm.DB, election *models.Election) (int64, error) {
+	_, eligible, err := EligibleCounts(db, election)
+	return eligible, err
+}
+
+// EligibleCounts returns both the rule-matching account count (total) and the
+// count after roster exclusions (eligible), for the officer report.
+func EligibleCounts(db *gorm.DB, election *models.Election) (total, eligible int64, err error) {
+	var excluded []string
+	if err := db.Model(&models.ElectionRoster{}).
+		Where("election_id = ? AND status <> ?", election.ID, models.RosterStatusEligible).
+		Pluck("LOWER(email)", &excluded).Error; err != nil {
+		return 0, 0, err
+	}
+	blocked := make(map[string]bool, len(excluded))
+	for _, email := range excluded {
+		blocked[strings.TrimSpace(email)] = true
+	}
+
+	var users []models.User
+	if err := db.Where("email_verified_at IS NOT NULL").Find(&users).Error; err != nil {
+		return 0, 0, err
+	}
+	for _, u := range users {
+		id, ok := ParseEmail(u.Email)
+		if !ok || !RuleAllows(election, id) {
+			continue
+		}
+		total++
+		if blocked[strings.ToLower(strings.TrimSpace(u.Email))] {
+			continue
+		}
+		eligible++
+	}
+	return total, eligible, nil
 }
 
 // Report is the officer-facing eligibility summary. Counts only: it has no
@@ -306,23 +333,13 @@ func BuildReport(db *gorm.DB, electionID string) (*Report, error) {
 		report.Total += row.Count
 	}
 
-	// Count rule-eligible users (the authoritative eligible number).
-	// Use the frozen count if already frozen, otherwise derive from users table.
-	if election.EligibilityFrozenAt != nil {
-		report.Eligible = int64(election.EligibilityFrozenCount)
-	} else {
-		var allUsers []models.User
-		if err := db.Where("email_verified_at IS NOT NULL").Find(&allUsers).Error; err != nil {
-			return nil, err
-		}
-		for _, u := range allUsers {
-			id, ok := ParseEmail(u.Email)
-			if ok && RuleAllows(&election, id) {
-				report.Eligible++
-			}
-		}
+	// Rule-based electorate, minus explicit exclusions.
+	total, eligible, err := EligibleCounts(db, &election)
+	if err != nil {
+		return nil, err
 	}
-	report.Total = report.Eligible // total eligible, not total roster rows
+	report.Total = total
+	report.Eligible = eligible
 
 	if err := db.Model(&models.VoterParticipation{}).
 		Where("election_id = ?", election.ID).Count(&report.Participated).Error; err != nil {
@@ -340,7 +357,6 @@ func BuildReport(db *gorm.DB, electionID string) (*Report, error) {
 	}
 	return report, nil
 }
-
 
 func validStatus(status string) bool {
 	switch status {

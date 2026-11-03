@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/icon";
+import { STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 
 export const metadata = { title: "How voting works — campVote" };
 
@@ -21,11 +22,12 @@ export default function HowVotingWorksPage() {
 
       <div className="stack">
         <section className="panel stack">
-          <h2 style={{ fontSize: 24 }}>1. Sign in with your MMU account</h2>
+          <h2 style={{ fontSize: 24 }}>1. Sign in with your campus account</h2>
           <p>
-            Use your verified <span className="mono">@std.must.ac.ug</span> or{" "}
-            <span className="mono">@must.ac.ug</span> address. Holding an institutional address is
-            only an identity hint: the server also checks the election roster.
+            Use your verified <span className="mono">@{STUDENT_EMAIL_DOMAIN}</span> or{" "}
+            <span className="mono">@{STAFF_EMAIL_DOMAIN}</span> address. Holding an institutional
+            address is only an identity hint: the server also checks the election's eligibility
+            rule (domain, year and course).
           </p>
         </section>
         <section className="panel stack">

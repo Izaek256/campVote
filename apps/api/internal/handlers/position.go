@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -39,14 +40,20 @@ func (h *PositionHandler) Create(c *gin.Context) {
 	electionID := c.Param("id")
 
 	var input struct {
-		Title         string `json:"title" binding:"required"`
-		Description   string `json:"description"`
-		QuestionType  string `json:"question_type" binding:"required"`
-		MinSelections int    `json:"min_selections"`
-		MaxSelections int    `json:"max_selections"`
-		Seats         int    `json:"seats"`
-		AllowBlank    bool   `json:"allow_blank"`
-		DisplayOrder  int    `json:"display_order"`
+		Title          string `json:"title" binding:"required"`
+		Description    string `json:"description"`
+		Requirements   string `json:"requirements"`
+		QuestionType   string `json:"question_type" binding:"required"`
+		MinSelections  int    `json:"min_selections"`
+		MaxSelections  int    `json:"max_selections"`
+		Seats          int    `json:"seats"`
+		AllowBlank     bool   `json:"allow_blank"`
+		DisplayOrder   int    `json:"display_order"`
+		Status         string `json:"status"`
+		MaxCandidates  int    `json:"max_candidates"`
+		AllowedDomain  string `json:"allowed_domain"`
+		AllowedYears   string `json:"allowed_years"`
+		AllowedCourses string `json:"allowed_courses"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -79,17 +86,32 @@ func (h *PositionHandler) Create(c *gin.Context) {
 		respond.BadRequest(c, "Seats must be at least 1")
 		return
 	}
+	if input.MaxCandidates < 0 {
+		respond.BadRequest(c, "Maximum candidates cannot be negative")
+		return
+	}
+	status, err := normalizePositionStatus(input.Status)
+	if err != nil {
+		respond.BadRequest(c, err.Error())
+		return
+	}
 
 	position := models.Position{
-		ElectionID:    electionID,
-		Title:         input.Title,
-		Description:   input.Description,
-		QuestionType:  input.QuestionType,
-		MinSelections: input.MinSelections,
-		MaxSelections: input.MaxSelections,
-		Seats:         input.Seats,
-		AllowBlank:    input.AllowBlank,
-		DisplayOrder:  input.DisplayOrder,
+		ElectionID:     models.Ptr(electionID),
+		Title:          input.Title,
+		Description:    input.Description,
+		Requirements:   input.Requirements,
+		QuestionType:   input.QuestionType,
+		MinSelections:  input.MinSelections,
+		MaxSelections:  input.MaxSelections,
+		Seats:          input.Seats,
+		AllowBlank:     input.AllowBlank,
+		DisplayOrder:   input.DisplayOrder,
+		Status:         status,
+		MaxCandidates:  input.MaxCandidates,
+		AllowedDomain:  normalizeDomain(input.AllowedDomain),
+		AllowedYears:   strings.TrimSpace(input.AllowedYears),
+		AllowedCourses: strings.TrimSpace(input.AllowedCourses),
 	}
 
 	if err := h.DB.Create(&position).Error; err != nil {
@@ -138,14 +160,20 @@ func (h *PositionHandler) Update(c *gin.Context) {
 	}
 
 	var input struct {
-		Title         *string `json:"title"`
-		Description   *string `json:"description"`
-		QuestionType  *string `json:"question_type"`
-		MinSelections *int    `json:"min_selections"`
-		MaxSelections *int    `json:"max_selections"`
-		Seats         *int    `json:"seats"`
-		AllowBlank    *bool   `json:"allow_blank"`
-		DisplayOrder  *int    `json:"display_order"`
+		Title          *string `json:"title"`
+		Description    *string `json:"description"`
+		Requirements   *string `json:"requirements"`
+		QuestionType   *string `json:"question_type"`
+		MinSelections  *int    `json:"min_selections"`
+		MaxSelections  *int    `json:"max_selections"`
+		Seats          *int    `json:"seats"`
+		AllowBlank     *bool   `json:"allow_blank"`
+		DisplayOrder   *int    `json:"display_order"`
+		Status         *string `json:"status"`
+		MaxCandidates  *int    `json:"max_candidates"`
+		AllowedDomain  *string `json:"allowed_domain"`
+		AllowedYears   *string `json:"allowed_years"`
+		AllowedCourses *string `json:"allowed_courses"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -159,6 +187,9 @@ func (h *PositionHandler) Update(c *gin.Context) {
 	}
 	if input.Description != nil {
 		updates["description"] = *input.Description
+	}
+	if input.Requirements != nil {
+		updates["requirements"] = *input.Requirements
 	}
 	if input.QuestionType != nil {
 		updates["question_type"] = *input.QuestionType
@@ -177,6 +208,30 @@ func (h *PositionHandler) Update(c *gin.Context) {
 	}
 	if input.DisplayOrder != nil {
 		updates["display_order"] = *input.DisplayOrder
+	}
+	if input.Status != nil {
+		status, err := normalizePositionStatus(*input.Status)
+		if err != nil {
+			respond.BadRequest(c, err.Error())
+			return
+		}
+		updates["status"] = status
+	}
+	if input.MaxCandidates != nil {
+		if *input.MaxCandidates < 0 {
+			respond.BadRequest(c, "Maximum candidates cannot be negative")
+			return
+		}
+		updates["max_candidates"] = *input.MaxCandidates
+	}
+	if input.AllowedDomain != nil {
+		updates["allowed_domain"] = normalizeDomain(*input.AllowedDomain)
+	}
+	if input.AllowedYears != nil {
+		updates["allowed_years"] = strings.TrimSpace(*input.AllowedYears)
+	}
+	if input.AllowedCourses != nil {
+		updates["allowed_courses"] = strings.TrimSpace(*input.AllowedCourses)
 	}
 
 	if len(updates) > 0 {

@@ -1,6 +1,7 @@
 package lifecycle_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -29,60 +30,22 @@ func testDB(t *testing.T) *gorm.DB {
 
 var statuses = []string{
 	models.ElectionStatusDraft,
-	models.ElectionStatusRegistration,
-	models.ElectionStatusPending,
-	models.ElectionStatusScheduled,
 	models.ElectionStatusOpen,
 	models.ElectionStatusClosed,
-	models.ElectionStatusReview,
-	models.ElectionStatusFinalized,
-	models.ElectionStatusArchived,
-	models.ElectionStatusCancelled,
 }
 
-// TestTransitionMatrix checks every from/from pair. The expected table is
+// TestTransitionMatrix checks every from/to pair. The expected table is
 // deliberately written out rather than derived from the implementation.
 func TestTransitionMatrix(t *testing.T) {
 	allowed := map[string]map[string]bool{
 		models.ElectionStatusDraft: {
-			models.ElectionStatusRegistration: true,
-			models.ElectionStatusPending:      true,
-			models.ElectionStatusScheduled:    true,
-			models.ElectionStatusCancelled:    true,
-		},
-		models.ElectionStatusRegistration: {
-			models.ElectionStatusPending:   true,
-			models.ElectionStatusScheduled: true,
-			models.ElectionStatusCancelled: true,
-		},
-		models.ElectionStatusPending: {
-			models.ElectionStatusRegistration: true,
-			models.ElectionStatusScheduled:    true,
-			models.ElectionStatusCancelled:    true,
-		},
-		models.ElectionStatusScheduled: {
-			models.ElectionStatusOpen:      true,
-			models.ElectionStatusClosed:    true,
-			models.ElectionStatusCancelled: true,
+			models.ElectionStatusOpen:   true,
+			models.ElectionStatusClosed: true,
 		},
 		models.ElectionStatusOpen: {
-			models.ElectionStatusClosed:    true,
-			models.ElectionStatusCancelled: true,
+			models.ElectionStatusClosed: true,
 		},
-		models.ElectionStatusClosed: {
-			models.ElectionStatusReview:    true,
-			models.ElectionStatusFinalized: true,
-			models.ElectionStatusArchived:  true,
-		},
-		models.ElectionStatusReview: {
-			models.ElectionStatusFinalized: true,
-			models.ElectionStatusArchived:  true,
-		},
-		models.ElectionStatusFinalized: {
-			models.ElectionStatusArchived: true,
-		},
-		models.ElectionStatusArchived:  {},
-		models.ElectionStatusCancelled: {},
+		models.ElectionStatusClosed: {},
 	}
 
 	for _, from := range statuses {
@@ -99,9 +62,9 @@ func validElection(t *testing.T, db *gorm.DB, status string, start, end time.Tim
 	t.Helper()
 	e := &models.Election{
 		Title: "Synthetic Guild Election", Category: models.ElectionCategoryGuild,
-		OrganizingUnit: "MMU Electoral Commission", Status: status,
+		OrganizingUnit: "Electoral Commission", Status: status,
 		StartsAt: start, EndsAt: end, ResultPolicy: models.ResultPolicyAfterClose,
-		AllowedDomains: "@std.must.ac.ug",
+		AllowedDomain: "std.mast.ac.ug",
 	}
 	if err := db.Create(e).Error; err != nil {
 		t.Fatal(err)
@@ -115,7 +78,7 @@ func validElection(t *testing.T, db *gorm.DB, status string, start, end time.Tim
 func addPositionAndCandidate(t *testing.T, db *gorm.DB, electionID string) {
 	t.Helper()
 	position := &models.Position{
-		ElectionID: electionID, Title: "President", QuestionType: models.QuestionTypeSingleChoice,
+		ElectionID: models.Ptr(electionID), Title: "President", QuestionType: models.QuestionTypeSingleChoice,
 		MinSelections: 1, MaxSelections: 1, Seats: 1,
 	}
 	if err := db.Create(position).Error; err != nil {
@@ -143,7 +106,7 @@ func TestOpenAndCloseBoundaries(t *testing.T) {
 		status string
 		open   bool
 	}{
-		{"just before start", start.Add(-time.Nanosecond), models.ElectionStatusScheduled, false},
+		{"just before start", start.Add(-time.Nanosecond), models.ElectionStatusDraft, false},
 		{"at start", start, models.ElectionStatusOpen, true},
 		{"just before end", end.Add(-time.Nanosecond), models.ElectionStatusOpen, true},
 		{"at end", end, models.ElectionStatusClosed, false},
@@ -152,7 +115,8 @@ func TestOpenAndCloseBoundaries(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			db := testDB(t)
-			e := validElection(t, db, models.ElectionStatusScheduled, start, end)
+			e := validElection(t, db, models.ElectionStatusDraft, start, end)
+			addPositionAndCandidate(t, db, e.ID)
 			if err := lifecycle.Ensure(db, e, tc.at); err != nil {
 				t.Fatal(err)
 			}
@@ -196,7 +160,7 @@ func TestMissedSchedulerTickCannotExtendVoting(t *testing.T) {
 func TestEnsureDoesNotOpenInvalidConfiguration(t *testing.T) {
 	db := testDB(t)
 	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
-	e := validElection(t, db, models.ElectionStatusScheduled, now.Add(-time.Hour), now.Add(time.Hour))
+	e := validElection(t, db, models.ElectionStatusDraft, now.Add(-time.Hour), now.Add(time.Hour))
 	if err := db.Where("election_id = ?", e.ID).Delete(&models.Position{}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -204,8 +168,8 @@ func TestEnsureDoesNotOpenInvalidConfiguration(t *testing.T) {
 	if err := lifecycle.Ensure(db, e, now); err != nil {
 		t.Fatal(err)
 	}
-	if e.Status != models.ElectionStatusScheduled {
-		t.Errorf("status = %s, want SCHEDULED when configuration is incomplete", e.Status)
+	if e.Status != models.ElectionStatusDraft {
+		t.Errorf("status = %s, want DRAFT when configuration is incomplete", e.Status)
 	}
 	var opened int64
 	db.Model(&models.ElectionAuditLog{}).
@@ -218,7 +182,8 @@ func TestEnsureDoesNotOpenInvalidConfiguration(t *testing.T) {
 func TestSchedulerRestartReconcilesMissedTransitions(t *testing.T) {
 	db := testDB(t)
 	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
-	due := validElection(t, db, models.ElectionStatusScheduled, now.Add(-time.Minute), now.Add(time.Hour))
+	due := validElection(t, db, models.ElectionStatusDraft, now.Add(-time.Minute), now.Add(time.Hour))
+	addPositionAndCandidate(t, db, due.ID)
 	ended := validElection(t, db, models.ElectionStatusOpen, now.Add(-3*time.Hour), now.Add(-time.Hour))
 
 	changed, err := lifecycle.SyncAll(db, now)
@@ -251,7 +216,7 @@ func TestValidateConfiguration(t *testing.T) {
 		}},
 		{"shorter than the minimum", func(e *models.Election) {
 			e.StartsAt = now
-			e.EndsAt = now.Add(30 * time.Minute)
+			e.EndsAt = now.Add(time.Minute)
 		}},
 		{"already ended when scheduling", func(e *models.Election) {
 			e.StartsAt = now.Add(-3 * time.Hour)
@@ -259,7 +224,7 @@ func TestValidateConfiguration(t *testing.T) {
 		}},
 		{"unknown category", func(e *models.Election) { e.Category = "SPACE" }},
 		{"unknown result policy", func(e *models.Election) { e.ResultPolicy = "SOMETIME" }},
-		{"bad domain", func(e *models.Election) { e.AllowedDomains = "@std.must.ac.ug,not a domain" }},
+		{"bad domain", func(e *models.Election) { e.AllowedDomain = "not a domain!" }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -295,7 +260,7 @@ func TestValidateConfigurationRequiresPositionsAndCandidates(t *testing.T) {
 	}
 }
 
-func TestExceptionalCloseAndCancelRequireAReason(t *testing.T) {
+func TestExceptionalCloseRequiresAReason(t *testing.T) {
 	db := testDB(t)
 	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
 	open := validElection(t, db, models.ElectionStatusOpen, now.Add(-time.Hour), now.Add(time.Hour))
@@ -306,25 +271,85 @@ func TestExceptionalCloseAndCancelRequireAReason(t *testing.T) {
 	if _, err := lifecycle.Apply(db, open, models.ElectionStatusClosed, "actor", "security concern", "", now); err != nil {
 		t.Fatalf("early close with a reason: %v", err)
 	}
-
-	draft := validElection(t, db, models.ElectionStatusDraft, now.Add(time.Hour), now.Add(2*time.Hour))
-	if _, err := lifecycle.Apply(db, draft, models.ElectionStatusCancelled, "actor", "", "", now); err == nil {
-		t.Error("cancellation without a reason must be refused")
-	}
-	if _, err := lifecycle.Apply(db, draft, models.ElectionStatusCancelled, "actor", "no candidates", "", now); err != nil {
-		t.Fatalf("cancellation with a reason: %v", err)
-	}
 }
 
 func TestIllegalTransitionHasAClearError(t *testing.T) {
 	db := testDB(t)
 	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
-	draft := validElection(t, db, models.ElectionStatusDraft, now.Add(time.Hour), now.Add(2*time.Hour))
-	_, err := lifecycle.Apply(db, draft, models.ElectionStatusOpen, "actor", "", "", now)
+	closed := validElection(t, db, models.ElectionStatusClosed, now.Add(-3*time.Hour), now.Add(-time.Hour))
+	_, err := lifecycle.Apply(db, closed, models.ElectionStatusOpen, "actor", "", "", now)
 	if err == nil {
-		t.Fatal("DRAFT -> OPEN must be refused")
+		t.Fatal("CLOSED -> OPEN must be refused")
 	}
-	if !strings.Contains(err.Error(), "illegal election transition") || !strings.Contains(err.Error(), "DRAFT") {
+	if !strings.Contains(err.Error(), "illegal election transition") || !strings.Contains(err.Error(), "CLOSED") {
 		t.Errorf("error %q does not name the refused transition", err)
+	}
+}
+
+// A close through the lazy scheduler path runs the registered hook exactly
+// once, and only after the election is durably CLOSED.
+func TestCloseRunsTheOnClosedHookOnce(t *testing.T) {
+	db := testDB(t)
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	e := validElection(t, db, models.ElectionStatusOpen, now.Add(-2*time.Hour), now.Add(-time.Minute))
+
+	calls := 0
+	var seenStatus string
+	lifecycle.OnClosed = func(hookDB *gorm.DB, election *models.Election, at time.Time) error {
+		calls++
+		seenStatus = election.Status
+		if at.IsZero() {
+			t.Error("close hook received a zero time")
+		}
+		var stored models.Election
+		if err := hookDB.Where("id = ?", election.ID).First(&stored).Error; err != nil {
+			t.Errorf("close hook could not reload the election: %v", err)
+			return nil
+		}
+		if stored.Status != models.ElectionStatusClosed {
+			t.Errorf("stored status at hook time = %s, want CLOSED", stored.Status)
+		}
+		return nil
+	}
+	t.Cleanup(func() { lifecycle.OnClosed = nil })
+
+	if err := lifecycle.Ensure(db, e, now); err != nil {
+		t.Fatal(err)
+	}
+	if e.Status != models.ElectionStatusClosed {
+		t.Fatalf("status = %s, want CLOSED", e.Status)
+	}
+	if calls != 1 {
+		t.Fatalf("close hook calls = %d, want 1", calls)
+	}
+	if seenStatus != models.ElectionStatusClosed {
+		t.Fatalf("hook saw status %s, want CLOSED", seenStatus)
+	}
+
+	// A second reconciliation of an already-closed election does nothing.
+	if err := lifecycle.Ensure(db, e, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("close hook ran again on an already-closed election: %d calls", calls)
+	}
+}
+
+// A hook failure must not undo the close.
+func TestCloseHookFailureLeavesTheElectionClosed(t *testing.T) {
+	db := testDB(t)
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	e := validElection(t, db, models.ElectionStatusOpen, now.Add(-2*time.Hour), now.Add(-time.Minute))
+
+	lifecycle.OnClosed = func(*gorm.DB, *models.Election, time.Time) error {
+		return errors.New("tally store unavailable")
+	}
+	t.Cleanup(func() { lifecycle.OnClosed = nil })
+
+	if err := lifecycle.Ensure(db, e, now); err != nil {
+		t.Fatal(err)
+	}
+	if e.Status != models.ElectionStatusClosed {
+		t.Fatalf("status = %s, want CLOSED even when the hook fails", e.Status)
 	}
 }

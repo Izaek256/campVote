@@ -1,6 +1,6 @@
 import type { ElectionStatus } from "./types";
 
-/** MMU display zone. Stored timestamps are UTC; voters read EAT. */
+/** Campus display zone. Stored timestamps are UTC; voters read EAT. */
 export const EAT = "Africa/Kampala";
 
 const dateTime = new Intl.DateTimeFormat("en-GB", {
@@ -59,28 +59,14 @@ export function remaining(endsAt: string, now = Date.now()): Remaining {
 
 const labels: Record<ElectionStatus, string> = {
   DRAFT: "Draft",
-  REGISTRATION: "Registration",
-  PENDING_APPROVAL: "Pending approval",
-  SCHEDULED: "Scheduled",
   OPEN: "Open",
   CLOSED: "Closed",
-  RESULTS_UNDER_REVIEW: "Results under review",
-  FINALIZED: "Finalized",
-  ARCHIVED: "Archived",
-  CANCELLED: "Cancelled",
 };
 
 const chipClasses: Record<ElectionStatus, string> = {
   DRAFT: "draft",
-  REGISTRATION: "review",
-  PENDING_APPROVAL: "review",
-  SCHEDULED: "sched",
   OPEN: "open",
   CLOSED: "closed",
-  RESULTS_UNDER_REVIEW: "review",
-  FINALIZED: "final",
-  ARCHIVED: "final",
-  CANCELLED: "cancel",
 };
 
 export function statusLabel(status: ElectionStatus): string {

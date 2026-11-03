@@ -38,8 +38,8 @@ export default function BallotSecrecyPage() {
 
         <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mt-8">
           <p className="font-medium">
-            If you have concerns about privacy, contact the election administrator or the MMU
-            Electoral Commission.
+            If you have concerns about privacy, contact the election administrator or your campus
+            electoral commission.
           </p>
         </div>
       </div>

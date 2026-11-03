@@ -56,6 +56,7 @@ func TestSeedElectionsSeedsNoAdministrator(t *testing.T) {
 
 func TestSeedElections(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
+	t.Setenv("SEED_DEMO_DATA", "true")
 
 	db, err := gorm.Open(sqlite.Open("file:memdb_elections_seeder_test?mode=memory&cache=shared"), &gorm.Config{})
 	if err != nil {
@@ -114,13 +115,17 @@ func TestSeedElections(t *testing.T) {
 		t.Errorf("expected at least 5 candidates, got %d", len(candidates))
 	}
 
-	// 6. Verify roster entries
+	// 6. Verify the demo election carries a rule, not a roster inclusion list.
+	// Eligibility is decided by email rule; roster rows are exclusions only.
+	if guildElection.AllowedDomain != "std.mast.ac.ug" {
+		t.Errorf("allowed domain = %q, want std.mast.ac.ug", guildElection.AllowedDomain)
+	}
 	var roster []models.ElectionRoster
 	if err := db.Where("election_id = ?", guildElection.ID).Find(&roster).Error; err != nil {
 		t.Fatalf("failed to query roster: %v", err)
 	}
-	if len(roster) != 2 {
-		t.Errorf("expected 2 roster entries, got %d", len(roster))
+	if len(roster) != 0 {
+		t.Errorf("demo election should not need roster inclusions, found %d", len(roster))
 	}
 
 	// 7. Verify Idempotency - second run must not duplicate

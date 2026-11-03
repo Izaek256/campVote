@@ -25,6 +25,7 @@ import (
 	"campvote/apps/api/internal/handlers"
 	"campvote/apps/api/internal/health"
 	"campvote/apps/api/internal/jobs"
+	"campvote/apps/api/internal/lifecycle"
 	"campvote/apps/api/internal/llms"
 	"campvote/apps/api/internal/mail"
 	"campvote/apps/api/internal/middleware"
@@ -33,6 +34,7 @@ import (
 	"campvote/apps/api/internal/policy"
 	"campvote/apps/api/internal/realtime"
 	"campvote/apps/api/internal/respond"
+	"campvote/apps/api/internal/results"
 	"campvote/apps/api/internal/saga"
 	"campvote/apps/api/internal/sagas"
 	"campvote/apps/api/internal/services"
@@ -823,6 +825,22 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		realtimeOptions = append(realtimeOptions, realtime.WithRedis(cfg.RedisURL, ""))
 	}
 	realtimeHub := realtime.NewHub(realtimeOptions...)
+	// Register the one post-close hook before any request can close an
+	// election. It is idempotent and records the first provisional tally;
+	// Read retries a missing one after a restart or a failed hook.
+	lifecycle.OnClosed = results.OnClose
+	// A new snapshot is broadcast on a public channel named for the election.
+	// The payload says only that results changed: the results endpoint still
+	// applies the publication policy, and no count rides the socket.
+	results.OnSnapshot = func(electionID, snapshotID string) {
+		realtimeHub.Publish("public-election-results."+electionID, realtime.Event{
+			Type: "results.updated",
+			Payload: map[string]string{
+				"election_id": electionID,
+				"snapshot_id": snapshotID,
+			},
+		})
+	}
 	// Revoking a session has to close that user's live sockets too. Without
 	// this, "sign out of all devices" leaves every open WebSocket streaming.
 	services.OnSessionsRevoked = realtimeHub.DisconnectUser
@@ -1365,6 +1383,13 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.GET("/elections/:id/candidate-application", candidateHandler.Application)
 		protected.POST("/elections/:id/candidates/apply", candidateHandler.Apply)
 		protected.POST("/candidates/my/:candidate_id/withdraw", candidateHandler.WithdrawMine)
+		protected.POST("/candidates/my/:candidate_id/ballot-photo", candidateHandler.SetBallotPhoto)
+
+		// Standalone position applications. A student sees only the positions
+		// their email domain, year and course make them eligible for, and may
+		// apply to one directly without going through an election.
+		protected.GET("/positions/eligible", positionHandler.Eligible)
+		protected.POST("/positions/:position_id/apply", positionHandler.Apply)
 
 		// grit:routes:protected
 	}
@@ -1507,13 +1532,16 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.POST("/elections", electionLifecycleHandler.Create)
 		staff.GET("/elections/:id", electionLifecycleHandler.Get)
 		staff.PUT("/elections/:id", electionLifecycleHandler.Update)
+		staff.DELETE("/elections/:id", electionLifecycleHandler.Delete)
 		staff.POST("/elections/:id/transitions", electionLifecycleHandler.Transition)
+		staff.GET("/elections/:id/readiness", electionLifecycleHandler.Readiness)
 
 		// Per-election roles and the operations whose visibility depends on
 		// the election itself. policy.Guard has already checked the permission
 		// key; the handler then checks the actor's relationship to this one
 		// election, which is what stops a cross-election IDOR.
 		staff.GET("/elections/:id/roles", electionRBACHandler.ListRoles)
+		staff.GET("/elections/:id/roles/lookup", electionRBACHandler.LookupUser)
 		staff.PUT("/elections/:id/roles/:userId", electionRBACHandler.AssignRole)
 		staff.DELETE("/elections/:id/roles/:userId/:role", electionRBACHandler.RemoveRole)
 
@@ -1537,6 +1565,20 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.POST("/elections/:id/positions", positionHandler.Create)
 		staff.PUT("/elections/:id/positions/:position_id", positionHandler.Update)
 		staff.DELETE("/elections/:id/positions/:position_id", positionHandler.Delete)
+
+		// Positions-first workflow. An administrator creates a position before
+		// any election exists, collects applications, settles the candidate
+		// list, and only then links the position to the election it will be
+		// contested in. Listing is global (filter with ?election_id or
+		// ?unlinked=1) because the position outlives any single election.
+		staff.GET("/positions", positionHandler.ListAll)
+		staff.POST("/positions", positionHandler.CreateStandalone)
+		staff.PUT("/positions/:position_id", positionHandler.UpdateStandalone)
+		staff.DELETE("/positions/:position_id", positionHandler.DeleteStandalone)
+		staff.GET("/positions/:position_id/applications", positionHandler.Applications)
+		staff.POST("/positions/:position_id/applications/:candidate_id/approve", positionHandler.ApproveApplication)
+		staff.POST("/positions/:position_id/applications/:candidate_id/reject", positionHandler.RejectApplication)
+		staff.POST("/positions/:position_id/link", positionHandler.Link)
 
 		// Candidate management
 		staff.GET("/elections/:id/candidates", candidateHandler.List)

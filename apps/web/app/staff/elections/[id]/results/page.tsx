@@ -8,6 +8,7 @@ import { PositionResult } from "@/components/position-result";
 import { RequireAuth } from "@/components/require-auth";
 import { ResultStatusBadge } from "@/components/result-status-badge";
 import { StaffShell } from "@/components/staff-shell";
+import { useToast } from "@/components/toast";
 import { TurnoutSummary } from "@/components/turnout-summary";
 import { ApiError, elections } from "@/lib/api";
 import { formatEAT, formatNumber } from "@/lib/format";
@@ -22,11 +23,10 @@ import type { ResultSnapshot, Results, ResultsHistory } from "@/lib/types";
  * new tally that supersedes the certified one and keeps it visible.
  */
 function Workspace({ id }: { id: string }) {
+  const toast = useToast();
   const [election, setElection] = useState<{ title: string; status: string } | null>(null);
   const [results, setResults] = useState<Results | null>(null);
   const [history, setHistory] = useState<ResultsHistory | null>(null);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Confirm dialogs carry the reason the server requires on every one of these.
@@ -47,17 +47,19 @@ function Workspace({ id }: { id: string }) {
   } | null>(null);
 
   const load = useCallback(async () => {
-    const messages: string[] = [];
+    const restricted: string[] = [];
     const current = await elections.get(id).catch((err) => {
-      setError(err instanceof ApiError ? err.message : "Election could not be loaded.");
+      toast.error(err instanceof ApiError ? err.message : "Election could not be loaded.");
       return null;
     });
     if (current) setElection({ title: current.title, status: current.status });
 
     const resultsResult = await elections.results(id).catch((err) => {
-      messages.push(
-        err instanceof ApiError && err.status === 403 ? err.message : "Results could not be loaded."
-      );
+      if (err instanceof ApiError && err.status === 403) {
+        restricted.push(err.message);
+      } else {
+        toast.error(err instanceof ApiError ? err.message : "Results could not be loaded.");
+      }
       return null;
     });
     setResults(resultsResult);
@@ -65,9 +67,8 @@ function Workspace({ id }: { id: string }) {
     const historyResult = await elections.resultsHistory(id).catch(() => null);
     setHistory(historyResult);
 
-    setError("");
-    setNotice(messages.join(" "));
-  }, [id]);
+    if (restricted.length) toast.warn(restricted.join(" "));
+  }, [id, toast]);
 
   useEffect(() => {
     load();
@@ -75,15 +76,13 @@ function Workspace({ id }: { id: string }) {
 
   async function act(action: () => Promise<unknown>, message: string) {
     setBusy(true);
-    setError("");
-    setNotice("");
     try {
       await action();
-      setNotice(message);
+      toast.success(message);
       await load();
       return true;
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "That did not complete.");
+      toast.error(err instanceof ApiError ? err.message : "That did not complete.");
       return false;
     } finally {
       setBusy(false);
@@ -105,19 +104,17 @@ function Workspace({ id }: { id: string }) {
     if (!recountFor) return;
     const snapshotID = recountFor.id;
     setBusy(true);
-    setError("");
-    setNotice("");
     try {
       const result = await elections.recount(id, snapshotID, recountReason.trim());
       setRecountResult(result.differences);
-      setNotice(
+      toast.success(
         result.identical
           ? "Recount reproduced the stored result exactly. Ballots were not changed."
           : "Recount found differences. Ballots were not changed."
       );
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The recount did not complete.");
+      toast.error(err instanceof ApiError ? err.message : "The recount did not complete.");
     } finally {
       setBusy(false);
       setRecountFor(null);
@@ -139,9 +136,8 @@ function Workspace({ id }: { id: string }) {
   }
 
   const snapshot = results?.snapshot;
-  const closedOrLater = ["CLOSED", "RESULTS_UNDER_REVIEW", "FINALIZED", "ARCHIVED"].includes(
-    election?.status ?? ""
-  );
+  // In the three-stage lifecycle only CLOSED produces a tally.
+  const closedOrLater = election?.status === "CLOSED";
 
   return (
     <StaffShell title="Results workspace">
@@ -166,22 +162,6 @@ function Workspace({ id }: { id: string }) {
           <ResultStatusBadge status={snapshot.status} version={snapshot.version} />
         ) : null}
       </div>
-
-      {error ? (
-        <div className="banner bad" role="alert">
-          <Icon name="alert" />
-          <div>
-            <b>That did not complete</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
-      {notice ? (
-        <div className="banner ok" role="status">
-          <Icon name="shield" />
-          <div>{notice}</div>
-        </div>
-      ) : null}
 
       <div className="stack">
         <section className="panel">
@@ -290,23 +270,6 @@ function Workspace({ id }: { id: string }) {
 
               {recountResult ? (
                 <div style={{ marginTop: 16 }}>
-                  {recountResult.identical ? (
-                    <div className="banner ok" role="status">
-                      <Icon name="shield" />
-                      <div>
-                        <b>Identical result</b>
-                        The recount reproduced the stored tally exactly. Ballots unchanged.
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="banner bad" role="alert">
-                      <Icon name="alert" />
-                      <div>
-                        <b>Differences found</b>
-                        Ballots were not changed. Review the differences below.
-                      </div>
-                    </div>
-                  )}
                   {recountResult.position_diffs?.length ? (
                     <div className="tbl-wrap" style={{ marginTop: 12 }}>
                       <table className="tbl">
@@ -450,7 +413,7 @@ function Workspace({ id }: { id: string }) {
 export default function ResultsWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth>
+    <RequireAuth adminOnly>
       <Workspace id={id} />
     </RequireAuth>
   );

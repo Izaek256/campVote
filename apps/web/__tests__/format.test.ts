@@ -39,10 +39,11 @@ describe("countdown", () => {
 
 describe("lifecycle labels", () => {
   it("maps every state to words and never colour alone", () => {
-    expect(statusLabel("RESULTS_UNDER_REVIEW")).toBe("Results under review");
-    expect(statusLabel("CANCELLED")).toBe("Cancelled");
+    expect(statusLabel("DRAFT")).toBe("Draft");
+    expect(statusLabel("OPEN")).toBe("Open");
+    expect(statusLabel("CLOSED")).toBe("Closed");
+    expect(statusClass("DRAFT")).toBe("draft");
     expect(statusClass("OPEN")).toBe("open");
-    expect(statusClass("FINALIZED")).toBe("final");
-    expect(statusClass("PENDING_APPROVAL")).toBe("review");
+    expect(statusClass("CLOSED")).toBe("closed");
   });
 });

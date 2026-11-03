@@ -2,6 +2,7 @@ package eligibility
 
 import (
 	"testing"
+	"time"
 
 	"campvote/apps/api/internal/models"
 )
@@ -160,5 +161,33 @@ func TestRuleAllows_EmptyDomainAllowsAll(t *testing.T) {
 	id := Identity{Year: "2024", Course: "bse", Number: "001", Domain: "anything.ac.ug"}
 	if !RuleAllows(e, id) {
 		t.Error("RuleAllows: empty AllowedDomain should allow any domain")
+	}
+}
+
+func TestIdentityProgrammeAndStudyYear(t *testing.T) {
+	id, ok := ParseEmail("2024BSE088@std.mast.ac.ug")
+	if !ok {
+		t.Fatal("expected the registration email to parse")
+	}
+	if id.Programme() != "BSE" {
+		t.Errorf("Programme() = %q, want BSE", id.Programme())
+	}
+	cases := []struct {
+		at   string
+		want int
+	}{
+		{"2024-10-01T00:00:00Z", 1}, // enrolled in the academic year that just started
+		{"2025-07-31T00:00:00Z", 1}, // still the 2024/25 academic year
+		{"2025-08-01T00:00:00Z", 2}, // new academic year
+		{"2026-11-02T00:00:00Z", 3},
+	}
+	for _, tc := range cases {
+		at, err := time.Parse(time.RFC3339, tc.at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := id.StudyYear(at); got != tc.want {
+			t.Errorf("StudyYear(%s) = %d, want %d", tc.at, got, tc.want)
+		}
 	}
 }

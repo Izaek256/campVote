@@ -53,12 +53,15 @@ func resultsFixtureFor(t *testing.T, db *gorm.DB, id string, status, policy stri
 		ID: id, Title: id, Status: status, ResultPolicy: policy,
 		StartsAt: now.Add(-2 * time.Hour), EndsAt: now.Add(-time.Hour),
 		CreatedByID: creator.ID,
+		// Rule-based eligibility: only the two verified accounts below match.
+		AllowedDomain: "std.mast.ac.ug",
+		AllowedYears:  "2020",
 	}
 	if err := db.Create(&election).Error; err != nil {
 		t.Fatal(err)
 	}
 
-	position := models.Position{ID: id + "-pos", ElectionID: id, Title: "President"}
+	position := models.Position{ID: id + "-pos", ElectionID: models.Ptr(id), Title: "President"}
 	if err := db.Create(&position).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +72,8 @@ func resultsFixtureFor(t *testing.T, db *gorm.DB, id string, status, policy stri
 			t.Fatal(err)
 		}
 	}
-	for _, email := range []string{"one-" + id + "@std.must.ac.ug", "two-" + id + "@std.must.ac.ug"} {
+	for _, email := range []string{"2020bse001@std.mast.ac.ug", "2020bse002@std.mast.ac.ug"} {
+		testkit.User(t, db, email, models.RoleStudentVoter)
 		row := models.ElectionRoster{ElectionID: id, Email: email, StudentNumber: email, Status: models.RosterStatusEligible}
 		if err := db.Create(&row).Error; err != nil {
 			t.Fatal(err)
@@ -131,7 +135,7 @@ func TestProvisionalResultsAreHiddenFromVotersWhileOpen(t *testing.T) {
 	fixture := resultsFixtureFor(t, db, "e-open", models.ElectionStatusOpen, models.ResultPolicyLive)
 	castBallot(t, db, fixture.electionID, fixture.adaID)
 	_, officialToken := resultsOfficial(t, db, fixture)
-	voter := rbacUser(t, db, "open-voter@std.must.ac.ug", models.RoleStudentVoter)
+	voter := rbacUser(t, db, "2022bse006@std.mast.ac.ug", models.RoleStudentVoter)
 	voterToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), voter)
 
 	client := testkit.New(t, resultsEngine(t, db))
@@ -154,7 +158,7 @@ func TestVoterSeesLabelledProvisionalResultAfterClose(t *testing.T) {
 	castBallot(t, db, fixture.electionID, fixture.adaID)
 	castBallot(t, db, fixture.electionID, fixture.benID)
 	_, officialToken := resultsOfficial(t, db, fixture)
-	voter := rbacUser(t, db, "closed-voter@std.must.ac.ug", models.RoleStudentVoter)
+	voter := rbacUser(t, db, "2022bse007@std.mast.ac.ug", models.RoleStudentVoter)
 	voterToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), voter)
 
 	client := testkit.New(t, resultsEngine(t, db))
@@ -163,8 +167,8 @@ func TestVoterSeesLabelledProvisionalResultAfterClose(t *testing.T) {
 	var body struct {
 		Label    string `json:"label"`
 		Snapshot struct {
-			Status   string  `json:"status"`
-			Turnout  float64 `json:"turnout_percent"`
+			Status    string  `json:"status"`
+			Turnout   float64 `json:"turnout_percent"`
 			Positions []struct {
 				Outcome string `json:"outcome"`
 				Rows    []struct {
@@ -227,7 +231,7 @@ func TestCertifiedSnapshotIsNotEditableOrDeletable(t *testing.T) {
 	// No method mutates a certified record: the routes simply do not exist
 	client.As(adminToken).Patch("/api/v1/elections/e-immutable/results/"+snapshot["id"].(string), nil).
 		AssertStatus(http.StatusNotFound)
-	client.As(adminToken).Delete("/api/v1/elections/e-immutable/results/"+snapshot["id"].(string)).
+	client.As(adminToken).Delete("/api/v1/elections/e-immutable/results/" + snapshot["id"].(string)).
 		AssertStatus(http.StatusNotFound)
 
 	// The stored row still carries its original hash and reason
@@ -282,9 +286,9 @@ func TestRecountReproducesTheTallyAndLeavesBallotsUnchanged(t *testing.T) {
 	db.Model(&models.AnonymousBallot{}).Where("election_id = ?", fixture.electionID).Count(&before)
 
 	var body struct {
-		Identical         bool `json:"identical"`
-		BallotsUnchanged  bool `json:"ballots_unchanged"`
-		Differences       struct {
+		Identical        bool `json:"identical"`
+		BallotsUnchanged bool `json:"ballots_unchanged"`
+		Differences      struct {
 			Identical bool `json:"identical"`
 		} `json:"differences"`
 	}
@@ -339,8 +343,8 @@ func TestRecountReportsDifferencesWhenTheCountMoves(t *testing.T) {
 	castBallot(t, db, fixture.electionID, fixture.adaID)
 
 	var body struct {
-		Identical    bool `json:"identical"`
-		Differences  struct {
+		Identical   bool `json:"identical"`
+		Differences struct {
 			Identical     bool `json:"identical"`
 			PositionDiffs []struct {
 				Candidates []struct {
@@ -404,12 +408,12 @@ func TestCorrectionSupersedesACertifiedSnapshotAndKeepsItVisible(t *testing.T) {
 
 	var after struct {
 		Snapshots []struct {
-			ID            string  `json:"id"`
-			Version       int     `json:"version"`
-			Status        string  `json:"status"`
-			SupersedesID  string  `json:"supersedes_id"`
-			SupersededBy  string  `json:"superseded_by_id"`
-			Turnout       float64 `json:"turnout_percent"`
+			ID           string  `json:"id"`
+			Version      int     `json:"version"`
+			Status       string  `json:"status"`
+			SupersedesID string  `json:"supersedes_id"`
+			SupersededBy string  `json:"superseded_by_id"`
+			Turnout      float64 `json:"turnout_percent"`
 		} `json:"snapshots"`
 	}
 	client.As(officialToken).Get("/api/v1/elections/e-correct/results/history").
@@ -496,4 +500,36 @@ func indexOf(haystack, needle string) int {
 		}
 	}
 	return -1
+}
+
+// A closed election with no snapshot yet is tallied on the first read, so a
+// close hook that failed or never ran does not leave voters with a blank page.
+func TestReadRecordsMissingTallyForAClosedElection(t *testing.T) {
+	db := rbacDB(t)
+	fixture := resultsFixtureFor(t, db, "e-retry", models.ElectionStatusClosed, models.ResultPolicyAfterClose)
+	castBallot(t, db, fixture.electionID, fixture.adaID)
+	voter := testkit.User(t, db, "2022bse008@std.mast.ac.ug", models.RoleStudentVoter)
+	voterToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), voter)
+
+	client := testkit.New(t, resultsEngine(t, db))
+	var body struct {
+		Available bool   `json:"available"`
+		Label     string `json:"label"`
+		Snapshot  struct {
+			BallotsCast int `json:"ballots_cast"`
+		} `json:"snapshot"`
+	}
+	client.As(voterToken).Get("/api/v1/elections/e-retry/results").AssertOK().BindData(&body)
+
+	if !body.Available || body.Label != models.ResultStatusProvisional {
+		t.Fatalf("read returned available=%v label=%q, want a provisional snapshot", body.Available, body.Label)
+	}
+	if body.Snapshot.BallotsCast != 1 {
+		t.Fatalf("ballots cast = %d, want 1", body.Snapshot.BallotsCast)
+	}
+	var count int64
+	db.Model(&models.ResultSnapshot{}).Where("election_id = ?", fixture.electionID).Count(&count)
+	if count != 1 {
+		t.Fatalf("snapshots = %d, want exactly 1", count)
+	}
 }

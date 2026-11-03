@@ -3,19 +3,23 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
 import { StatusChip } from "@/components/status-chip";
+import { useToast } from "@/components/toast";
 import { ApiError, elections } from "@/lib/api";
 import { formatEAT, statusLabel } from "@/lib/format";
 import type { Election, VoteStatus } from "@/lib/types";
 
 /** Shows whether a ballot was recorded, never what it contained. */
 function StatusView({ id }: { id: string }) {
+  const toast = useToast();
   const [election, setElection] = useState<Election | null>(null);
   const [status, setStatus] = useState<VoteStatus | null>(null);
-  const [error, setError] = useState("");
-  const [statusCode, setStatusCode] = useState(0);
+  const [loadError, setLoadError] = useState<{ message: string; unauthorized: boolean } | null>(
+    null
+  );
 
   useEffect(() => {
     let active = true;
@@ -27,9 +31,14 @@ function StatusView({ id }: { id: string }) {
         if (active) setElection(found);
       })
       .catch((err) => {
-        if (active) {
-          setStatusCode(err instanceof ApiError ? err.status : 0);
-          setError(err instanceof ApiError ? err.message : "Election could not be loaded.");
+        if (!active) return;
+        const unauthorized = err instanceof ApiError && err.status === 401;
+        const message = err instanceof ApiError ? err.message : "Election could not be loaded.";
+        setLoadError({ message, unauthorized });
+        if (unauthorized) {
+          toast.warn(message);
+        } else {
+          toast.error(message);
         }
       });
     elections
@@ -39,35 +48,36 @@ function StatusView({ id }: { id: string }) {
       })
       .catch((err) => {
         if (!active) return;
-        setStatusCode(err instanceof ApiError ? err.status : 0);
-        setError(err instanceof ApiError ? err.message : "Your status could not be checked.");
+        const unauthorized = err instanceof ApiError && err.status === 401;
+        const message = err instanceof ApiError ? err.message : "Your status could not be checked.";
+        setLoadError({ message, unauthorized });
+        if (unauthorized) {
+          toast.warn(message);
+        } else {
+          toast.error(message);
+        }
       });
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, toast]);
 
-  if (error) {
+  if (loadError) {
     return (
       <main className="app-wrap narrow">
-        <div className={`banner ${statusCode === 401 ? "hatch" : "bad"}`} role="alert">
-          <Icon name={statusCode === 401 ? "lock" : "alert"} />
-          <div>
-            <b>{statusCode === 401 ? "Your session expired" : "We could not check your status"}</b>
-            {error}
-            {statusCode === 401 ? (
-              <>
-                {" "}
-                <Link href="/login">Sign in again</Link> to continue.
-              </>
-            ) : null}
-          </div>
-        </div>
-        <p style={{ marginTop: 16 }}>
-          <Link className="btn" href="/elections">
-            Back to elections
-          </Link>
-        </p>
+        <LoadError
+          title={loadError.unauthorized ? "Your session expired" : "We could not check your status"}
+          message={loadError.message}
+          backHref="/elections"
+          backLabel="Back to elections"
+          action={
+            loadError.unauthorized ? (
+              <Link className="btn primary" href="/login">
+                Sign in again
+              </Link>
+            ) : undefined
+          }
+        />
       </main>
     );
   }
@@ -120,9 +130,7 @@ function StatusView({ id }: { id: string }) {
             choices.
           </p>
           <div className="row">
-            {["CLOSED", "RESULTS_UNDER_REVIEW", "FINALIZED", "ARCHIVED"].includes(
-              election.status
-            ) ? (
+            {election.status === "CLOSED" ? (
               <Link className="btn" href={`/elections/${id}/results`}>
                 <Icon name="chart" size="s" />
                 View results

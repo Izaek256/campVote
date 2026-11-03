@@ -4,11 +4,12 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { BallotView } from "@/components/ballot-view";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ElectionTabs } from "@/components/election-tabs";
 import { EmptyState } from "@/components/empty-state";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
+import { useToast } from "@/components/toast";
 import { ApiError, elections, staff } from "@/lib/api";
 import { formatEAT } from "@/lib/format";
 import type { BallotContent, Election } from "@/lib/types";
@@ -23,12 +24,12 @@ type Version = {
 };
 
 function Builder({ id }: { id: string }) {
+  const toast = useToast();
   const [versions, setVersions] = useState<Version[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Version | null>(null);
   const [content, setContent] = useState<BallotContent | null>(null);
   const [election, setElection] = useState<Election | null>(null);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -39,11 +40,12 @@ function Builder({ id }: { id: string }) {
       setElection(current);
       const latest = list.versions?.[0];
       setSelected((previous) => previous ?? latest ?? null);
-      setError("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Ballot versions could not be loaded.");
+      const message = err instanceof ApiError ? err.message : "Ballot versions could not be loaded.";
+      setLoadError(message);
+      toast.error(message);
     }
-  }, [id]);
+  }, [id, toast]);
 
   useEffect(() => {
     load();
@@ -62,26 +64,25 @@ function Builder({ id }: { id: string }) {
       })
       .catch((err) => {
         if (active)
-          setError(
+          toast.error(
             err instanceof ApiError ? err.message : "The ballot preview could not be loaded."
           );
       });
     return () => {
       active = false;
     };
-  }, [id, selected]);
+  }, [id, selected, toast]);
 
   async function publish() {
     setBusy(true);
-    setError("");
     try {
       const published = await staff.publish(id);
-      setNotice(`Ballot version ${published.version} published.`);
+      toast.success(`Ballot version ${published.version} published.`);
       setConfirming(false);
       setSelected(null);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The ballot could not be published.");
+      toast.error(err instanceof ApiError ? err.message : "The ballot could not be published.");
     } finally {
       setBusy(false);
     }
@@ -118,25 +119,14 @@ function Builder({ id }: { id: string }) {
         </div>
       </div>
 
-      <ElectionTabs id={id} />
-
-      {error ? (
-        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" />
-          <div>
-            <b>Something needs attention</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
-      {notice ? (
-        <div className="banner ok" role="status" style={{ marginBottom: 16 }}>
-          <Icon name="check" />
-          <div>{notice}</div>
-        </div>
-      ) : null}
-
-      {!versions && !error ? (
+      {loadError ? (
+        <LoadError
+          title="We could not load the ballot versions"
+          message={loadError}
+          backHref={`/staff/elections/${id}`}
+          backLabel="Back to the election"
+        />
+      ) : !versions ? (
         <div className="panel stack" aria-busy="true">
           <span className="skel" style={{ height: 18, width: "30%" }} />
           <span className="skel" style={{ height: 14 }} />
@@ -225,7 +215,7 @@ function Builder({ id }: { id: string }) {
 export default function BallotBuilderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth>
+    <RequireAuth adminOnly>
       <Builder id={id} />
     </RequireAuth>
   );

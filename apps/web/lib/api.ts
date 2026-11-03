@@ -5,10 +5,15 @@ import type {
   Candidate,
   CandidateApplicationView,
   Election,
+  ElectionRole,
+  ElectionStatus,
   EligibilityDecision,
   EligibilityReport,
+  EligiblePosition,
   MyCandidate,
   Position,
+  PositionApplications,
+  PositionWithMeta,
   RecountResult,
   ResultSnapshot,
   Results,
@@ -24,14 +29,55 @@ export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").
 
 export class ApiError extends Error {
   status: number;
+  /** Machine-readable code from the API envelope, e.g. VALIDATION_ERROR. */
+  code?: string;
   fields?: Record<string, string>;
+  /** The API's X-Request-ID, which names the matching line in the API log. */
+  requestId: string;
 
-  constructor(message: string, status: number, fields?: Record<string, string>) {
-    super(message);
+  constructor(
+    message: string,
+    status: number,
+    options: { fields?: Record<string, string>; code?: string; requestId?: string } = {}
+  ) {
+    super(displayMessage(message, status, options));
     this.name = "ApiError";
     this.status = status;
-    this.fields = fields;
+    this.fields = options.fields;
+    this.code = options.code;
+    this.requestId = options.requestId ?? "";
   }
+}
+
+/**
+ * The most useful text we can put in front of a person for a failed request.
+ *
+ * This is built once here rather than in each page: every screen already shows
+ * ApiError.message, so all of them gain the detail at the same time instead of
+ * each one having to remember to ask for it.
+ *
+ * The API keeps 500 bodies deliberately generic because their text can describe
+ * the schema, so for server errors we append the code and the request id: that
+ * id is on the matching line of the API log.
+ */
+function displayMessage(
+  message: string,
+  status: number,
+  options: { fields?: Record<string, string>; code?: string; requestId?: string }
+): string {
+  const parts: string[] = [message];
+  if (options.fields && Object.keys(options.fields).length > 0) {
+    parts.push(
+      Object.entries(options.fields)
+        .map(([field, problem]) => `${field.replaceAll("_", " ")}: ${problem}`)
+        .join("; ")
+    );
+  }
+  if (status >= 500) {
+    if (options.code) parts.push(`[${options.code}]`);
+    if (options.requestId) parts.push(`ref ${options.requestId}`);
+  }
+  return parts.join(" — ");
 }
 
 /** Double-submit cookie: the API issues grit_csrf and expects it echoed. */
@@ -65,7 +111,11 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const message = payload?.error?.message ?? `Request failed (${response.status})`;
-    throw new ApiError(message, response.status, payload?.error?.details);
+    throw new ApiError(message, response.status, {
+      fields: payload?.error?.details,
+      code: payload?.error?.code,
+      requestId: response.headers.get("X-Request-ID") ?? undefined,
+    });
   }
   return (payload?.data ?? payload) as T;
 }
@@ -122,7 +172,11 @@ export async function upload(
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const message = payload?.error?.message ?? `Upload failed (${response.status})`;
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, {
+      fields: payload?.error?.details,
+      code: payload?.error?.code,
+      requestId: response.headers.get("X-Request-ID") ?? undefined,
+    });
   }
   return payload?.data as UploadRef;
 }
@@ -135,6 +189,15 @@ export const candidates = {
   mine: () => api<{ candidates: MyCandidate[] }>("/candidates/my"),
   withdraw: (candidateId: string, reason: string) =>
     api<Candidate>(`/candidates/my/${candidateId}/withdraw`, { method: "POST", body: { reason } }),
+  /**
+   * Replace the image shown on the ballot (approved candidates only, before
+   * voting opens). When unset the passport photo is used.
+   */
+  setBallotPhoto: (candidateId: string, ballotPhotoUrl: string) =>
+    api<Candidate>(`/candidates/my/${candidateId}/ballot-photo`, {
+      method: "POST",
+      body: { ballot_photo_url: ballotPhotoUrl },
+    }),
   list: (electionId: string, status?: string) =>
     api<{ candidates: Candidate[] }>(
       `/elections/${electionId}/candidates${status ? `?status=${status}` : ""}`
@@ -160,6 +223,47 @@ export const positions = {
     api<Position>(`/elections/${electionId}/positions/${positionId}`, { method: "PUT", body }),
   remove: (electionId: string, positionId: string) =>
     api<unknown>(`/elections/${electionId}/positions/${positionId}`, { method: "DELETE" }),
+
+  // Standalone (positions-first) endpoints. A position exists before any
+  // election does; these paths are not election-scoped.
+  listAll: (filter: { electionId?: string; unlinked?: boolean; status?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (filter.electionId) query.set("election_id", filter.electionId);
+    if (filter.unlinked) query.set("unlinked", "1");
+    if (filter.status) query.set("status", filter.status);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return api<{ positions: PositionWithMeta[] }>(`/positions${suffix}`);
+  },
+  createStandalone: (body: Record<string, unknown>) =>
+    api<Position>("/positions", { method: "POST", body }),
+  updateStandalone: (positionId: string, body: Record<string, unknown>) =>
+    api<Position>(`/positions/${positionId}`, { method: "PUT", body }),
+  removeStandalone: (positionId: string) =>
+    api<unknown>(`/positions/${positionId}`, { method: "DELETE" }),
+  applications: (positionId: string, status?: string) =>
+    api<PositionApplications>(
+      `/positions/${positionId}/applications${status ? `?status=${status}` : ""}`
+    ),
+  approve: (positionId: string, candidateId: string, reason: string) =>
+    api<Candidate>(`/positions/${positionId}/applications/${candidateId}/approve`, {
+      method: "POST",
+      body: { reason },
+    }),
+  reject: (positionId: string, candidateId: string, reason: string) =>
+    api<Candidate>(`/positions/${positionId}/applications/${candidateId}/reject`, {
+      method: "POST",
+      body: { reason },
+    }),
+  link: (positionId: string, electionId: string) =>
+    api<Position>(`/positions/${positionId}/link`, {
+      method: "POST",
+      body: { election_id: electionId },
+    }),
+
+  // Applicant-facing.
+  eligible: () => api<{ positions: EligiblePosition[] }>("/positions/eligible"),
+  apply: (positionId: string, body: Record<string, unknown>) =>
+    api<Candidate>(`/positions/${positionId}/apply`, { method: "POST", body }),
 };
 
 export const staff = {
@@ -169,6 +273,13 @@ export const staff = {
       voted: number;
       percent: number;
       suppressed: boolean;
+      positions?: Array<{
+        position_id: string;
+        title: string;
+        ballots_answered: number;
+        blank_count: number;
+        abstain_count: number;
+      }>;
       last_refresh: string;
     }>(`/elections/${electionId}/turnout`),
   versions: (electionId: string) =>
@@ -216,8 +327,35 @@ export const elections = {
   create: (body: Record<string, unknown>) => api<Election>("/elections", { method: "POST", body }),
   update: (id: string, body: Record<string, unknown>) =>
     api<Election>(`/elections/${id}`, { method: "PUT", body }),
+  /**
+   * Delete an election that has not yet collected a ballot. The server refuses
+   * with 409 once voting has started; close it instead.
+   */
+  remove: (id: string) => api<unknown>(`/elections/${id}`, { method: "DELETE" }),
   transition: (id: string, to: string, reason = "") =>
     api<Election>(`/elections/${id}/transitions`, { method: "POST", body: { to, reason } }),
+  readiness: (id: string) =>
+    api<{
+      ready: boolean;
+      status: ElectionStatus;
+      problems: Record<string, string>;
+    }>(`/elections/${id}/readiness`),
+  roles: {
+    list: (id: string) => api<ElectionRole[]>(`/elections/${id}/roles`),
+    lookup: (id: string, email: string) =>
+      api<{ user_id: string; email: string; full_name: string; election_id: string }>(
+        `/elections/${id}/roles/lookup?email=${encodeURIComponent(email)}`
+      ),
+    assign: (id: string, userId: string, role: string) =>
+      api<ElectionRole>(`/elections/${id}/roles/${userId}`, {
+        method: "PUT",
+        body: { role },
+      }),
+    remove: (id: string, userId: string, role: string) =>
+      api<{ removed: boolean }>(`/elections/${id}/roles/${userId}/${role}`, {
+        method: "DELETE",
+      }),
+  },
   eligibility: (id: string) => api<EligibilityDecision>(`/elections/${id}/eligibility`),
   report: (id: string) => api<EligibilityReport>(`/elections/${id}/eligibility/report`),
   freeze: (id: string) =>

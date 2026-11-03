@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
 import { StatusChip } from "@/components/status-chip";
+import { useToast } from "@/components/toast";
+import { useChannel } from "@/hooks/use-realtime";
 import { ApiError, elections } from "@/lib/api";
 import { formatNumber, formatPercent } from "@/lib/format";
 import type { PositionResult, Results } from "@/lib/types";
@@ -52,30 +55,36 @@ function PositionTally({ position, certified }: { position: PositionResult; cert
 }
 
 function ResultsView({ id }: { id: string }) {
+  const toast = useToast();
   const [results, setResults] = useState<Results | null>(null);
-  const [error, setError] = useState("");
-  const [blocked, setBlocked] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await elections.results(id);
+      setResults(data);
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Results could not be loaded.";
+      setLoadError(message);
+      if (err instanceof ApiError && err.status === 403) {
+        toast.warn(message);
+      } else {
+        toast.error(message);
+      }
+    }
+  }, [id, toast]);
 
   useEffect(() => {
-    let active = true;
-    elections
-      .results(id)
-      .then((data) => {
-        if (active) setResults(data);
-      })
-      .catch((err) => {
-        if (!active) return;
-        if (err instanceof ApiError && err.status === 403) {
-          setBlocked(true);
-          setError(err.message);
-        } else {
-          setError(err instanceof ApiError ? err.message : "Results could not be loaded.");
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [id]);
+    void load();
+  }, [load]);
+
+  // The automatic tally at close publishes on this channel, so a page already
+  // open updates without a refresh or a staff click.
+  useChannel(`public-election-results.${id}`, {
+    "results.updated": () => {
+      void load();
+    },
+  });
 
   const snapshot = results?.snapshot;
   const certified = snapshot?.status === "CERTIFIED";
@@ -102,17 +111,14 @@ function ResultsView({ id }: { id: string }) {
         {results?.election_status ? <StatusChip status={results.election_status} /> : null}
       </div>
 
-      {error ? (
-        <div className={`banner ${blocked ? "hatch" : "bad"}`} role="alert">
-          <Icon name={blocked ? "clock" : "alert"} />
-          <div>
-            <b>{blocked ? "Results are not published yet" : "We could not load results"}</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
-
-      {!results && !error ? (
+      {loadError ? (
+        <LoadError
+          title="We could not load the results"
+          message={loadError}
+          backHref="/elections"
+          backLabel="Back to elections"
+        />
+      ) : !results ? (
         <div className="panel stack" role="status" aria-busy="true" aria-label="Loading results">
           <span className="skel" style={{ height: 18, width: "30%" }} />
           <span className="skel" style={{ height: 14 }} />

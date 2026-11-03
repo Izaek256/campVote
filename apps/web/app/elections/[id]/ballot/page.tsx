@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Countdown } from "@/components/countdown";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
-import { VoteRecordedNotice } from "@/components/vote-recorded-notice";
+import { useToast } from "@/components/toast";
+import { VoteSuccess } from "@/components/vote-success";
 import { ApiError, elections } from "@/lib/api";
 import { formatEAT } from "@/lib/format";
 import {
@@ -22,17 +25,16 @@ import type { Ballot, BallotPosition, SubmitResult } from "@/lib/types";
 
 /** Selections live only in this component's state, never in storage or the URL. */
 function BallotForm({ id }: { id: string }) {
+  const toast = useToast();
+  const router = useRouter();
   const [ballot, setBallot] = useState<Ballot | null>(null);
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState("");
   const [loadStatus, setLoadStatus] = useState(0);
-  const [submitError, setSubmitError] = useState("");
   const [alreadyVoted, setAlreadyVoted] = useState(false);
   const [stale, setStale] = useState(false);
   const [unknownOutcome, setUnknownOutcome] = useState(false);
-  const [reviewing, setReviewing] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<SubmitResult | null>(null);
@@ -55,6 +57,11 @@ function BallotForm({ id }: { id: string }) {
         if (!active) return;
         setLoadStatus(err instanceof ApiError ? err.status : 0);
         setLoadError(err instanceof ApiError ? err.message : "The ballot could not be loaded.");
+        if (err instanceof ApiError && (err.status === 403 || err.status === 409)) {
+          toast.warn(err.message);
+        } else {
+          toast.error(err instanceof ApiError ? err.message : "The ballot could not be loaded.");
+        }
       });
     elections
       .startBallot(id)
@@ -62,12 +69,15 @@ function BallotForm({ id }: { id: string }) {
         if (active) setAlreadyVoted(false);
       })
       .catch((err) => {
-        if (active && err instanceof ApiError && err.status === 409) setAlreadyVoted(true);
+        if (active && err instanceof ApiError && err.status === 409) {
+          setAlreadyVoted(true);
+          toast.success("You have already voted");
+        }
       });
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, toast]);
 
   const answered = useMemo(
     () => Object.values(selections).filter((chosen) => chosen.length > 0).length,
@@ -76,7 +86,6 @@ function BallotForm({ id }: { id: string }) {
 
   function choose(position: BallotPosition, value: string) {
     if (alreadyVoted || stale) return;
-    const { max } = limits(position);
     setErrors((current) => {
       const next = { ...current };
       delete next[position.id];
@@ -84,6 +93,8 @@ function BallotForm({ id }: { id: string }) {
     });
     setSelections((current) => {
       const chosen = current[position.id] ?? [];
+      // A ballot is single choice: choosing one candidate replaces any previous
+      // pick for this position. Multi-choice positions are not used here.
       if (position.question_type === "MULTI_CHOICE") {
         if (chosen.includes(value)) {
           return { ...current, [position.id]: chosen.filter((item) => item !== value) };
@@ -91,14 +102,20 @@ function BallotForm({ id }: { id: string }) {
         if (chosen.includes(ABSTAIN)) {
           return { ...current, [position.id]: [value] };
         }
+        const { max } = limits(position);
         if (chosen.length >= max) return current;
         return { ...current, [position.id]: [...chosen, value] };
+      }
+      if (chosen.includes(value)) {
+        // Tapping the same option again clears it, so a required position can be
+        // undone before submitting.
+        return { ...current, [position.id]: [] };
       }
       return { ...current, [position.id]: [value] };
     });
   }
 
-  function requestReview() {
+  function cast() {
     if (!ballot) return;
     const found = validate(ballot, selections);
     setErrors(found);
@@ -108,21 +125,12 @@ function BallotForm({ id }: { id: string }) {
       first?.focus();
       return;
     }
-    setSubmitError("");
-    setConfirmed(false);
-    setReviewing(true);
-    window.scrollTo({ top: 0 });
-  }
-
-  function requestSubmit() {
-    if (!confirmed) return;
     setConfirming(true);
   }
 
   async function submit() {
     if (!ballot) return;
     setBusy(true);
-    setSubmitError("");
     setUnknownOutcome(false);
     try {
       const result = await elections.submitBallot(
@@ -130,67 +138,43 @@ function BallotForm({ id }: { id: string }) {
         buildSelections(ballot, selections),
         { ballotVersionId: ballot.ballot_version_id, idempotencyKey: attemptKey.current }
       );
-      setReceipt(result);
       setSelections({});
       setConfirming(false);
-      setReviewing(false);
+      setReceipt(result);
     } catch (err) {
       setConfirming(false);
       if (err instanceof ApiError) {
         if (err.status === 409 && /changed/i.test(err.message)) {
           setStale(true);
+          toast.warn("The ballot changed while you were filling it in");
         } else if (err.status === 409) {
           setAlreadyVoted(true);
+          toast.success("You have already voted");
+        } else {
+          toast.error(err.message);
         }
-        setSubmitError(err.message);
       } else {
         // The request may have committed before the response was lost.
         setUnknownOutcome(true);
-        setSubmitError("We could not confirm your vote. Check your status before trying again.");
+        toast.error("We could not confirm your vote. Check your status before trying again.");
       }
     } finally {
       setBusy(false);
     }
   }
 
-  function choiceLabel(position: BallotPosition, value: string): string {
-    if (value === ABSTAIN) return "Leave this position blank";
-    if (value === "YES") return "YES";
-    if (value === "NO") return "NO";
-    return position.candidates.find((candidate) => candidate.id === value)?.full_name ?? "—";
-  }
-
+  // The ballot is replaced by the confirmation overlay once the vote is stored.
   if (receipt) {
     return (
       <main className="app-wrap narrow">
-        <VoteRecordedNotice electionTitle={ballot?.title} />
-        <div className="panel stack" style={{ marginTop: 20 }}>
-          <div>
-            <span className="lbl">Participation reference</span>
-            <p className="code-block" style={{ marginTop: 8 }}>
-              {receipt.confirmation_token}
-            </p>
-            <p className="hint" style={{ marginTop: 8 }}>
-              Keep this private. It proves that you voted, not how you voted.
-            </p>
-          </div>
-          <div className="row">
-            <Link className="btn" href={`/elections/${id}/status`}>
-              <Icon name="shield" size="s" />
-              Check vote status
-            </Link>
-            <Link className="btn ghost" href="/elections">
-              Back to my elections
-            </Link>
-          </div>
-        </div>
+        <VoteSuccess title={ballot?.title} onDone={() => router.replace("/")} />
       </main>
     );
   }
 
-  // Post-vote state: if already voted, show access to results only after election ends
-  if (alreadyVoted && ballot) {
-    const electionEnded = new Date(ballot.ends_at) < new Date();
+  // Post-vote state: if already voted, offer results only after the election ends.
+  if (alreadyVoted) {
+    const electionEnded = ballot ? new Date(ballot.ends_at) < new Date() : false;
     return (
       <main className="app-wrap narrow">
         <div className="panel stack" style={{ marginTop: 20 }}>
@@ -208,12 +192,17 @@ function BallotForm({ id }: { id: string }) {
             ) : (
               <div className="text-sm text-gray-500">
                 <p>Results will be available after the election ends.</p>
-                <p className="mt-2">
-                  Election closes: <strong>{formatEAT(ballot.ends_at)}</strong>
-                </p>
+                {ballot ? (
+                  <p className="mt-2">
+                    Election closes: <strong>{formatEAT(ballot.ends_at)}</strong>
+                  </p>
+                ) : null}
               </div>
             )}
-            <div className="mt-4">
+            <div className="mt-4 row" style={{ justifyContent: "center" }}>
+              <Link className="btn ghost" href={`/elections/${id}/status`}>
+                Check vote status
+              </Link>
               <Link className="btn ghost" href="/elections">
                 Back to my elections
               </Link>
@@ -233,7 +222,7 @@ function BallotForm({ id }: { id: string }) {
         <span>/</span>
         <Link href={`/elections/${id}`}>{ballot?.title ?? "Election"}</Link>
         <span>/</span>
-        <span>{reviewing ? "Review" : "Ballot"}</span>
+        <span>Ballot</span>
       </nav>
 
       <div className="page-head">
@@ -242,8 +231,8 @@ function BallotForm({ id }: { id: string }) {
           <h1>{ballot?.title ?? "Loading ballot…"}</h1>
           {ballot ? (
             <p>
-              Closes {formatEAT(ballot.ends_at)}. You may leave an optional position blank. You
-              cannot change your ballot after you submit it.
+              Closes {formatEAT(ballot.ends_at)}. Choose one candidate per position. You cannot
+              change your ballot after you submit it.
               {ballot.ballot_version ? ` Ballot version ${ballot.ballot_version}.` : ""}
             </p>
           ) : null}
@@ -252,37 +241,27 @@ function BallotForm({ id }: { id: string }) {
       </div>
 
       {loadError ? (
-        <div
-          className={`banner ${loadStatus === 403 || loadStatus === 409 ? "hatch" : "bad"}`}
-          role="alert"
-        >
-          <Icon name={loadStatus === 401 ? "lock" : "alert"} />
-          <div>
-            <b>
-              {loadStatus === 401
+        <div style={{ marginBottom: 18 }}>
+          <LoadError
+            title={
+              loadStatus === 401
                 ? "Your session expired"
                 : loadStatus === 403
                   ? "The ballot is not available to you"
-                  : "Ballot unavailable"}
-            </b>
-            {loadError}
-            {loadStatus === 401 ? (
-              <>
-                {" "}
-                <Link href="/login">Sign in again</Link> to continue. Your selections are not saved.
-              </>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {alreadyVoted ? (
-        <div className="banner ok" style={{ marginBottom: 18 }}>
-          <Icon name="check" />
-          <div>
-            <b>You have already voted</b>
-            <Link href={`/elections/${id}/status`}>Check your status</Link> or view results after the election ends.
-          </div>
+                  : "Ballot unavailable"
+            }
+            message={loadStatus === 401 ? `${loadError} Your selections are not saved.` : loadError}
+            tone={loadStatus === 403 || loadStatus === 409 ? "hatch" : "bad"}
+            backHref={`/elections/${id}`}
+            backLabel="Back to the election"
+            action={
+              loadStatus === 401 ? (
+                <Link className="btn primary" href="/login">
+                  Sign in again
+                </Link>
+              ) : undefined
+            }
+          />
         </div>
       ) : null}
 
@@ -309,7 +288,8 @@ function BallotForm({ id }: { id: string }) {
           <Icon name="alert" />
           <div>
             <b>We could not confirm your vote</b>
-            {submitError} Do not submit again until you have checked your status.
+            Do not submit again until you have checked your status, in case the ballot was already
+            recorded.
             <div style={{ marginTop: 8 }}>
               <Link className="btn sm" href={`/elections/${id}/status`}>
                 Check status
@@ -329,100 +309,7 @@ function BallotForm({ id }: { id: string }) {
         </div>
       ) : null}
 
-      {ballot && reviewing ? (
-        <section className="panel stack" aria-labelledby="review-heading">
-          <div className="section-h" style={{ marginTop: 0 }}>
-            <h2 id="review-heading">Review your selections</h2>
-            <span className="mono">
-              {answered} of {ballot.positions.length} answered
-            </span>
-          </div>
-          <p className="hint">
-            Check each position. This is your last chance to change a choice. Nothing is recorded
-            until you press Submit.
-          </p>
-          <dl className="kv">
-            {ballot.positions.map((position) => {
-              const chosen = selections[position.id] ?? [];
-              return [
-                <dt key={`${position.id}-t`}>{position.title}</dt>,
-                <dd key={`${position.id}-d`}>
-                  {chosen.length === 0 ? (
-                    <span className="hint">Left blank</span>
-                  ) : (
-                    chosen.map((value) => <div key={value}>{choiceLabel(position, value)}</div>)
-                  )}
-                  <button
-                    type="button"
-                    className="btn ghost sm"
-                    style={{ marginTop: 6 }}
-                    onClick={() => {
-                      setReviewing(false);
-                      document
-                        .getElementById(`pos-${position.id}`)
-                        ?.scrollIntoView({ block: "center" });
-                    }}
-                  >
-                    Edit
-                  </button>
-                </dd>,
-              ];
-            })}
-          </dl>
-
-          <div className="banner">
-            <Icon name="lock" />
-            <div>
-              <b>Your choices stay secret</b>
-              The record proves that you voted, not how you voted. Officials and candidates cannot
-              see your choices.
-            </div>
-          </div>
-
-          <label className="field" style={{ gap: 8 }}>
-            <span className="row" style={{ alignItems: "flex-start" }}>
-              <input
-                type="checkbox"
-                checked={confirmed}
-                onChange={(event) => setConfirmed(event.target.checked)}
-                aria-describedby="confirm-help"
-              />
-              <span>
-                I understand this ballot is final and cannot be changed or submitted again.
-              </span>
-            </span>
-            <span className="hint" id="confirm-help">
-              If the network drops after you press Submit, check your status before trying again.
-            </span>
-          </label>
-
-          {submitError && !unknownOutcome ? (
-            <div className="banner bad" role="alert">
-              <Icon name="alert" />
-              <div>
-                <b>Your ballot was not accepted</b>
-                {submitError}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <button type="button" className="btn ghost" onClick={() => setReviewing(false)}>
-              Back to ballot
-            </button>
-            <button
-              type="button"
-              className="btn primary lg"
-              onClick={requestSubmit}
-              disabled={!confirmed || busy || alreadyVoted || stale}
-            >
-              {busy ? "Submitting…" : "Submit ballot"}
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      {ballot && !reviewing ? (
+      {ballot ? (
         <>
           <div className="banner" style={{ marginBottom: 18 }}>
             <Icon name="lock" />
@@ -512,13 +399,24 @@ function BallotForm({ id }: { id: string }) {
                         <span className={`box${multi ? "" : " rd"}`}>
                           {multi ? <Icon name="check" size="s" /> : null}
                         </span>
-                        <span
-                          className="ph r11"
-                          style={{ width: 48, flex: "none" }}
-                          aria-hidden="true"
-                        >
-                          <span style={{ padding: "0 4px" }}>{candidate.ballot_number}</span>
-                        </span>
+                        {candidate.photo_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={candidate.photo_url}
+                            alt=""
+                            width={44}
+                            height={44}
+                            className="ballot-photo"
+                          />
+                        ) : (
+                          <span
+                            className="ph r11"
+                            style={{ width: 44, flex: "none" }}
+                            aria-hidden="true"
+                          >
+                            <span style={{ padding: "0 4px" }}>{candidate.ballot_number}</span>
+                          </span>
+                        )}
                         <span style={{ minWidth: 0 }}>
                           <span className="nm">{candidate.full_name}</span>
                           {candidate.manifesto ? (
@@ -561,16 +459,6 @@ function BallotForm({ id }: { id: string }) {
             );
           })}
 
-          {submitError && !unknownOutcome ? (
-            <div className="banner bad" role="alert" style={{ marginTop: 18 }}>
-              <Icon name="alert" />
-              <div>
-                <b>Your ballot was not accepted</b>
-                {submitError}
-              </div>
-            </div>
-          ) : null}
-
           <div className="ballot-actions">
             <span className="hint">
               {answered} of {ballot.positions.length} positions answered
@@ -582,10 +470,10 @@ function BallotForm({ id }: { id: string }) {
               <button
                 type="button"
                 className="btn primary lg"
-                onClick={requestReview}
+                onClick={cast}
                 disabled={blocked || busy}
               >
-                Review selections
+                Cast vote
               </button>
             </div>
           </div>
@@ -594,8 +482,8 @@ function BallotForm({ id }: { id: string }) {
 
       <ConfirmDialog
         open={confirming}
-        title="Submit this ballot?"
-        confirmLabel="Submit ballot"
+        title="Cast your vote?"
+        confirmLabel="Cast vote"
         busy={busy}
         onClose={() => setConfirming(false)}
         onConfirm={submit}

@@ -17,9 +17,10 @@ import (
 	"campvote/apps/api/internal/models"
 )
 
-// MinimumDuration is the shortest schedule an election may be given. A shorter
-// window is almost always a timezone or typo mistake, not a real contest.
-const MinimumDuration = time.Hour
+// MinimumDuration is the shortest schedule an election may be given. Officials
+// run short demonstration or runoff polls, so a couple of minutes is allowed;
+// anything shorter is almost always a typo.
+const MinimumDuration = 2 * time.Minute
 
 // DisplayTimezone is the human-facing zone for MMU. Timestamps are stored and
 // returned in UTC; clients format them in this zone for display only.
@@ -28,6 +29,13 @@ const DisplayTimezone = "Africa/Kampala"
 // SystemActor is the actor recorded on transitions the scheduler or a lazy
 // request made, rather than a person.
 const SystemActor = "system"
+
+// OnClosed runs after an election has been persisted as CLOSED. It is
+// registered by the HTTP layer so this package stays free of tally and
+// eligibility concerns, which import lifecycle and would otherwise form a
+// cycle. A hook failure is logged but never reopens the election: the close is
+// the durable fact, and Read retries a missing snapshot.
+var OnClosed func(db *gorm.DB, election *models.Election, at time.Time) error
 
 var (
 	// ErrIllegalTransition is returned for a state pair the machine forbids.
@@ -49,49 +57,25 @@ func (e *ConfigError) Error() string { return "election configuration is not val
 // FieldErrors lets respond.WriteError render a 422 with the field map.
 func (e *ConfigError) FieldErrors() map[string]string { return e.Fields }
 
-// transitionMatrix is the whole state machine. OPEN and FINALIZED are reached
-// by the scheduler and by certification respectively; the transition endpoint
-// refuses to set them directly.
+// transitionMatrix is the whole state machine. It has three stages:
+//
+//	DRAFT  -> OPEN    (publish; the scheduler also opens at StartsAt)
+//	DRAFT  -> CLOSED  (a lapsed draft; Ensure closes the clock's leftovers)
+//	OPEN   -> CLOSED  (the scheduler closes at EndsAt, or an official early)
+//	CLOSED ->         (terminal)
+//
+// A draft is normally opened by the clock at StartsAt; closing it directly is
+// reserved for the clock when a window lapses without the ballot ever being
+// ready, so no election is left unresolved forever.
 var transitionMatrix = map[string][]string{
 	models.ElectionStatusDraft: {
-		models.ElectionStatusRegistration,
-		models.ElectionStatusPending,
-		models.ElectionStatusScheduled,
-		models.ElectionStatusCancelled,
-	},
-	models.ElectionStatusRegistration: {
-		models.ElectionStatusPending,
-		models.ElectionStatusScheduled,
-		models.ElectionStatusCancelled,
-	},
-	models.ElectionStatusPending: {
-		models.ElectionStatusRegistration,
-		models.ElectionStatusScheduled,
-		models.ElectionStatusCancelled,
-	},
-	models.ElectionStatusScheduled: {
 		models.ElectionStatusOpen,
 		models.ElectionStatusClosed,
-		models.ElectionStatusCancelled,
 	},
 	models.ElectionStatusOpen: {
 		models.ElectionStatusClosed,
-		models.ElectionStatusCancelled,
 	},
-	models.ElectionStatusClosed: {
-		models.ElectionStatusReview,
-		models.ElectionStatusFinalized,
-		models.ElectionStatusArchived,
-	},
-	models.ElectionStatusReview: {
-		models.ElectionStatusFinalized,
-		models.ElectionStatusArchived,
-	},
-	models.ElectionStatusFinalized: {
-		models.ElectionStatusArchived,
-	},
-	models.ElectionStatusArchived:  {},
-	models.ElectionStatusCancelled: {},
+	models.ElectionStatusClosed: {},
 }
 
 // CanTransition reports whether the state machine allows from -> to.
@@ -118,12 +102,10 @@ func KnownStatus(status string) bool {
 }
 
 // IsFrozen reports whether configuration edits need the audited exception.
-// Configuration freezes when voting opens and stays frozen afterwards.
+// Configuration freezes when voting opens (OPEN) and stays frozen once closed.
 func IsFrozen(status string) bool {
 	switch status {
-	case models.ElectionStatusOpen, models.ElectionStatusClosed,
-		models.ElectionStatusReview, models.ElectionStatusFinalized,
-		models.ElectionStatusArchived, models.ElectionStatusCancelled:
+	case models.ElectionStatusOpen, models.ElectionStatusClosed:
 		return true
 	}
 	return false
@@ -169,8 +151,8 @@ func ValidateBasics(e *models.Election, at time.Time, scheduling bool) error {
 	if !validResultPolicy(e.ResultPolicy) {
 		fields["result_policy"] = "choose LIVE, AFTER_CLOSE or CERTIFIED_ONLY"
 	}
-	if !validDomains(e.AllowedDomains) {
-		fields["allowed_domains"] = "use comma-separated institutional domains such as @std.must.ac.ug"
+	if !validDomains(e.AllowedDomain) {
+		fields["allowed_domain"] = "use a single institutional domain such as std.mast.ac.ug"
 	}
 	switch {
 	case e.StartsAt.IsZero() || e.EndsAt.IsZero():
@@ -290,10 +272,6 @@ func Apply(db *gorm.DB, e *models.Election, to, actorID, reason, ip string, at t
 	}
 	at = at.UTC()
 	switch to {
-	case models.ElectionStatusScheduled:
-		if err := ValidateConfiguration(db, e, at, true); err != nil {
-			return nil, err
-		}
 	case models.ElectionStatusOpen:
 		if err := ReadyToOpen(db, e, at); err != nil {
 			return nil, err
@@ -302,23 +280,20 @@ func Apply(db *gorm.DB, e *models.Election, to, actorID, reason, ip string, at t
 		if at.Before(e.EndsAt) && strings.TrimSpace(reason) == "" {
 			return nil, fmt.Errorf("%w: closing before the scheduled end", ErrReasonRequired)
 		}
-	case models.ElectionStatusCancelled:
-		if strings.TrimSpace(reason) == "" {
-			return nil, fmt.Errorf("%w: cancelling an election", ErrReasonRequired)
-		}
 	}
 	return persist(db, e, to, actorID, reason, ip, at)
 }
 
 // Ensure reconciles the stored status with server time. It is the lazy safety
-// net for a missed scheduler tick: after EndsAt it closes, and it never opens
-// an election whose configuration is invalid.
+// net for a missed scheduler tick: a draft or an open election closes once its
+// window has passed, and a fully configured draft opens when its start time is
+// reached. It never opens an election whose configuration is invalid.
 func Ensure(db *gorm.DB, e *models.Election, at time.Time) error {
 	at = at.UTC()
 	switch e.Status {
-	case models.ElectionStatusScheduled:
+	case models.ElectionStatusDraft:
 		if !at.Before(e.EndsAt) {
-			return ensureApply(db, e, models.ElectionStatusClosed, "scheduled end reached without opening", at)
+			return ensureApply(db, e, models.ElectionStatusClosed, "schedule ended before the election opened", at)
 		}
 		if !at.Before(e.StartsAt) {
 			if err := ReadyToOpen(db, e, at); err != nil {
@@ -354,8 +329,9 @@ func SyncAll(db *gorm.DB, at time.Time) (int, error) {
 	at = at.UTC()
 	var due []models.Election
 	if err := db.Where(
-		"(status = ? AND starts_at <= ?) OR (status = ? AND ends_at <= ?)",
-		models.ElectionStatusScheduled, at,
+		"(status = ? AND starts_at <= ?) OR (status = ? AND ends_at <= ?) OR (status = ? AND ends_at <= ?)",
+		models.ElectionStatusDraft, at,
+		models.ElectionStatusDraft, at,
 		models.ElectionStatusOpen, at,
 	).Find(&due).Error; err != nil {
 		return 0, err
@@ -408,23 +384,23 @@ func persist(db *gorm.DB, e *models.Election, to, actorID, reason, ip string, at
 	if err := db.Where("id = ?", e.ID).First(e).Error; err != nil {
 		return nil, err
 	}
+	if to == models.ElectionStatusClosed && OnClosed != nil {
+		if hookErr := OnClosed(db, e, at); hookErr != nil {
+			// Closing is not undone by a tally failure. Read retries a missing
+			// snapshot, and the scheduler's next pass would close the same
+			// election only if it were still open, which it is not.
+			log.Printf("lifecycle: tally on close for election %s failed: %v", e.ID, hookErr)
+		}
+	}
 	return e, nil
 }
 
 func auditAction(to string) string {
 	switch to {
-	case models.ElectionStatusScheduled:
-		return models.AuditActionElectionScheduled
 	case models.ElectionStatusOpen:
 		return models.AuditActionElectionOpened
 	case models.ElectionStatusClosed:
 		return models.AuditActionElectionClosed
-	case models.ElectionStatusCancelled:
-		return models.AuditActionElectionCancelled
-	case models.ElectionStatusReview:
-		return models.AuditActionElectionReview
-	case models.ElectionStatusArchived:
-		return models.AuditActionElectionArchived
 	default:
 		return models.AuditActionElectionUpdated
 	}

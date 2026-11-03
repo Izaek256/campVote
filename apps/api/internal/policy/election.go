@@ -191,18 +191,18 @@ func ResultsVisible(e models.Election, now time.Time) (bool, string) {
 	case models.ResultPolicyLive:
 		return true, ""
 	case models.ResultPolicyAfterClose:
-		switch e.Status {
-		case models.ElectionStatusClosed, models.ElectionStatusReview,
-			models.ElectionStatusFinalized, models.ElectionStatusArchived:
+		if e.Status == models.ElectionStatusClosed {
 			return true, ""
 		}
 		return false, "Results are published after voting closes"
 	case models.ResultPolicyCertifiedOnly:
-		switch e.Status {
-		case models.ElectionStatusFinalized, models.ElectionStatusArchived:
+		// The three-stage lifecycle has no separate finalised state, so a
+		// certified-only election publishes once voting has closed. Certifying
+		// a snapshot still pins it; it no longer moves the election on.
+		if e.Status == models.ElectionStatusClosed {
 			return true, ""
 		}
-		return false, "Results are published only after certification"
+		return false, "Results are published only after voting closes"
 	default:
 		// An unrecognised policy is not permission to publish.
 		return false, "This election has no recognised results policy"
@@ -279,9 +279,9 @@ func CertifyDecision(db *gorm.DB, a *Authority, actor Actor) (bool, string) {
 		return false, "the election creator cannot certify its results"
 	}
 	switch a.Election.Status {
-	case models.ElectionStatusClosed, models.ElectionStatusReview:
+	case models.ElectionStatusClosed:
 	default:
-		return false, "results can be certified only after voting has closed and before finalisation"
+		return false, "results can be certified only after voting has closed"
 	}
 
 	var officials []string

@@ -6,31 +6,19 @@ import { Icon } from "@/components/icon";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
 import { Countdown } from "@/components/countdown";
+import { LoadError } from "@/components/load-error";
 import { StatusChip } from "@/components/status-chip";
+import { useToast } from "@/components/toast";
 import { ApiError, elections } from "@/lib/api";
 import { categoryLabel, formatEAT, formatNumber, statusLabel } from "@/lib/format";
 import type { Election, EligibilityDecision } from "@/lib/types";
 
-const railStates = [
-  "DRAFT",
-  "REGISTRATION",
-  "PENDING_APPROVAL",
-  "SCHEDULED",
-  "OPEN",
-  "CLOSED",
-  "RESULTS_UNDER_REVIEW",
-  "FINALIZED",
-] as const;
+const railStates = ["DRAFT", "OPEN", "CLOSED"] as const;
 
 const railLabels: Record<string, string> = {
   DRAFT: "Draft",
-  REGISTRATION: "Registration",
-  PENDING_APPROVAL: "Approval",
-  SCHEDULED: "Scheduled",
   OPEN: "Open",
   CLOSED: "Closed",
-  RESULTS_UNDER_REVIEW: "Review",
-  FINALIZED: "Finalized",
 };
 
 function LifecycleRail({ status }: { status: Election["status"] }) {
@@ -50,9 +38,10 @@ function LifecycleRail({ status }: { status: Election["status"] }) {
 }
 
 function ElectionView({ id }: { id: string }) {
+  const toast = useToast();
   const [election, setElection] = useState<Election | null>(null);
   const [eligibility, setEligibility] = useState<EligibilityDecision | null>(null);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -64,8 +53,10 @@ function ElectionView({ id }: { id: string }) {
         if (active) setElection(found);
       })
       .catch((err) => {
-        if (active)
-          setError(err instanceof ApiError ? err.message : "Election could not be loaded.");
+        if (!active) return;
+        const message = err instanceof ApiError ? err.message : "Election could not be loaded.";
+        setLoadError(message);
+        toast.error(message);
       });
     elections
       .eligibility(id)
@@ -79,23 +70,17 @@ function ElectionView({ id }: { id: string }) {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, toast]);
 
-  if (error) {
+  if (loadError) {
     return (
       <main className="app-wrap narrow">
-        <div className="banner bad" role="alert">
-          <Icon name="alert" />
-          <div>
-            <b>We could not open this election</b>
-            {error}
-          </div>
-        </div>
-        <p style={{ marginTop: 16 }}>
-          <Link className="btn" href="/elections">
-            Back to elections
-          </Link>
-        </p>
+        <LoadError
+          title="We could not open this election"
+          message={loadError}
+          backHref="/elections"
+          backLabel="Back to elections"
+        />
       </main>
     );
   }
@@ -114,11 +99,10 @@ function ElectionView({ id }: { id: string }) {
 
   const voted = Boolean(election.my_vote_status?.voted);
   const canVote = Boolean(eligibility?.eligible) && election.accepting_votes && !voted;
+  const ended = election.status === "CLOSED" || new Date(election.ends_at).getTime() <= Date.now();
   const applicationsOpen =
     Boolean(eligibility?.eligible) &&
-    !["DRAFT", "CLOSED", "RESULTS_UNDER_REVIEW", "FINALIZED", "ARCHIVED", "CANCELLED"].includes(
-      election.status
-    ) &&
+    election.status === "OPEN" &&
     new Date(election.starts_at).getTime() > Date.now();
 
   return (
@@ -219,13 +203,16 @@ function ElectionView({ id }: { id: string }) {
               <span className="lbl">Status</span>
               <b style={{ fontSize: 20 }}>{statusLabel(election.status)}</b>
               <span className="hint">
-                Voting {election.status === "SCHEDULED" ? "opens" : "opened"}{" "}
-                {formatEAT(election.starts_at)}.
+                {ended
+                  ? `Voting closed ${formatEAT(election.ends_at)}.`
+                  : `Voting opens ${formatEAT(election.starts_at)}.`}
               </span>
-              <Link className="btn block" href={`/elections/${election.id}/results`}>
-                <Icon name="chart" />
-                View results
-              </Link>
+              {ended ? (
+                <Link className="btn block" href={`/elections/${election.id}/results`}>
+                  <Icon name="chart" />
+                  View results
+                </Link>
+              ) : null}
             </div>
           )}
 

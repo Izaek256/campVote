@@ -3,21 +3,27 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
+import { useToast } from "@/components/toast";
 import { ApiError, candidates, upload } from "@/lib/api";
+import { STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 import { formatEAT } from "@/lib/format";
 import type { CandidateApplicationView } from "@/lib/types";
 
 function Apply({ id }: { id: string }) {
+  const toast = useToast();
   const [view, setView] = useState<CandidateApplicationView | null>(null);
-  const [loadError, setLoadError] = useState("");
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
   const [positionId, setPositionId] = useState("");
   const [fullName, setFullName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [sex, setSex] = useState("");
+  const [religion, setReligion] = useState("");
   const [slogan, setSlogan] = useState("");
   const [bio, setBio] = useState("");
   const [manifesto, setManifesto] = useState("");
@@ -25,7 +31,12 @@ function Apply({ id }: { id: string }) {
   const [contactPhone, setContactPhone] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [manifestoUrl, setManifestoUrl] = useState("");
-  const [uploading, setUploading] = useState<"photo" | "manifesto" | "">("");
+  const [passportPhotoUrl, setPassportPhotoUrl] = useState("");
+  const [idDocumentUrl, setIdDocumentUrl] = useState("");
+  const [transcriptUrl, setTranscriptUrl] = useState("");
+  const [uploading, setUploading] = useState<
+    "photo" | "manifesto" | "passport" | "id" | "transcript" | ""
+  >("");
 
   useEffect(() => {
     candidates
@@ -34,30 +45,33 @@ function Apply({ id }: { id: string }) {
         setView(data);
         setPositionId(data.positions[0]?.id ?? "");
       })
-      .catch((err) =>
-        setLoadError(err instanceof ApiError ? err.message : "This election could not be loaded.")
-      );
-  }, [id]);
+      .catch((err) => {
+        const message =
+          err instanceof ApiError ? err.message : "This election could not be loaded.";
+        setLoadError(message);
+        toast.error(message);
+      });
+  }, [id, toast]);
 
-  async function pickFile(kind: "photo" | "manifesto", file: File | undefined) {
+  async function pickFile(
+    kind: "photo" | "manifesto" | "passport" | "id" | "transcript",
+    file: File | undefined
+  ) {
     if (!file) return;
-    setError("");
     setUploading(kind);
     try {
+      const isPdf = kind === "manifesto" || kind === "transcript";
       const ref = await upload(file, {
-        accepts: kind === "photo" ? "image" : "pdf",
-        maxSize: (kind === "photo" ? 2 : 5) * 1024 * 1024,
+        accepts: isPdf ? "pdf" : "image",
+        maxSize: (isPdf ? 5 : 2) * 1024 * 1024,
       });
       if (kind === "photo") setPhotoUrl(ref.url);
-      else setManifestoUrl(ref.url);
+      else if (kind === "manifesto") setManifestoUrl(ref.url);
+      else if (kind === "passport") setPassportPhotoUrl(ref.url);
+      else if (kind === "transcript") setTranscriptUrl(ref.url);
+      else setIdDocumentUrl(ref.url);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : kind === "photo"
-            ? "The photo could not be uploaded."
-            : "The manifesto could not be uploaded."
-      );
+      toast.error(err instanceof ApiError ? err.message : "That document could not be uploaded.");
     } finally {
       setUploading("");
     }
@@ -65,13 +79,32 @@ function Apply({ id }: { id: string }) {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setError("");
     if (!positionId) {
-      setError("Choose the position you are applying for.");
+      toast.error("Choose the position you are applying for.");
       return;
     }
     if (fullName.trim().length < 2) {
-      setError("Enter the name that should appear on the ballot.");
+      toast.error("Enter the name that should appear on the ballot.");
+      return;
+    }
+    if (!dateOfBirth) {
+      toast.error("Enter your date of birth.");
+      return;
+    }
+    if (sex !== "MALE" && sex !== "FEMALE") {
+      toast.error("Select your sex.");
+      return;
+    }
+    if (!transcriptUrl) {
+      toast.error("Upload your partial transcript.");
+      return;
+    }
+    if (!passportPhotoUrl) {
+      toast.error("Upload your passport photo.");
+      return;
+    }
+    if (!idDocumentUrl) {
+      toast.error("Upload a photo of your student ID.");
       return;
     }
     setBusy(true);
@@ -79,17 +112,25 @@ function Apply({ id }: { id: string }) {
       await candidates.apply(id, {
         position_id: positionId,
         full_name: fullName.trim(),
+        date_of_birth: dateOfBirth,
+        sex,
+        religion: religion.trim(),
         slogan: slogan.trim(),
         bio: bio.trim(),
         manifesto: manifesto.trim(),
         manifesto_url: manifestoUrl,
         photo_url: photoUrl,
+        passport_photo_url: passportPhotoUrl,
+        id_document_url: idDocumentUrl,
+        partial_transcript_url: transcriptUrl,
         contact_email: contactEmail.trim(),
         contact_phone: contactPhone.trim(),
       });
       setDone(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Your application could not be submitted.");
+      toast.error(
+        err instanceof ApiError ? err.message : "Your application could not be submitted."
+      );
     } finally {
       setBusy(false);
     }
@@ -98,18 +139,12 @@ function Apply({ id }: { id: string }) {
   if (loadError) {
     return (
       <main className="app-wrap narrow">
-        <div className="banner bad" role="alert">
-          <Icon name="alert" />
-          <div>
-            <b>We could not open this application</b>
-            {loadError}
-          </div>
-        </div>
-        <p style={{ marginTop: 16 }}>
-          <Link className="btn" href="/elections">
-            Back to elections
-          </Link>
-        </p>
+        <LoadError
+          title="We could not open this application"
+          message={loadError}
+          backHref="/elections"
+          backLabel="Back to elections"
+        />
       </main>
     );
   }
@@ -151,6 +186,7 @@ function Apply({ id }: { id: string }) {
 
   const closed = !view.accepting_applications;
   const blocked = closed || !view.eligible;
+  const selectedPosition = view.positions.find((position) => position.id === positionId);
 
   return (
     <main className="app-wrap">
@@ -170,22 +206,13 @@ function Apply({ id }: { id: string }) {
         </div>
       </div>
 
-      {error ? (
-        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" />
-          <div>
-            <b>We could not submit that</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
-
       {closed ? (
         <div className="banner hatch" role="alert" style={{ marginBottom: 16 }}>
           <Icon name="clock" />
           <div>
             <b>Applications are closed</b>
-            {view.application_reason ?? "This election is no longer accepting applications."}
+            {view.application_reason ??
+              "Applications open when the election is in Registration and close when voting opens."}
           </div>
         </div>
       ) : null}
@@ -193,9 +220,16 @@ function Apply({ id }: { id: string }) {
         <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
           <Icon name="alert" />
           <div>
-            <b>You are not on this election&apos;s roster</b>
+            <b>You are not eligible to stand in this election</b>
             {view.eligibility_reason ?? "Only eligible voters may stand for election."}
           </div>
+        </div>
+      ) : null}
+
+      {selectedPosition?.requirements ? (
+        <div className="panel stack" style={{ marginBottom: 16 }}>
+          <span className="lbl">Requirements for {selectedPosition.title}</span>
+          <p style={{ whiteSpace: "pre-wrap" }}>{selectedPosition.requirements}</p>
         </div>
       ) : null}
 
@@ -231,6 +265,29 @@ function Apply({ id }: { id: string }) {
             ) : null}
           </div>
 
+          {view.applicant ? (
+            <div className="form-grid">
+              <div className="field">
+                <label htmlFor="programme">Programme</label>
+                <input
+                  id="programme"
+                  className="in"
+                  value={view.applicant.programme ?? ""}
+                  readOnly
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="study-year">Year of study</label>
+                <input
+                  id="study-year"
+                  className="in"
+                  value={view.applicant.study_year ?? ""}
+                  readOnly
+                />
+              </div>
+            </div>
+          ) : null}
+
           <div className="form-grid">
             <div className="field">
               <label htmlFor="full-name">Name on the ballot *</label>
@@ -245,6 +302,50 @@ function Apply({ id }: { id: string }) {
               />
             </div>
             <div className="field">
+              <label htmlFor="date-of-birth">Date of birth *</label>
+              <input
+                id="date-of-birth"
+                className="in"
+                type="date"
+                value={dateOfBirth}
+                onChange={(event) => setDateOfBirth(event.target.value)}
+                disabled={blocked}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="sex">Sex *</label>
+              <select
+                id="sex"
+                className="sel"
+                value={sex}
+                onChange={(event) => setSex(event.target.value)}
+                disabled={blocked}
+                required
+              >
+                <option value="">Select…</option>
+                <option value="MALE">Male</option>
+                <option value="FEMALE">Female</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="religion">Religion (optional)</label>
+              <input
+                id="religion"
+                className="in"
+                value={religion}
+                onChange={(event) => setReligion(event.target.value)}
+                disabled={blocked}
+                maxLength={100}
+              />
+            </div>
+          </div>
+
+          <div className="form-grid">
+            <div className="field">
               <label htmlFor="slogan">Slogan (optional)</label>
               <input
                 id="slogan"
@@ -254,6 +355,15 @@ function Apply({ id }: { id: string }) {
                 disabled={blocked}
                 maxLength={200}
                 placeholder="One line voters will remember"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="registration-number">Registration number</label>
+              <input
+                id="registration-number"
+                className="in"
+                value={view.applicant?.registration_number ?? ""}
+                readOnly
               />
             </div>
           </div>
@@ -296,7 +406,7 @@ function Apply({ id }: { id: string }) {
                 value={contactEmail}
                 onChange={(event) => setContactEmail(event.target.value)}
                 disabled={blocked}
-                placeholder="you@std.must.ac.ug"
+                placeholder={`you@${STUDENT_EMAIL_DOMAIN}`}
               />
             </div>
             <div className="field">
@@ -314,26 +424,74 @@ function Apply({ id }: { id: string }) {
 
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="photo">Photo (JPEG or PNG, max 2 MB)</label>
+              <label htmlFor="passport-photo">Passport photo (JPEG or PNG, max 2 MB) *</label>
               <input
-                id="photo"
+                id="passport-photo"
                 className="in"
                 type="file"
                 accept="image/jpeg,image/png"
                 disabled={blocked || uploading !== ""}
-                onChange={(event) => pickFile("photo", event.target.files?.[0])}
+                onChange={(event) => pickFile("passport", event.target.files?.[0])}
+                required
               />
-              {uploading === "photo" ? <span className="hint">Uploading photo…</span> : null}
-              {photoUrl ? (
+              {uploading === "passport" ? (
+                <span className="hint">Uploading passport photo…</span>
+              ) : null}
+              {passportPhotoUrl ? (
                 <span className="fileline">
                   <Icon name="check" size="s" />
-                  Photo uploaded
+                  Passport photo uploaded
                   <span className="mono">ready</span>
                 </span>
               ) : null}
             </div>
             <div className="field">
-              <label htmlFor="manifesto-file">Manifesto PDF (max 5 MB)</label>
+              <label htmlFor="student-id">Student ID photo (JPEG or PNG, max 2 MB) *</label>
+              <input
+                id="student-id"
+                className="in"
+                type="file"
+                accept="image/jpeg,image/png"
+                disabled={blocked || uploading !== ""}
+                onChange={(event) => pickFile("id", event.target.files?.[0])}
+                required
+              />
+              {uploading === "id" ? <span className="hint">Uploading student ID…</span> : null}
+              {idDocumentUrl ? (
+                <span className="fileline">
+                  <Icon name="check" size="s" />
+                  Student ID uploaded
+                  <span className="mono">ready</span>
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="transcript-file">Partial transcript (PDF, max 5 MB) *</label>
+              <input
+                id="transcript-file"
+                className="in"
+                type="file"
+                accept="application/pdf"
+                disabled={blocked || uploading !== ""}
+                onChange={(event) => pickFile("transcript", event.target.files?.[0])}
+                required
+              />
+              {uploading === "transcript" ? (
+                <span className="hint">Uploading transcript…</span>
+              ) : null}
+              {transcriptUrl ? (
+                <span className="fileline">
+                  <Icon name="check" size="s" />
+                  Transcript uploaded
+                  <span className="mono">ready</span>
+                </span>
+              ) : null}
+            </div>
+            <div className="field">
+              <label htmlFor="manifesto-file">Manifesto PDF (optional, max 5 MB)</label>
               <input
                 id="manifesto-file"
                 className="in"
@@ -353,6 +511,26 @@ function Apply({ id }: { id: string }) {
                 </span>
               ) : null}
             </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="photo">Ballot photo (optional, JPEG or PNG, max 2 MB)</label>
+            <input
+              id="photo"
+              className="in"
+              type="file"
+              accept="image/jpeg,image/png"
+              disabled={blocked || uploading !== ""}
+              onChange={(event) => pickFile("photo", event.target.files?.[0])}
+            />
+            {uploading === "photo" ? <span className="hint">Uploading photo…</span> : null}
+            {photoUrl ? (
+              <span className="fileline">
+                <Icon name="check" size="s" />
+                Photo uploaded
+                <span className="mono">ready</span>
+              </span>
+            ) : null}
           </div>
 
           <div className="row">

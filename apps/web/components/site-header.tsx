@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useAuth, isStaff } from "./auth-provider";
+import { useAuth, isAdmin } from "./auth-provider";
 import { Icon } from "./icon";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -38,7 +38,7 @@ export function SiteHeader() {
           >
             Elections
           </Link>
-          {isStaff(user) ? <Link href="/staff">Staff console</Link> : null}
+          {isAdmin(user) ? <Link href="/staff">Admin panel</Link> : null}
           {user ? (
             <Link className={pathname === "/candidate" ? "on" : ""} href="/candidate">
               My candidacy
@@ -62,7 +62,7 @@ export function SiteHeader() {
             </>
           ) : (
             <Link className="btn primary sm" href="/login">
-              Sign in with MMU account
+              Sign in
             </Link>
           )}
         </span>

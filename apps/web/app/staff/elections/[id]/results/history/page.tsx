@@ -6,6 +6,7 @@ import { Icon } from "@/components/icon";
 import { RequireAuth } from "@/components/require-auth";
 import { ResultStatusBadge } from "@/components/result-status-badge";
 import { StaffShell } from "@/components/staff-shell";
+import { useToast } from "@/components/toast";
 import { ApiError, elections } from "@/lib/api";
 import { formatEAT } from "@/lib/format";
 import type { ResultSnapshot, ResultsHistory } from "@/lib/types";
@@ -19,8 +20,8 @@ import type { ResultSnapshot, ResultsHistory } from "@/lib/types";
  * because a certified record is immutable by design.
  */
 function History({ id }: { id: string }) {
+  const toast = useToast();
   const [history, setHistory] = useState<ResultsHistory | null>(null);
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ function History({ id }: { id: string }) {
       })
       .catch((err) => {
         if (!active) return;
-        setError(err instanceof ApiError ? err.message : "History could not be loaded.");
+        toast.error(err instanceof ApiError ? err.message : "History could not be loaded.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -40,7 +41,7 @@ function History({ id }: { id: string }) {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, toast.error]);
 
   const superseded = (snapshot: ResultSnapshot) => snapshot.status === "SUPERSEDED";
 
@@ -67,17 +68,7 @@ function History({ id }: { id: string }) {
         </div>
       </div>
 
-      {error ? (
-        <div className="banner bad" role="alert">
-          <Icon name="alert" />
-          <div>
-            <b>History could not be loaded</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
-
-      {loading && !error ? (
+      {loading ? (
         <div className="panel stack" role="status" aria-busy="true">
           <span className="skel" style={{ height: 18, width: "30%" }} />
           <span className="skel" style={{ height: 14 }} />
@@ -213,7 +204,7 @@ function History({ id }: { id: string }) {
 export default function ResultHistoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth>
+    <RequireAuth adminOnly>
       <History id={id} />
     </RequireAuth>
   );

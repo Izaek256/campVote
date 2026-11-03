@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ElectionTabs } from "@/components/election-tabs";
 import { EmptyState } from "@/components/empty-state";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
+import { useToast } from "@/components/toast";
 import { ApiError, candidates, positions } from "@/lib/api";
 import { candidateStatusClass, candidateStatusLabel, formatEAT } from "@/lib/format";
 import type { Candidate, Position } from "@/lib/types";
@@ -15,11 +16,11 @@ import type { Candidate, Position } from "@/lib/types";
 const filters = ["ALL", "NOMINATED", "APPROVED", "REJECTED", "WITHDRAWN"] as const;
 
 function Review({ id }: { id: string }) {
+  const toast = useToast();
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [items, setItems] = useState<Candidate[] | null>(null);
   const [configuredPositions, setConfiguredPositions] = useState<Position[]>([]);
   const [filter, setFilter] = useState<(typeof filters)[number]>("ALL");
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState<Candidate | null>(null);
   const [decision, setDecision] = useState<"approve" | "reject">("approve");
@@ -33,11 +34,12 @@ function Review({ id }: { id: string }) {
       ]);
       setItems(list.candidates ?? []);
       setConfiguredPositions(configured.positions ?? []);
-      setError("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Candidates could not be loaded.");
+      const message = err instanceof ApiError ? err.message : "Candidates could not be loaded.";
+      setLoadError(message);
+      toast.error(message);
     }
-  }, [id, filter, positions.list]);
+  }, [id, filter, toast]);
 
   useEffect(() => {
     load();
@@ -47,37 +49,35 @@ function Review({ id }: { id: string }) {
     setReviewing(candidate);
     setDecision(next);
     setReason("");
-    setError("");
-    setNotice("");
   }
 
   async function submit() {
     if (!reviewing) return;
     if (!reason.trim()) {
-      setError("Add a reason before recording the decision.");
+      toast.error("Add a reason before recording the decision.");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       if (decision === "approve") {
         await candidates.approve(id, reviewing.id, reason.trim());
-        setNotice(`${reviewing.full_name} was approved.`);
+        toast.success(`${reviewing.full_name} was approved.`);
       } else {
         await candidates.reject(id, reviewing.id, reason.trim());
-        setNotice(`${reviewing.full_name} was rejected.`);
+        toast.success(`${reviewing.full_name} was rejected.`);
       }
       setReviewing(null);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The decision was refused.");
+      toast.error(err instanceof ApiError ? err.message : "The decision was refused.");
     } finally {
       setBusy(false);
     }
   }
 
-  const positionTitle = (positionId: string) =>
-    configuredPositions.find((position) => position.id === positionId)?.title ?? "Position";
+  const positionFor = (positionId: string) =>
+    configuredPositions.find((position) => position.id === positionId);
+  const positionTitle = (positionId: string) => positionFor(positionId)?.title ?? "Position";
 
   return (
     <StaffShell title="Candidates">
@@ -91,24 +91,6 @@ function Review({ id }: { id: string }) {
           Back to election
         </Link>
       </div>
-
-      <ElectionTabs id={id} />
-
-      {error ? (
-        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" />
-          <div>
-            <b>Something needs attention</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
-      {notice ? (
-        <div className="banner ok" role="status" style={{ marginBottom: 16 }}>
-          <Icon name="check" />
-          <div>{notice}</div>
-        </div>
-      ) : null}
 
       <div className="row" style={{ marginBottom: 16 }}>
         {filters.map((value) => (
@@ -124,7 +106,14 @@ function Review({ id }: { id: string }) {
         ))}
       </div>
 
-      {!items && !error ? (
+      {loadError ? (
+        <LoadError
+          title="We could not load the candidates"
+          message={loadError}
+          backHref={`/staff/elections/${id}`}
+          backLabel="Back to the election"
+        />
+      ) : !items ? (
         <div className="panel stack" aria-busy="true">
           <span className="skel" style={{ height: 18, width: "30%" }} />
           <span className="skel" style={{ height: 14 }} />
@@ -202,6 +191,106 @@ function Review({ id }: { id: string }) {
                   ) : null}
                 </div>
               </div>
+              <div className="form-grid" style={{ marginTop: 16 }}>
+                <div className="field">
+                  <span className="lbl">Registration number</span>
+                  <span>{candidate.registration_number || "—"}</span>
+                </div>
+                <div className="field">
+                  <span className="lbl">Programme / year</span>
+                  <span>
+                    {candidate.programme || "—"}
+                    {candidate.study_year ? ` · Year ${candidate.study_year}` : ""}
+                  </span>
+                </div>
+                <div className="field">
+                  <span className="lbl">Date of birth</span>
+                  <span>{candidate.date_of_birth?.slice(0, 10) || "—"}</span>
+                </div>
+                <div className="field">
+                  <span className="lbl">Sex</span>
+                  <span>{candidate.sex || "—"}</span>
+                </div>
+                <div className="field">
+                  <span className="lbl">Religion</span>
+                  <span>{candidate.religion || "—"}</span>
+                </div>
+                <div className="field">
+                  <span className="lbl">Position requirements</span>
+                  <span style={{ whiteSpace: "pre-wrap" }}>
+                    {positionFor(candidate.position_id)?.requirements || "—"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="row" style={{ marginTop: 12, flexWrap: "wrap", gap: 8 }}>
+                {candidate.partial_transcript_url ? (
+                  <a
+                    className="btn sm"
+                    href={candidate.partial_transcript_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Icon name="file" size="s" />
+                    Partial transcript (PDF)
+                  </a>
+                ) : null}
+                {candidate.ballot_photo_url ? (
+                  <a
+                    className="btn sm"
+                    href={candidate.ballot_photo_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Icon name="eye" size="s" />
+                    Ballot photo
+                  </a>
+                ) : null}
+              </div>
+
+              {candidate.passport_photo_url || candidate.id_document_url ? (
+                <div className="row" style={{ marginTop: 12, alignItems: "flex-start", gap: 16 }}>
+                  {candidate.passport_photo_url ? (
+                    <a
+                      href={candidate.passport_photo_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="stack"
+                      style={{ gap: 4 }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={candidate.passport_photo_url}
+                        alt="Passport photo"
+                        width={112}
+                        height={112}
+                        style={{ objectFit: "cover", border: "1px solid var(--line)" }}
+                      />
+                      <span className="hint">Passport photo</span>
+                    </a>
+                  ) : null}
+                  {candidate.id_document_url ? (
+                    <a
+                      href={candidate.id_document_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="stack"
+                      style={{ gap: 4 }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={candidate.id_document_url}
+                        alt="Student ID"
+                        width={112}
+                        height={112}
+                        style={{ objectFit: "cover", border: "1px solid var(--line)" }}
+                      />
+                      <span className="hint">Student ID</span>
+                    </a>
+                  ) : null}
+                </div>
+              ) : null}
+
               {candidate.bio || candidate.manifesto ? (
                 <details style={{ marginTop: 12 }}>
                   <summary className="hint">Read the application</summary>
@@ -256,7 +345,7 @@ function Review({ id }: { id: string }) {
 export default function CandidatesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth>
+    <RequireAuth adminOnly>
       <Review id={id} />
     </RequireAuth>
   );

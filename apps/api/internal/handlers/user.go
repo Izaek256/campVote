@@ -75,7 +75,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		user.Active = *req.Active
 	}
 	if user.Role == "" {
-		user.Role = models.RoleUser
+		user.Role = models.RoleStudentVoter
 	}
 
 	// The unique index on users.email decides, not a SELECT before the INSERT.

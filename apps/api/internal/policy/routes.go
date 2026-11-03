@@ -127,8 +127,11 @@ func init() {
 	permitted("elections.create", "POST", "/api/v1/elections")
 	permitted("elections.view", "GET", "/api/v1/elections/:id")
 	permitted("elections.edit", "PUT", "/api/v1/elections/:id")
+	permitted("elections.edit", "DELETE", "/api/v1/elections/:id")
 	permitted("elections.edit", "POST", "/api/v1/elections/:id/transitions")
+	permitted("elections.edit", "GET", "/api/v1/elections/:id/readiness")
 	permitted("elections.roles", "GET", "/api/v1/elections/:id/roles")
+	permitted("elections.roles", "GET", "/api/v1/elections/:id/roles/lookup")
 	permitted("elections.roles", "PUT", "/api/v1/elections/:id/roles/:userId")
 	permitted("elections.roles", "DELETE", "/api/v1/elections/:id/roles/:userId/:role")
 
@@ -172,6 +175,21 @@ func init() {
 	permitted("ballots.edit", "POST", "/api/v1/elections/:id/positions",
 		"/api/v1/elections/:id/ballot/publish")
 	permitted("ballots.edit", "DELETE", "/api/v1/elections/:id/positions/:position_id")
+
+	// Positions-first workflow. A position is created and edited outside any
+	// election, so these paths are not election-scoped. Any signed-in student
+	// may browse the positions open to them and apply to one; the handler
+	// applies the position's own eligibility rule before writing anything.
+	authenticated("GET", "/api/v1/positions/eligible")
+	authenticated("POST", "/api/v1/positions/:position_id/apply")
+	permitted("ballots.view", "GET", "/api/v1/positions",
+		"/api/v1/positions/:position_id/applications")
+	permitted("ballots.edit", "POST", "/api/v1/positions", "/api/v1/positions/:position_id/link")
+	permitted("ballots.edit", "PUT", "/api/v1/positions/:position_id")
+	permitted("ballots.edit", "DELETE", "/api/v1/positions/:position_id")
+	permitted("candidates.review", "POST",
+		"/api/v1/positions/:position_id/applications/:candidate_id/approve",
+		"/api/v1/positions/:position_id/applications/:candidate_id/reject")
 	permitted("ballots.view", "GET", "/api/v1/elections/:id/ballot/versions",
 		"/api/v1/elections/:id/ballot/versions/compare",
 		"/api/v1/elections/:id/ballot/versions/:version_id")

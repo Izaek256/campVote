@@ -1,176 +1,217 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { use, useCallback, useEffect, useState } from "react";
 import { Icon } from "@/components/icon";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
-import { ApiError, elections } from "@/lib/api";
+import { useToast } from "@/components/toast";
+import { useChannel } from "@/hooks/use-realtime";
+import { ApiError, elections, staff } from "@/lib/api";
 import { formatEAT, formatNumber, formatPercent } from "@/lib/format";
-import type { Election, PositionResult, Results } from "@/lib/types";
+import type { Election, Results } from "@/lib/types";
 
-export default function ElectionMonitorPage() {
-  const params = useParams();
-  // params.id may be string | string[] | undefined in Next.js 13+
-  const electionId = String(params.id ?? "");
+type Turnout = Awaited<ReturnType<typeof staff.turnout>>;
+
+function Monitor({ id }: { id: string }) {
+  const toast = useToast();
   const [election, setElection] = useState<Election | null>(null);
+  const [turnout, setTurnout] = useState<Turnout | null>(null);
   const [results, setResults] = useState<Results | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
-  const loadData = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      const [currentElection, currentResults] = await Promise.all([
-        elections.get(electionId),
-        elections.results(electionId).catch(() => null),
+      const [current, currentTurnout, currentResults] = await Promise.all([
+        elections.get(id),
+        staff.turnout(id),
+        elections.results(id).catch(() => null),
       ]);
-      setElection(currentElection);
+      setElection(current);
+      setTurnout(currentTurnout);
       setResults(currentResults);
       setLastUpdated(new Date());
     } catch (err) {
-      console.error(err);
+      toast.error(err instanceof ApiError ? err.message : "The monitor could not be loaded.");
     } finally {
       setLoading(false);
     }
-  }, [electionId]);
+  }, [id, toast.error]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    load();
+  }, [load]);
 
+  // The timer is the fallback; a results snapshot (including the automatic one
+  // at close) also wakes the page immediately.
   useEffect(() => {
     if (!autoRefresh) return;
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
+  }, [autoRefresh, load]);
 
-    const interval = setInterval(() => {
-      loadData();
-    }, 30000); // Refresh every 30 seconds
+  useChannel(`public-election-results.${id}`, {
+    "results.updated": () => {
+      void load();
+    },
+  });
 
-    return () => clearInterval(interval);
-  }, [autoRefresh, loadData]);
-
-  if (loading) return <div className="p-8">Loading...</div>;
-
-  // Positions come from the snapshot, not directly from results
-  const snapshotPositions: PositionResult[] = results?.snapshot?.positions ?? [];
   const isOpen = election?.status === "OPEN";
+  const snapshotPositions = results?.snapshot?.positions ?? [];
+  const participation = turnout?.positions ?? [];
 
   return (
-    <StaffShell>
-      <div className="p-4 md:p-8">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold">Election Monitor</h1>
-            {election && <p className="text-gray-600">{election.title}</p>}
+    <StaffShell title="Monitor">
+      <div className="page-head">
+        <div>
+          <span className="lbl">Live participation</span>
+          <h1>{election?.title ?? "Election monitor"}</h1>
+          <p>
+            Turnout only while voting is open. Candidate counts appear after the election closes and
+            are never shown on this page early.
+          </p>
+        </div>
+        <div className="row">
+          {election ? <StatusChip status={election.status} /> : null}
+          <button
+            type="button"
+            className={`btn sm${autoRefresh ? " primary" : ""}`}
+            onClick={() => setAutoRefresh((value) => !value)}
+          >
+            {autoRefresh ? "Live updates on" : "Live updates off"}
+          </button>
+          <button type="button" className="btn sm" onClick={load}>
+            Refresh now
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="panel stack" aria-busy="true">
+          <span className="skel" style={{ height: 18, width: "30%" }} />
+          <span className="skel" style={{ height: 14 }} />
+        </div>
+      ) : null}
+
+      {election ? (
+        <div className="kpis" style={{ marginBottom: 20 }}>
+          <div className="kpi">
+            <span className="l">Eligible voters</span>
+            <span className="v">{turnout ? formatNumber(turnout.eligible) : "—"}</span>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Auto-refresh:</span>
-              <button
-                onClick={() => setAutoRefresh(!autoRefresh)}
-                className={`px-3 py-1 rounded text-sm ${
-                  autoRefresh ? "bg-green-100 text-green-800" : "bg-gray-100"
-                }`}
-              >
-                {autoRefresh ? "On" : "Off"}
-              </button>
-            </div>
-            <button
-              onClick={loadData}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-            >
-              Refresh Now
-            </button>
+          <div className="kpi">
+            <span className="l">Ballots cast</span>
+            <span className="v">{turnout ? formatNumber(turnout.voted) : "—"}</span>
+          </div>
+          <div className="kpi">
+            <span className="l">Turnout</span>
+            <span className="v">{turnout ? formatPercent(turnout.percent) : "—"}</span>
+          </div>
+          <div className="kpi">
+            <span className="l">Window</span>
+            <span className="v" style={{ fontSize: 14 }}>
+              {formatEAT(election.starts_at)} – {formatEAT(election.ends_at)}
+            </span>
           </div>
         </div>
+      ) : null}
 
-        {lastUpdated && (
-          <p className="text-sm text-gray-500 mb-6">
-            Last updated: {lastUpdated.toLocaleTimeString()}
-          </p>
-        )}
-
-        {election && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div className="bg-white border rounded-lg p-4">
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Status</h3>
-              <StatusChip status={election.status} />
-            </div>
-            <div className="bg-white border rounded-lg p-4">
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Schedule</h3>
-              <p className="text-sm">
-                {formatEAT(election.starts_at)} - {formatEAT(election.ends_at)}
-              </p>
-            </div>
-            <div className="bg-white border rounded-lg p-4">
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Turnout</h3>
-              <p className="text-sm font-semibold">
-                {results?.snapshot
-                  ? `${formatNumber(results.snapshot.ballots_cast)} / ${formatNumber(results.snapshot.eligible_voters)} (${formatPercent(results.snapshot.turnout_percent)})`
-                  : "—"}
-              </p>
-            </div>
+      {turnout?.suppressed ? (
+        <div className="banner hatch" role="status" style={{ marginBottom: 16 }}>
+          <Icon name="lock" />
+          <div>
+            <b>Turnout is hidden for this group</b>
+            The electorate is below the configured privacy threshold.
           </div>
-        )}
+        </div>
+      ) : null}
 
-        {/* Participation per position — never show per-candidate counts while OPEN */}
-        {snapshotPositions.length > 0 ? (
-          <div className="space-y-6">
-            <h2 className="text-lg font-semibold">
-              {isOpen ? "Participation by Position" : "Results by Position"}
-            </h2>
-            {snapshotPositions.map((position: PositionResult) => (
-              <div key={position.position_id} className="bg-white border rounded-lg p-4">
-                <h3 className="font-semibold mb-4">{position.title}</h3>
-                <p className="text-sm text-gray-600 mb-2">
-                  Ballots answered: {formatNumber(position.ballots_answered)}
-                  {" · "}Blank: {formatNumber(position.blank_count)}
-                </p>
-                {/* Only show per-candidate breakdown when election is NOT open */}
-                {!isOpen && position.rows.map((row) => (
-                  <div key={row.candidate_id} className="space-y-2 mt-2">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        {row.is_winner && (
-                          <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">
-                            Winner
-                          </span>
-                        )}
-                        <p className="font-medium">{row.name}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold">{formatPercent(row.share_percent)}</p>
-                        <p className="text-sm text-gray-500">{formatNumber(row.votes)} votes</p>
-                      </div>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-green-600 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${row.share_percent}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-                {isOpen && (
-                  <p className="text-sm text-amber-600 mt-2">
-                    ⚠️ Candidate vote counts are hidden while the election is open.
-                  </p>
-                )}
+      {participation.length > 0 ? (
+        <section className="panel" style={{ marginBottom: 16 }}>
+          <div className="section-h" style={{ marginTop: 0 }}>
+            <h2>Participation by position</h2>
+            <span className="mono">no candidate totals while open</span>
+          </div>
+          <div className="stack">
+            {participation.map((position) => (
+              <div className="row-between" key={position.position_id}>
+                <span>
+                  <b>{position.title}</b>
+                  <span className="hint" style={{ display: "block" }}>
+                    {formatNumber(position.ballots_answered)} ballots answered ·{" "}
+                    {formatNumber(position.blank_count)} blank ·{" "}
+                    {formatNumber(position.abstain_count)} abstained
+                  </span>
+                </span>
               </div>
             ))}
           </div>
-        ) : (
-          <div className="bg-white border rounded-lg p-8 text-center text-gray-500">
-            <p>No results available yet.</p>
-            <p className="text-sm mt-2">
-              {isOpen
-                ? "Results will be published automatically when the election closes."
-                : "Results will appear here once ballots are cast."}
-            </p>
+        </section>
+      ) : null}
+
+      {!isOpen && snapshotPositions.length > 0 ? (
+        <section className="panel">
+          <div className="section-h" style={{ marginTop: 0 }}>
+            <h2>Results by position</h2>
+            <span className="mono">published after close</span>
           </div>
-        )}
-      </div>
+          <div className="stack">
+            {snapshotPositions.map((position) => (
+              <div key={position.position_id} className="stack">
+                <b>{position.title}</b>
+                <div className="tally">
+                  {position.rows.map((row) => (
+                    <div className="trow" key={row.candidate_id}>
+                      <span>
+                        {row.name}
+                        {row.is_winner ? <span className="lead-tag">Winner</span> : null}
+                      </span>
+                      <div className={`bar${row.is_winner ? " lead" : ""}`}>
+                        <i
+                          style={{
+                            width: `${Math.min(100, Math.max(0, row.share_percent))}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="vl">
+                        <b>{formatNumber(row.votes)}</b> · {formatPercent(row.share_percent)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {!loading && participation.length === 0 ? (
+        <div className="panel stack">
+          <b>{isOpen ? "No ballots have been cast yet" : "No results yet"}</b>
+          <span className="hint">
+            {isOpen
+              ? "This page updates as ballots arrive. Candidate counts stay hidden until the election closes."
+              : "Results are tallied automatically when voting closes."}
+          </span>
+        </div>
+      ) : null}
+
+      {lastUpdated ? (
+        <p className="hint" style={{ marginTop: 16 }}>
+          Last updated {lastUpdated.toLocaleTimeString()}
+        </p>
+      ) : null}
     </StaffShell>
+  );
+}
+
+export default function ElectionMonitorPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return (
+    <RequireAuth adminOnly>
+      <Monitor id={id} />
+    </RequireAuth>
   );
 }

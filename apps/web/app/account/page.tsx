@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
 import { RequireAuth } from "@/components/require-auth";
-import { SiteHeader } from "@/components/site-header";
 
 function AccountView() {
   const { user, signOut } = useAuth();
@@ -17,7 +17,7 @@ function AccountView() {
   }
 
   return (
-    <main className="app-wrap narrow">
+    <AppShell title="Account">
       <div className="page-head">
         <div>
           <span className="lbl">Account</span>
@@ -51,14 +51,13 @@ function AccountView() {
           </button>
         </div>
       </div>
-    </main>
+    </AppShell>
   );
 }
 
 export default function AccountPage() {
   return (
     <RequireAuth>
-      <SiteHeader />
       <AccountView />
     </RequireAuth>
   );

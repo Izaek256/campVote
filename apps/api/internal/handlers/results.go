@@ -11,6 +11,7 @@ import (
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/policy"
 	"campvote/apps/api/internal/respond"
+	"campvote/apps/api/internal/results"
 	"campvote/apps/api/internal/tally"
 )
 
@@ -87,64 +88,6 @@ func viewOf(snapshot models.ResultSnapshot) (snapshotView, bool) {
 		view.CertifiedAt = &at
 	}
 	return view, true
-}
-
-// compute tallies the election's stored ballots against its positions.
-func (h *ResultsHandler) compute(electionID string) (tally.Result, error) {
-	var eligible int64
-	if err := h.DB.Model(&models.ElectionRoster{}).
-		Where("election_id = ? AND status = ?", electionID, models.RosterStatusEligible).
-		Count(&eligible).Error; err != nil {
-		return tally.Result{}, err
-	}
-
-	var positions []models.Position
-	if err := h.DB.Where("election_id = ?", electionID).
-		Preload("Candidates").Order("display_order ASC, id ASC").
-		Find(&positions).Error; err != nil {
-		return tally.Result{}, err
-	}
-	rules := make([]tally.PositionRule, 0, len(positions))
-	for _, position := range positions {
-		rule := tally.PositionRule{
-			ID: position.ID, Title: position.Title, QuestionType: position.QuestionType,
-			Seats: position.Seats, DisplayOrder: position.DisplayOrder,
-		}
-		for _, candidate := range position.Candidates {
-			rule.Candidates = append(rule.Candidates, tally.CandidateRef{
-				ID: candidate.ID, Name: candidate.FullName,
-			})
-		}
-		rules = append(rules, rule)
-	}
-
-	// Only aggregate fields are loaded. Ballot rows carry no identity, so
-	// there is nothing here that could link a voter to a choice.
-	var stored []models.AnonymousBallot
-	if err := h.DB.Where("election_id = ?", electionID).
-		Preload("Selections").Find(&stored).Error; err != nil {
-		return tally.Result{}, err
-	}
-
-	ballots := make([]tally.Ballot, 0, len(stored))
-	for _, row := range stored {
-		ballot := tally.Ballot{ID: row.ID, Status: row.Status}
-		for _, selection := range row.Selections {
-			s := tally.Selection{PositionID: selection.PositionID, Choice: selection.Choice}
-			if selection.CandidateID != nil {
-				s.CandidateID = *selection.CandidateID
-			}
-			ballot.Selections = append(ballot.Selections, s)
-		}
-		ballots = append(ballots, ballot)
-	}
-
-	return tally.Compute(tally.Input{
-		ElectionID:     electionID,
-		EligibleVoters: int(eligible),
-		Positions:      rules,
-		Ballots:        ballots,
-	}), nil
 }
 
 // election loads the election by id. A missing election writes 404. It also
@@ -238,7 +181,7 @@ func (h *ResultsHandler) RunTally(c *gin.Context) {
 		return
 	}
 
-	result, err := h.compute(election.ID)
+	result, err := results.Compute(h.DB, election.ID)
 	if err != nil {
 		respond.Internal(c, err)
 		return
@@ -301,6 +244,7 @@ func (h *ResultsHandler) RunTally(c *gin.Context) {
 		respond.Internal(c, err)
 		return
 	}
+	results.NotifySnapshot(election.ID, snapshot.ID)
 	respond.Created(c, gin.H{
 		"election_id": election.ID,
 		"snapshot":    mustView(snapshot, result),
@@ -311,9 +255,11 @@ func (h *ResultsHandler) RunTally(c *gin.Context) {
 // Read GET /api/v1/elections/:id/results
 //
 // One handler serves the officer workspace and the voter/public page. The
-// election's publication policy is applied to every caller — an officer is not
-// exempt from a CERTIFIED_ONLY election that has not been certified — and
-// before it allows publication the answer carries no result data at all.
+// election's publication policy is applied to every caller, and before it
+// allows publication the answer carries no result data at all. In the
+// three-stage lifecycle a CERTIFIED_ONLY election becomes readable when voting
+// closes; certification then relabels the same snapshot from PROVISIONAL to
+// CERTIFIED rather than moving the election on.
 //
 // While an election is still open its tally is provisional, and provisional
 // figures are restricted to roles holding results.view_live. Once the policy
@@ -345,6 +291,16 @@ func (h *ResultsHandler) Read(c *gin.Context) {
 	snapshot, err := h.currentSnapshot(election.ID, staff)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// A close hook may have failed, or the election may have closed
+			// through a path that did not register one. Record the missing
+			// snapshot now, then try once more before reporting unavailable.
+			if results.Closed(election.Status) {
+				if _, tallyErr := results.EnsureOnClose(h.DB, &election, h.now()); tallyErr == nil {
+					snapshot, err = h.currentSnapshot(election.ID, staff)
+				}
+			}
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			respond.OK(c, gin.H{
 				"election_id": election.ID,
 				"available":   false,
@@ -353,8 +309,10 @@ func (h *ResultsHandler) Read(c *gin.Context) {
 			})
 			return
 		}
-		respond.Internal(c, err)
-		return
+		if err != nil {
+			respond.Internal(c, err)
+			return
+		}
 	}
 	view, ok := viewOf(snapshot)
 	if !ok {
@@ -446,7 +404,7 @@ func (h *ResultsHandler) Recount(c *gin.Context) {
 		return
 	}
 
-	recounted, err := h.compute(election.ID)
+	recounted, err := results.Compute(h.DB, election.ID)
 	if err != nil {
 		respond.Internal(c, err)
 		return
@@ -548,10 +506,6 @@ func (h *ResultsHandler) Certify(c *gin.Context) {
 			}).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&models.Election{}).Where("id = ?", election.ID).
-			Update("status", models.ElectionStatusFinalized).Error; err != nil {
-			return err
-		}
 		details, _ := json.Marshal(map[string]any{
 			"snapshot_id": snapshot.ID,
 			"version":     snapshot.Version,
@@ -577,7 +531,7 @@ func (h *ResultsHandler) Certify(c *gin.Context) {
 	view, _ := viewOf(snapshot)
 	respond.OK(c, gin.H{
 		"election_id": election.ID,
-		"status":      models.ElectionStatusFinalized,
+		"status":      election.Status,
 		"snapshot":    view,
 	}, "Results certified")
 }
@@ -633,12 +587,7 @@ func (h *ResultsHandler) latestVersion(electionID string) (int, error) {
 
 // closedOrLater reports whether voting has ended for this election.
 func closedOrLater(status string) bool {
-	switch status {
-	case models.ElectionStatusClosed, models.ElectionStatusReview,
-		models.ElectionStatusFinalized, models.ElectionStatusArchived:
-		return true
-	}
-	return false
+	return status == models.ElectionStatusClosed
 }
 
 func mustView(snapshot models.ResultSnapshot, result tally.Result) snapshotView {

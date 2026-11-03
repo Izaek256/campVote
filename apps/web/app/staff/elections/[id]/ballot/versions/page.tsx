@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
-import { ElectionTabs } from "@/components/election-tabs";
 import { EmptyState } from "@/components/empty-state";
 import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
+import { useToast } from "@/components/toast";
 import { ApiError, staff } from "@/lib/api";
 import { formatEAT } from "@/lib/format";
 
@@ -26,22 +27,24 @@ type Comparison = {
 };
 
 function Versions({ id }: { id: string }) {
+  const toast = useToast();
   const [versions, setVersions] = useState<Version[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [v1, setV1] = useState("");
   const [v2, setV2] = useState("");
   const [comparison, setComparison] = useState<Comparison | null>(null);
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const data = await staff.versions(id);
       setVersions(data.versions ?? []);
-      setError("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Ballot versions could not be loaded.");
+      const message = err instanceof ApiError ? err.message : "Ballot versions could not be loaded.";
+      setLoadError(message);
+      toast.error(message);
     }
-  }, [id]);
+  }, [id, toast]);
 
   useEffect(() => {
     load();
@@ -49,19 +52,18 @@ function Versions({ id }: { id: string }) {
 
   async function compare() {
     if (!v1 || !v2) {
-      setError("Choose two versions to compare.");
+      toast.error("Choose two versions to compare.");
       return;
     }
     if (v1 === v2) {
-      setError("Choose two different versions.");
+      toast.error("Choose two different versions.");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       setComparison(await staff.compare(id, v1, v2));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "The versions could not be compared.");
+      toast.error(err instanceof ApiError ? err.message : "The versions could not be compared.");
     } finally {
       setBusy(false);
     }
@@ -80,19 +82,14 @@ function Versions({ id }: { id: string }) {
         </Link>
       </div>
 
-      <ElectionTabs id={id} />
-
-      {error ? (
-        <div className="banner bad" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" />
-          <div>
-            <b>Something needs attention</b>
-            {error}
-          </div>
-        </div>
-      ) : null}
-
-      {!versions && !error ? (
+      {loadError ? (
+        <LoadError
+          title="We could not load the ballot versions"
+          message={loadError}
+          backHref={`/staff/elections/${id}/ballot`}
+          backLabel="Back to the ballot"
+        />
+      ) : !versions ? (
         <div className="panel stack" aria-busy="true">
           <span className="skel" style={{ height: 18, width: "30%" }} />
           <span className="skel" style={{ height: 14 }} />
@@ -210,7 +207,7 @@ function Versions({ id }: { id: string }) {
 export default function BallotVersionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth>
+    <RequireAuth adminOnly>
       <Versions id={id} />
     </RequireAuth>
   );

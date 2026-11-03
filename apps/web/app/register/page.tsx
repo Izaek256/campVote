@@ -6,15 +6,20 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
 import { PasswordStrength } from "@/components/password-strength";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { useToast } from "@/components/toast";
 import { ApiError, auth } from "@/lib/api";
+import { STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 import { passwordFailures } from "@/lib/password-rules";
 
-// Allowed email domains for campus registration.
-const ALLOWED_DOMAINS = ["@std.must.ac.ug", "@must.ac.ug"];
-
+// The backend enforces SIGNUP_ALLOWED_DOMAINS; this client check gives instant
+// feedback without a round trip. Domain names come from config so the UI stays
+// neutral.
 function isAllowedDomain(email: string): boolean {
   const lower = email.toLowerCase().trim();
-  return ALLOWED_DOMAINS.some((d) => lower.endsWith(d));
+  return (
+    lower.endsWith(`@${STUDENT_EMAIL_DOMAIN}`) || lower.endsWith(`@${STAFF_EMAIL_DOMAIN}`)
+  );
 }
 
 /**
@@ -48,6 +53,8 @@ export default function RegisterPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
+  const toast = useToast();
+
   // Already signed in — bounce straight to elections.
   useEffect(() => {
     if (!loading && user) router.replace("/elections");
@@ -67,8 +74,7 @@ export default function RegisterPage() {
     if (!email.trim()) {
       errs.email = "Email is required.";
     } else if (!isAllowedDomain(email)) {
-      errs.email =
-        "Please use your @std.must.ac.ug (student) or @must.ac.ug (staff/official) address.";
+      errs.email = `Please use your @${STUDENT_EMAIL_DOMAIN} (student) or @${STAFF_EMAIL_DOMAIN} (staff/official) address.`;
     }
     const pwFails = passwordFailures(password, [email, firstName, lastName]);
     if (pwFails.length > 0) {
@@ -96,9 +102,11 @@ export default function RegisterPage() {
           setFieldErrors({ email: "An account with this email already exists." });
         } else {
           setError(err.message);
+          toast.error(err.message);
         }
       } else {
         setError("Something went wrong. Please try again.");
+        toast.error("Something went wrong. Please try again.");
       }
     } finally {
       setBusy(false);
@@ -113,6 +121,7 @@ export default function RegisterPage() {
 
     if (!code.trim() || code.trim().length !== 6) {
       setError("Please enter the 6-digit code from your email.");
+      toast.error("Please enter the 6-digit code from your email.");
       return;
     }
 
@@ -136,6 +145,11 @@ export default function RegisterPage() {
           ? err.message
           : "We could not complete your registration. Please try again."
       );
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : "We could not complete your registration. Please try again."
+      );
     } finally {
       setBusy(false);
     }
@@ -150,6 +164,7 @@ export default function RegisterPage() {
       if (result.verification_code) setDevCode(result.verification_code);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not resend. Please try again.");
+      toast.error(err instanceof ApiError ? err.message : "Could not resend. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -161,6 +176,9 @@ export default function RegisterPage() {
     <main className="auth-wrap">
       <div className="auth-card">
         {/* Brand */}
+        <div className="row" style={{ justifyContent: "flex-end", marginBottom: 4 }}>
+          <ThemeToggle />
+        </div>
         <Link className="brand row" href="/login" style={{ marginBottom: 24 }}>
           <span className="mark">
             <Icon name="moon" size="l" />
@@ -174,7 +192,7 @@ export default function RegisterPage() {
           <>
             <h1>Create your account</h1>
             <p className="lead">
-              Register with your MUST campus email to participate in Guild elections.
+              Register with your campus email to participate in campus elections.
             </p>
 
             <form className="form-stack" onSubmit={handleDetailsSubmit} noValidate>
@@ -232,7 +250,7 @@ export default function RegisterPage() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@std.must.ac.ug"
+                  placeholder={`you@${STUDENT_EMAIL_DOMAIN}`}
                   required
                   aria-describedby={fieldErrors.email ? "err-email" : "hint-email"}
                 />
@@ -243,7 +261,7 @@ export default function RegisterPage() {
                   </span>
                 ) : (
                   <span id="hint-email" className="hint">
-                    Use your @std.must.ac.ug or @must.ac.ug address.
+                    Use your @{STUDENT_EMAIL_DOMAIN} or @{STAFF_EMAIL_DOMAIN} address.
                   </span>
                 )}
               </div>
@@ -273,14 +291,6 @@ export default function RegisterPage() {
                   id="password-strength"
                 />
               </div>
-
-              {/* Generic error */}
-              {error ? (
-                <span className="field err" role="alert">
-                  <Icon name="alert" size="s" />
-                  {error}
-                </span>
-              ) : null}
 
               <button className="btn primary block lg" type="submit" disabled={busy}>
                 {busy ? "Sending verification…" : "Continue"}
@@ -331,13 +341,6 @@ export default function RegisterPage() {
                     </span>
                   </div>
                 </div>
-              ) : null}
-
-              {error ? (
-                <span className="field err" role="alert">
-                  <Icon name="alert" size="s" />
-                  {error}
-                </span>
               ) : null}
 
               <button className="btn primary block lg" type="submit" disabled={busy}>

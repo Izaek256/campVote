@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+// Ptr returns a pointer to v. It exists for the optional columns, such as
+// Position.ElectionID, where a nil pointer means "not set yet".
+func Ptr[T any](v T) *T { return &v }
+
 // slugify generates a URL-friendly slug with a unique suffix.
 func slugify(s string) string {
 	slug := strings.ToLower(s)
