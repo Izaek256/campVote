@@ -27,6 +27,35 @@ import type {
 
 export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").replace(/\/$/, "");
 
+/**
+ * The URL a browser should load a stored file from.
+ *
+ * Files kept on the API's own disk (STORAGE_DRIVER=local) are served by the API
+ * under /files, and the API writes that link using its public origin (APP_URL).
+ * In this project APP_URL is the web app's origin, so a stored link can point at
+ * a port with no /files route and every candidate photo and document 404s.
+ * Rewriting the origin to the API base — the one the browser already talks to —
+ * makes them open, including for records written before APP_URL was corrected.
+ * A bucket URL (MinIO/S3/R2/B2) does not contain /files and is left untouched.
+ */
+export function fileUrl(url?: string | null): string {
+  const value = (url ?? "").trim();
+  if (!value) return "";
+  // A site-relative path: resolve it against the API, which serves /files.
+  if (value.startsWith("/") && !value.startsWith("//")) {
+    return `${API}${value}`;
+  }
+  try {
+    const parsed = new URL(value, API);
+    if (parsed.pathname.startsWith("/files/")) {
+      return `${API}${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    // Not a URL we can parse; hand it back as it came.
+  }
+  return value;
+}
+
 export class ApiError extends Error {
   status: number;
   /** Machine-readable code from the API envelope, e.g. VALIDATION_ERROR. */

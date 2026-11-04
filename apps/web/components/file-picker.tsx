@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { Icon } from "./icon";
+import { fileUrl } from "@/lib/api";
 
 interface FilePickerProps {
 	/** File type to accept (e.g., "image" for photos, "pdf" for documents) */
@@ -154,14 +155,16 @@ export function FilePicker({
 					}
 					onChange={handleInputChange}
 					disabled={disabled || uploading}
+					aria-hidden="true"
+					tabIndex={-1}
 				/>
 				{!value ? (
 					<div className="file-picker-empty">
 						<div className={`file-picker-icon ${uploading ? "uploading" : ""} ${dragActive ? "drag" : ""}`}>
 							{uploading ? (
-								<Icon name="clock" size="s" />
+								<Icon name="clock" size="l" />
 							) : (
-								<Icon name={isImage ? "image" : "file"} size="s" />
+								<Icon name={isImage ? "image" : "file"} size="l" />
 							)}
 						</div>
 						<div className="file-picker-text">
@@ -170,21 +173,20 @@ export function FilePicker({
 									? "Uploading..."
 									: dragActive
 										? "Drop file here"
-										: "Choose file"}
+										: `Select ${label.toLowerCase()}`}
 							</span>
-							{hint && (
-								<span className="hint">
-									{isImage ? "JPEG, PNG, GIF, WebP" : "PDF"} · max{" "}
-									{formatSize(maxSize)}
-								</span>
-							)}
+							<span className="hint">
+								{isImage ? "JPEG, PNG, GIF, WebP" : "PDF"} · max{" "}
+								{formatSize(maxSize)}
+							</span>
 						</div>
 						<button
 							type="button"
-							className="btn sm"
-							onClick={() =>
-								!disabled && !uploading && inputRef.current?.click()
-							}
+							className="btn primary sm"
+							onClick={(e) => {
+								e.stopPropagation();
+								!disabled && !uploading && inputRef.current?.click();
+							}}
 							disabled={disabled || uploading}
 						>
 							Browse
@@ -192,35 +194,47 @@ export function FilePicker({
 					</div>
 				) : (
 					<div className="file-picker-filled">
-						{isImage ? (
-							// eslint-disable-next-line @next/next/no-img-element
-							<img
-								src={value}
-								alt="Preview"
-								className="file-picker-preview"
-							/>
-						) : (
-							<div className="file-picker-preview file-picker-preview-pdf">
-								<Icon name="file" size="s" />
-							</div>
-						)}
+						<div className="file-picker-preview-wrapper">
+							{isImage ? (
+								// eslint-disable-next-line @next/next/no-img-element
+								<img
+									src={fileUrl(value)}
+									alt="Preview"
+									className="file-picker-preview"
+								/>
+							) : (
+								<div className="file-picker-preview file-picker-preview-pdf">
+									<Icon name="file" size="s" />
+								</div>
+							)}
+						</div>
 						<div className="file-picker-filename">
+							<span className="lbl">File uploaded</span>
 							<span className="hint">{value.split("/").pop()}</span>
 						</div>
 						<div className="row" style={{ gap: 8 }}>
 							<button
 								type="button"
 								className="btn sm ghost"
-								onClick={handleReplace}
+								onClick={(e) => {
+									e.stopPropagation();
+									handleReplace();
+								}}
 								disabled={disabled || uploading}
+								title="Replace file"
 							>
 								<Icon name="refresh" size="s" />
+								<span>Replace</span>
 							</button>
 							<button
 								type="button"
 								className="btn sm danger-o"
-								onClick={handleRemove}
+								onClick={(e) => {
+									e.stopPropagation();
+									handleRemove();
+								}}
 								disabled={disabled || uploading}
+								title="Remove file"
 							>
 								<Icon name="x" size="s" />
 							</button>

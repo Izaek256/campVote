@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Icon } from "@/components/icon";
+import { fileUrl } from "@/lib/api";
 import { candidateStatusClass, candidateStatusLabel } from "@/lib/format";
 import type { Candidate } from "@/lib/types";
 
@@ -30,7 +31,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 function DocumentLink({ url, label }: { url?: string; label: string }) {
   if (!url) return <span className="candidate-meta">{label}: not provided</span>;
   return (
-    <a className="btn sm" href={url} target="_blank" rel="noreferrer">
+    <a className="btn sm" href={fileUrl(url)} target="_blank" rel="noreferrer">
       <Icon name="file" size="s" />
       {label}
     </a>
@@ -116,10 +117,10 @@ export function ApplicationReviewDialog({
             <div className="row-between" style={{ alignItems: "flex-start", gap: 16 }}>
               <div className="row" style={{ alignItems: "flex-start", gap: 12 }}>
                 {candidate.passport_photo_url ? (
-                  <a href={candidate.passport_photo_url} target="_blank" rel="noreferrer">
+                  <a href={fileUrl(candidate.passport_photo_url)} target="_blank" rel="noreferrer">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={candidate.passport_photo_url}
+                      src={fileUrl(candidate.passport_photo_url)}
                       alt={`Passport of ${candidate.full_name}`}
                       width={96}
                       height={96}

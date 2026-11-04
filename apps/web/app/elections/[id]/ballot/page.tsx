@@ -12,7 +12,7 @@ import { SiteHeader } from "@/components/site-header";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/toast";
 import { VoteSuccess } from "@/components/vote-success";
-import { ApiError, elections } from "@/lib/api";
+import { ApiError, elections, fileUrl } from "@/lib/api";
 import { formatEAT } from "@/lib/format";
 import {
   ABSTAIN,
@@ -417,7 +417,7 @@ function BallotForm({ id }: { id: string }) {
                         {candidate.photo_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={candidate.photo_url}
+                            src={fileUrl(candidate.photo_url)}
                             alt=""
                             width={44}
                             height={44}

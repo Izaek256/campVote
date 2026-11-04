@@ -11,7 +11,7 @@ import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/toast";
-import { ApiError, candidates, upload } from "@/lib/api";
+import { ApiError, candidates, fileUrl, upload } from "@/lib/api";
 import { candidateStatusClass, candidateStatusLabel, formatEAT } from "@/lib/format";
 import type { MyCandidate } from "@/lib/types";
 
@@ -144,7 +144,7 @@ function MyCandidacy() {
                     {candidate.photo_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={candidate.photo_url}
+                        src={fileUrl(candidate.photo_url)}
                         alt=""
                         width={56}
                         height={56}
@@ -169,7 +169,7 @@ function MyCandidacy() {
                     {candidate.manifesto_url ? (
                       <a
                         className="btn sm"
-                        href={candidate.manifesto_url}
+                        href={fileUrl(candidate.manifesto_url)}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -218,7 +218,7 @@ function MyCandidacy() {
                       {candidate.ballot_photo_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={candidate.ballot_photo_url}
+                          src={fileUrl(candidate.ballot_photo_url)}
                           alt=""
                           width={56}
                           height={56}

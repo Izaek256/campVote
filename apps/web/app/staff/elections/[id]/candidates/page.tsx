@@ -9,7 +9,7 @@ import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { useToast } from "@/components/toast";
-import { ApiError, candidates, positions } from "@/lib/api";
+import { ApiError, candidates, fileUrl, positions } from "@/lib/api";
 import { candidateStatusClass, candidateStatusLabel, formatEAT } from "@/lib/format";
 import type { Candidate, Position } from "@/lib/types";
 
@@ -135,7 +135,7 @@ function Review({ id }: { id: string }) {
                   {candidate.photo_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={candidate.photo_url}
+                      src={fileUrl(candidate.photo_url)}
                       alt=""
                       width={56}
                       height={56}
@@ -165,7 +165,7 @@ function Review({ id }: { id: string }) {
                   {candidate.manifesto_url ? (
                     <a
                       className="btn sm"
-                      href={candidate.manifesto_url}
+                      href={fileUrl(candidate.manifesto_url)}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -230,7 +230,7 @@ function Review({ id }: { id: string }) {
                 {candidate.partial_transcript_url ? (
                   <a
                     className="btn sm"
-                    href={candidate.partial_transcript_url}
+                    href={fileUrl(candidate.partial_transcript_url)}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -241,7 +241,7 @@ function Review({ id }: { id: string }) {
                 {candidate.ballot_photo_url ? (
                   <a
                     className="btn sm"
-                    href={candidate.ballot_photo_url}
+                    href={fileUrl(candidate.ballot_photo_url)}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -255,7 +255,7 @@ function Review({ id }: { id: string }) {
                 <div className="row" style={{ marginTop: 12, alignItems: "flex-start", gap: 16 }}>
                   {candidate.passport_photo_url ? (
                     <a
-                      href={candidate.passport_photo_url}
+                      href={fileUrl(candidate.passport_photo_url)}
                       target="_blank"
                       rel="noreferrer"
                       className="stack"
@@ -263,7 +263,7 @@ function Review({ id }: { id: string }) {
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={candidate.passport_photo_url}
+                        src={fileUrl(candidate.passport_photo_url)}
                         alt={`${candidate.full_name}'s passport`}
                         width={112}
                         height={112}
@@ -277,7 +277,7 @@ function Review({ id }: { id: string }) {
                   ) : null}
                   {candidate.id_document_url ? (
                     <a
-                      href={candidate.id_document_url}
+                      href={fileUrl(candidate.id_document_url)}
                       target="_blank"
                       rel="noreferrer"
                       className="stack"
@@ -285,7 +285,7 @@ function Review({ id }: { id: string }) {
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={candidate.id_document_url}
+                        src={fileUrl(candidate.id_document_url)}
                         alt="Student ID"
                         width={112}
                         height={112}

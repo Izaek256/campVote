@@ -25,11 +25,14 @@ func AddPerformanceIndexes(db *gorm.DB) error {
 		return err
 	}
 
-	// Composite index for ballot queries by election and user
-	// Optimizes: WHERE election_id=? AND user_id=?
+	// Composite index for ballot tally queries by election and status.
+	// Optimizes: WHERE election_id=? AND status=?
+	//
+	// The table is anonymous_ballots, not ballots, and it deliberately carries
+	// no user_id (FR-PRIV-01): a voter-to-ballot mapping must never exist.
 	if err := db.Exec(`
-		CREATE INDEX IF NOT EXISTS idx_ballots_election_user 
-		ON ballots (election_id, user_id)
+		CREATE INDEX IF NOT EXISTS idx_anonymous_ballots_election_status 
+		ON anonymous_ballots (election_id, status)
 	`).Error; err != nil {
 		return err
 	}
