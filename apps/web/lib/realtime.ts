@@ -7,7 +7,11 @@
  * cheap registry operation rather than a handshake.
  */
 
-export type RealtimeEvent = { type: string; channel?: string; payload: unknown };
+export type RealtimeEvent = {
+  type: string;
+  channel?: string;
+  payload: unknown;
+};
 // The payload is whatever JSON the server sent, so a handler annotates it:
 // (payload: Invoice) => ... It stays any rather than unknown because
 // unknown would reject every annotated handler and every documented
@@ -78,10 +82,18 @@ export function whisper(channel: string, event: string, data?: unknown): boolean
 }
 
 /** A client event as the other subscribers receive it. data is whatever the sender sent, so treat it as user input. */
-export type ClientEvent<Data = unknown> = { event: string; user_id: string; data?: Data };
+export type ClientEvent<Data = unknown> = {
+  event: string;
+  user_id: string;
+  data?: Data;
+};
 
 /** One user in a presence channel. info is what the channel's authorizer passed to SetInfo. */
-export type PresenceMember<Info = unknown> = { user_id: string; info?: Info; joined_at: string };
+export type PresenceMember<Info = unknown> = {
+  user_id: string;
+  info?: Info;
+  joined_at: string;
+};
 
 /**
  * The members of each presence channel something is subscribed to, from the

@@ -35,6 +35,9 @@ function Apply({ id }: { id: string }) {
   const [passportPhotoUrl, setPassportPhotoUrl] = useState("");
   const [idDocumentUrl, setIdDocumentUrl] = useState("");
   const [transcriptUrl, setTranscriptUrl] = useState("");
+  const [uploading, setUploading] = useState<
+    "photo" | "manifesto" | "passport" | "id" | "transcript" | ""
+  >("");
 
   useEffect(() => {
     candidates
@@ -50,6 +53,25 @@ function Apply({ id }: { id: string }) {
         toast.error(message);
       });
   }, [id, toast]);
+
+  async function pickFile(kind: "photo" | "manifesto", file: File | undefined) {
+    if (!file) return;
+    setUploading(kind);
+    try {
+      const { upload } = await import("@/lib/api");
+      const isPdf = kind === "manifesto";
+      const ref = await upload(file, {
+        accepts: isPdf ? "pdf" : "image",
+        maxSize: (isPdf ? 5 : 2) * 1024 * 1024,
+      });
+      if (kind === "photo") setPhotoUrl(ref.url);
+      else setManifestoUrl(ref.url);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "That document could not be uploaded.");
+    } finally {
+      setUploading("");
+    }
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -427,40 +449,15 @@ function Apply({ id }: { id: string }) {
               hint="PDF · max 5 MB"
               disabled={blocked}
             />
-                required
-              />
-              {uploading === "transcript" ? (
-                <span className="hint">Uploading transcript…</span>
-              ) : null}
-              {transcriptUrl ? (
-                <span className="fileline">
-                  <Icon name="check" size="s" />
-                  Transcript uploaded
-                  <span className="mono">ready</span>
-                </span>
-              ) : null}
-            </div>
-            <div className="field">
-              <label htmlFor="manifesto-file">Manifesto PDF (optional, max 5 MB)</label>
-              <input
-                id="manifesto-file"
-                className="in"
-                type="file"
-                accept="application/pdf"
-                disabled={blocked || uploading !== ""}
-                onChange={(event) => pickFile("manifesto", event.target.files?.[0])}
-              />
-              {uploading === "manifesto" ? (
-                <span className="hint">Uploading manifesto…</span>
-              ) : null}
-              {manifestoUrl ? (
-                <span className="fileline">
-                  <Icon name="check" size="s" />
-                  Manifesto uploaded
-                  <span className="mono">ready</span>
-                </span>
-              ) : null}
-            </div>
+            <FilePicker
+              accepts="pdf"
+              maxSize={5 * 1024 * 1024}
+              value={manifestoUrl}
+              onChange={setManifestoUrl}
+              label="Manifesto PDF (optional)"
+              hint="PDF · max 5 MB"
+              disabled={blocked}
+            />
           </div>
 
           <div className="field">
@@ -477,14 +474,14 @@ function Apply({ id }: { id: string }) {
             {photoUrl ? (
               <span className="fileline">
                 <Icon name="check" size="s" />
-                Photo uploaded
+                Ballot photo uploaded
                 <span className="mono">ready</span>
               </span>
             ) : null}
           </div>
 
-          <div className="row">
-            <button className="btn primary" type="submit" disabled={busy || blocked}>
+          <div className="row" style={{ justifyContent: "flex-end", marginTop: 20 }}>
+            <button className="btn primary" type="submit" disabled={blocked || busy}>
               {busy ? "Submitting…" : "Submit application"}
             </button>
             <Link className="btn ghost" href={`/elections/${id}`}>
@@ -504,7 +501,10 @@ function Apply({ id }: { id: string }) {
                   alt=""
                   width={64}
                   height={64}
-                  style={{ objectFit: "cover", border: "1px solid var(--line)" }}
+                  style={{
+                    objectFit: "cover",
+                    border: "1px solid var(--line)",
+                  }}
                 />
               ) : (
                 <div

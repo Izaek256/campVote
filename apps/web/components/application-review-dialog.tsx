@@ -123,7 +123,10 @@ export function ApplicationReviewDialog({
                       alt={`Passport of ${candidate.full_name}`}
                       width={96}
                       height={96}
-                      style={{ objectFit: "cover", border: "1px solid var(--line)" }}
+                      style={{
+                        objectFit: "cover",
+                        border: "1px solid var(--line)",
+                      }}
                     />
                   </a>
                 ) : null}
@@ -131,7 +134,9 @@ export function ApplicationReviewDialog({
                   <span className={`chip ${candidateStatusClass(candidate.approval_status)}`}>
                     {candidateStatusLabel(candidate.approval_status)}
                   </span>
-                  <span className="candidate-meta">Registration {candidate.registration_number || "—"}</span>
+                  <span className="candidate-meta">
+                    Registration {candidate.registration_number || "—"}
+                  </span>
                   <span className="candidate-meta">
                     {candidate.programme || "—"}
                     {candidate.study_year ? ` · Year ${candidate.study_year}` : ""}
@@ -174,9 +179,7 @@ export function ApplicationReviewDialog({
               ) : null}
             </div>
 
-            {candidate.slogan ? (
-              <Row label="Slogan" value={candidate.slogan} />
-            ) : null}
+            {candidate.slogan ? <Row label="Slogan" value={candidate.slogan} /> : null}
             {candidate.bio ? (
               <div>
                 <span className="lbl">Why they are standing</span>
@@ -234,12 +237,7 @@ export function ApplicationReviewDialog({
             </button>
             {reviewable ? (
               <>
-                <button
-                  type="button"
-                  className="btn danger-o"
-                  onClick={onReject}
-                  disabled={busy}
-                >
+                <button type="button" className="btn danger-o" onClick={onReject} disabled={busy}>
                   Reject
                 </button>
                 <button type="button" className="btn primary" onClick={onApprove} disabled={busy}>

@@ -17,9 +17,7 @@ import { passwordFailures } from "@/lib/password-rules";
 // neutral.
 function isAllowedDomain(email: string): boolean {
   const lower = email.toLowerCase().trim();
-  return (
-    lower.endsWith(`@${STUDENT_EMAIL_DOMAIN}`) || lower.endsWith(`@${STAFF_EMAIL_DOMAIN}`)
-  );
+  return lower.endsWith(`@${STUDENT_EMAIL_DOMAIN}`) || lower.endsWith(`@${STAFF_EMAIL_DOMAIN}`);
 }
 
 /**
@@ -99,7 +97,9 @@ export default function RegisterPage() {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          setFieldErrors({ email: "An account with this email already exists." });
+          setFieldErrors({
+            email: "An account with this email already exists.",
+          });
         } else {
           setError(err.message);
           toast.error(err.message);
@@ -197,7 +197,13 @@ export default function RegisterPage() {
 
             <form className="form-stack" onSubmit={handleDetailsSubmit} noValidate>
               {/* Name row */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
                 <div className="field">
                   <label htmlFor="first-name">First name</label>
                   <input
@@ -297,7 +303,14 @@ export default function RegisterPage() {
               </button>
             </form>
 
-            <p style={{ marginTop: 20, fontSize: 14, textAlign: "center", color: "var(--ink-3)" }}>
+            <p
+              style={{
+                marginTop: 20,
+                fontSize: 14,
+                textAlign: "center",
+                color: "var(--ink-3)",
+              }}
+            >
               Already have an account?{" "}
               <Link href="/login" style={{ color: "var(--primary)" }}>
                 Sign in
@@ -348,7 +361,14 @@ export default function RegisterPage() {
               </button>
             </form>
 
-            <p style={{ marginTop: 16, fontSize: 14, textAlign: "center", color: "var(--ink-3)" }}>
+            <p
+              style={{
+                marginTop: 16,
+                fontSize: 14,
+                textAlign: "center",
+                color: "var(--ink-3)",
+              }}
+            >
               Didn&apos;t receive it?{" "}
               <button
                 className="btn ghost sm"

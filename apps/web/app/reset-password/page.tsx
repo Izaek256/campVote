@@ -9,10 +9,10 @@ import { useToast } from "@/components/toast";
 import { ApiError, auth } from "@/lib/api";
 
 export default function ResetPasswordPage() {
-  const router = useRouter();
+  const _router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
-  
+
   const token = searchParams.get("token") || "";
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -45,8 +45,12 @@ export default function ResetPasswordPage() {
       setDone(true);
       toast.success("Your password has been reset. Please sign in with your new password.");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "We could not reset your password. Try again.");
-      toast.error(err instanceof ApiError ? err.message : "We could not reset your password. Try again.");
+      setError(
+        err instanceof ApiError ? err.message : "We could not reset your password. Try again."
+      );
+      toast.error(
+        err instanceof ApiError ? err.message : "We could not reset your password. Try again."
+      );
     } finally {
       setBusy(false);
     }
@@ -59,7 +63,9 @@ export default function ResetPasswordPage() {
           <div className="row" style={{ justifyContent: "flex-end", marginBottom: 4 }}>
             <ThemeToggle />
           </div>
-          <Icon name="alert" size="l" style={{ color: "var(--danger)" }} />
+          <div style={{ color: "var(--danger)" }}>
+            <Icon name="alert" size="l" />
+          </div>
           <h1 style={{ marginTop: 16 }}>Invalid reset link</h1>
           <p className="lead">
             This password reset link is invalid or has expired. Please request a new one.
@@ -79,7 +85,9 @@ export default function ResetPasswordPage() {
           <div className="row" style={{ justifyContent: "flex-end", marginBottom: 4 }}>
             <ThemeToggle />
           </div>
-          <Icon name="check" size="l" style={{ color: "var(--success)" }} />
+          <div style={{ color: "var(--success)" }}>
+            <Icon name="check" size="l" />
+          </div>
           <h1 style={{ marginTop: 16 }}>Password reset</h1>
           <p className="lead">
             Your password has been successfully reset. You can now sign in with your new password.
@@ -151,7 +159,14 @@ export default function ResetPasswordPage() {
           </button>
         </form>
 
-        <p style={{ marginTop: 16, fontSize: 14, textAlign: "center", color: "var(--ink-3)" }}>
+        <p
+          style={{
+            marginTop: 16,
+            fontSize: 14,
+            textAlign: "center",
+            color: "var(--ink-3)",
+          }}
+        >
           Remember your password?{" "}
           <Link href="/login" style={{ color: "var(--primary)" }}>
             Sign in

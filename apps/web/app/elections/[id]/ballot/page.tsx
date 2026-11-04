@@ -106,7 +106,10 @@ function BallotForm({ id }: { id: string }) {
       // pick for this position. Multi-choice positions are not used here.
       if (position.question_type === "MULTI_CHOICE") {
         if (chosen.includes(value)) {
-          return { ...current, [position.id]: chosen.filter((item) => item !== value) };
+          return {
+            ...current,
+            [position.id]: chosen.filter((item) => item !== value),
+          };
         }
         if (chosen.includes(ABSTAIN)) {
           return { ...current, [position.id]: [value] };
@@ -145,7 +148,10 @@ function BallotForm({ id }: { id: string }) {
       const result = await elections.submitBallot(
         ballot.election_id,
         buildSelections(ballot, selections),
-        { ballotVersionId: ballot.ballot_version_id, idempotencyKey: attemptKey.current }
+        {
+          ballotVersionId: ballot.ballot_version_id,
+          idempotencyKey: attemptKey.current,
+        }
       );
       setSelections({});
       setConfirming(false);

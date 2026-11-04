@@ -24,8 +24,12 @@ export default function ForgotPasswordPage() {
       setSent(true);
       toast.success("If that address exists, a password reset link has been sent to it.");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "We could not send a reset link. Try again.");
-      toast.error(err instanceof ApiError ? err.message : "We could not send a reset link. Try again.");
+      setError(
+        err instanceof ApiError ? err.message : "We could not send a reset link. Try again."
+      );
+      toast.error(
+        err instanceof ApiError ? err.message : "We could not send a reset link. Try again."
+      );
     } finally {
       setBusy(false);
     }
@@ -47,12 +51,15 @@ export default function ForgotPasswordPage() {
         </Link>
         <h1>Reset your password</h1>
         <p className="lead">
-          Enter your {CAMPUS_NAME} email address and we&apos;ll send you a link to reset your password.
+          Enter your {CAMPUS_NAME} email address and we&apos;ll send you a link to reset your
+          password.
         </p>
 
         {sent ? (
           <div className="panel stack" style={{ marginBottom: 20 }}>
-            <Icon name="mail" size="l" style={{ color: "var(--success)" }} />
+            <div style={{ color: "var(--success)" }}>
+              <Icon name="mail" size="l" />
+            </div>
             <h2 style={{ marginTop: 12 }}>Check your email</h2>
             <p className="hint">
               We&apos;ve sent a password reset link to <b>{email}</b>. The link expires in 1 hour.
@@ -93,7 +100,14 @@ export default function ForgotPasswordPage() {
           </form>
         )}
 
-        <p style={{ marginTop: 16, fontSize: 14, textAlign: "center", color: "var(--ink-3)" }}>
+        <p
+          style={{
+            marginTop: 16,
+            fontSize: 14,
+            textAlign: "center",
+            color: "var(--ink-3)",
+          }}
+        >
           Remember your password?{" "}
           <Link href="/login" style={{ color: "var(--primary)" }}>
             Sign in

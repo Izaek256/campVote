@@ -64,7 +64,11 @@ function StaffHome() {
 
   // Admin invite form state
   const [showInviteForm, setShowInviteForm] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ first_name: "", last_name: "", email: "" });
+  const [inviteForm, setInviteForm] = useState({
+    first_name: "",
+    last_name: "",
+    email: "",
+  });
   const [inviteFields, setInviteFields] = useState<Record<string, string>>({});
   const [inviteBusy, setInviteBusy] = useState(false);
 
@@ -120,7 +124,9 @@ function StaffHome() {
     setInviteFields({});
     try {
       await auth.inviteAdmin(inviteForm);
-      toast.success("Invitation sent. The administrator will choose a password from the emailed link.");
+      toast.success(
+        "Invitation sent. The administrator will choose a password from the emailed link."
+      );
       setShowInviteForm(false);
       setInviteForm({ first_name: "", last_name: "", email: "" });
     } catch (err) {
@@ -151,11 +157,7 @@ function StaffHome() {
             <Icon name="hist" size="s" />
             Refresh
           </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setShowInviteForm((open) => !open)}
-          >
+          <button type="button" className="btn" onClick={() => setShowInviteForm((open) => !open)}>
             <Icon name="user" size="s" />
             Invite admin
           </button>
@@ -221,7 +223,10 @@ function StaffHome() {
                     className="btn sm"
                     disabled={!form.starts_at}
                     onClick={() =>
-                      setForm({ ...form, ends_at: addMinutes(form.starts_at, preset.minutes) })
+                      setForm({
+                        ...form,
+                        ends_at: addMinutes(form.starts_at, preset.minutes),
+                      })
                     }
                   >
                     {preset.label}
@@ -257,12 +262,19 @@ function StaffHome() {
                 id="invite-first-name"
                 className={`in${inviteFields.first_name ? " bad" : ""}`}
                 value={inviteForm.first_name}
-                onChange={(event) => setInviteForm({ ...inviteForm, first_name: event.target.value })}
+                onChange={(event) =>
+                  setInviteForm({
+                    ...inviteForm,
+                    first_name: event.target.value,
+                  })
+                }
                 placeholder="Jane"
                 required
                 minLength={2}
               />
-              {inviteFields.first_name ? <span className="err">{inviteFields.first_name}</span> : null}
+              {inviteFields.first_name ? (
+                <span className="err">{inviteFields.first_name}</span>
+              ) : null}
             </div>
             <div className="field">
               <label htmlFor="invite-last-name">Last name *</label>
@@ -270,12 +282,19 @@ function StaffHome() {
                 id="invite-last-name"
                 className={`in${inviteFields.last_name ? " bad" : ""}`}
                 value={inviteForm.last_name}
-                onChange={(event) => setInviteForm({ ...inviteForm, last_name: event.target.value })}
+                onChange={(event) =>
+                  setInviteForm({
+                    ...inviteForm,
+                    last_name: event.target.value,
+                  })
+                }
                 placeholder="Doe"
                 required
                 minLength={2}
               />
-              {inviteFields.last_name ? <span className="err">{inviteFields.last_name}</span> : null}
+              {inviteFields.last_name ? (
+                <span className="err">{inviteFields.last_name}</span>
+              ) : null}
             </div>
             <div className="field full">
               <label htmlFor="invite-email">Email (must be @must.ac.ug) *</label>

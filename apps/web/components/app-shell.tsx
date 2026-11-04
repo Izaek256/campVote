@@ -23,7 +23,12 @@ interface NavSection {
 // Every election is built in this order. On desktop these steps live in the
 // sidebar so they are reachable from anywhere inside the election; on mobile
 // they are the same list inside the navigation drawer.
-const ELECTION_STEPS: { key: string; label: string; icon: IconName; hash?: string }[] = [
+const ELECTION_STEPS: {
+  key: string;
+  label: string;
+  icon: IconName;
+  hash?: string;
+}[] = [
   { key: "", label: "Details", icon: "file" },
   { key: "", label: "Eligibility", icon: "shield", hash: "#eligibility" },
   { key: "positions", label: "Positions", icon: "ballot" },
@@ -45,9 +50,7 @@ const ADMIN_SECTIONS: NavSection[] = [
   },
   {
     heading: "My activity",
-    items: [
-      { href: "/account", label: "Account", icon: "shield" },
-    ],
+    items: [{ href: "/account", label: "Account", icon: "shield" }],
   },
 ];
 

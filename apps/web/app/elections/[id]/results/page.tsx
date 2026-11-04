@@ -38,7 +38,11 @@ function PositionTally({ position, certified }: { position: PositionResult; cert
                 {row.is_tie ? <span className="lead-tag">Tie</span> : null}
               </span>
               <div className={`bar${row.is_winner ? " lead" : ""}`}>
-                <i style={{ width: `${Math.min(100, Math.max(0, row.share_percent))}%` }} />
+                <i
+                  style={{
+                    width: `${Math.min(100, Math.max(0, row.share_percent))}%`,
+                  }}
+                />
               </div>
               <span className="vl">
                 <b>{formatNumber(row.votes)}</b> · {formatPercent(row.share_percent)}

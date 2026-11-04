@@ -214,7 +214,10 @@ function Manage({ id }: { id: string }) {
                 min={0}
                 value={form.display_order}
                 onChange={(event) =>
-                  setForm({ ...form, display_order: Number(event.target.value) })
+                  setForm({
+                    ...form,
+                    display_order: Number(event.target.value),
+                  })
                 }
               />
             </div>
@@ -238,7 +241,10 @@ function Manage({ id }: { id: string }) {
                 min={0}
                 value={form.min_selections}
                 onChange={(event) =>
-                  setForm({ ...form, min_selections: Number(event.target.value) })
+                  setForm({
+                    ...form,
+                    min_selections: Number(event.target.value),
+                  })
                 }
               />
             </div>
@@ -251,7 +257,10 @@ function Manage({ id }: { id: string }) {
                 min={1}
                 value={form.max_selections}
                 onChange={(event) =>
-                  setForm({ ...form, max_selections: Number(event.target.value) })
+                  setForm({
+                    ...form,
+                    max_selections: Number(event.target.value),
+                  })
                 }
               />
             </div>

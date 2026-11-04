@@ -85,7 +85,12 @@ function Manage({ id }: { id: string }) {
   const [confirmCertify, setConfirmCertify] = useState(false);
   const [certifyReason, setCertifyReason] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [form, setForm] = useState({ title: "", starts_at: "", ends_at: "", reason: "" });
+  const [form, setForm] = useState({
+    title: "",
+    starts_at: "",
+    ends_at: "",
+    reason: "",
+  });
   const [fields, setFields] = useState<Record<string, string>>({});
   const [eligibility, setEligibility] = useState({
     allowed_domain: "",
@@ -405,7 +410,10 @@ function Manage({ id }: { id: string }) {
                 className="in"
                 value={eligibility.allowed_domain}
                 onChange={(event) =>
-                  setEligibility({ ...eligibility, allowed_domain: event.target.value })
+                  setEligibility({
+                    ...eligibility,
+                    allowed_domain: event.target.value,
+                  })
                 }
                 placeholder="std.mast.ac.ug"
               />
@@ -419,7 +427,10 @@ function Manage({ id }: { id: string }) {
                 className="in"
                 value={eligibility.allowed_years}
                 onChange={(event) =>
-                  setEligibility({ ...eligibility, allowed_years: event.target.value })
+                  setEligibility({
+                    ...eligibility,
+                    allowed_years: event.target.value,
+                  })
                 }
                 placeholder="2024"
               />
@@ -433,7 +444,10 @@ function Manage({ id }: { id: string }) {
                 className="in"
                 value={eligibility.allowed_courses}
                 onChange={(event) =>
-                  setEligibility({ ...eligibility, allowed_courses: event.target.value })
+                  setEligibility({
+                    ...eligibility,
+                    allowed_courses: event.target.value,
+                  })
                 }
                 placeholder="bse"
               />
@@ -579,7 +593,10 @@ function Manage({ id }: { id: string }) {
                         className="btn sm"
                         disabled={!form.starts_at}
                         onClick={() =>
-                          setForm({ ...form, ends_at: addMinutes(form.starts_at, preset.minutes) })
+                          setForm({
+                            ...form,
+                            ends_at: addMinutes(form.starts_at, preset.minutes),
+                          })
                         }
                       >
                         {preset.label}

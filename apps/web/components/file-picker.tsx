@@ -157,9 +157,15 @@ export function FilePicker({
             disabled={disabled || uploading}
             style={{ display: "none" }}
           />
-          <Icon name={isImage ? "image" : "file"} size="l" style={{ color: "var(--muted)" }} />
+          <div style={{ color: "var(--muted)" }}>
+            <Icon name={isImage ? "image" : "file"} size="l" />
+          </div>
           <p style={{ marginTop: 12, marginBottom: 4 }}>
-            {uploading ? "Uploading..." : dragActive ? "Drop file here" : "Drag & drop or click to browse"}
+            {uploading
+              ? "Uploading..."
+              : dragActive
+                ? "Drop file here"
+                : "Drag & drop or click to browse"}
           </p>
           <span className="hint">
             {isImage ? "JPEG, PNG, GIF, WebP" : "PDF"} · max {formatSize(maxSize)}
@@ -202,7 +208,9 @@ export function FilePicker({
                 borderRadius: 4,
               }}
             >
-              <Icon name="file" size="l" style={{ color: "var(--muted)" }} />
+              <div style={{ color: "var(--muted)" }}>
+                <Icon name="file" size="l" />
+              </div>
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>

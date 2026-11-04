@@ -74,7 +74,10 @@ function MyCandidacy() {
     if (!file) return;
     setPhotoBusy(candidateId);
     try {
-      const ref = await upload(file, { accepts: "image", maxSize: 2 * 1024 * 1024 });
+      const ref = await upload(file, {
+        accepts: "image",
+        maxSize: 2 * 1024 * 1024,
+      });
       await candidates.setBallotPhoto(candidateId, ref.url);
       toast.success("Ballot photo updated.");
       await load();
@@ -145,7 +148,10 @@ function MyCandidacy() {
                         alt=""
                         width={56}
                         height={56}
-                        style={{ objectFit: "cover", border: "1px solid var(--line)" }}
+                        style={{
+                          objectFit: "cover",
+                          border: "1px solid var(--line)",
+                        }}
                       />
                     ) : null}
                     <div>
@@ -176,7 +182,11 @@ function MyCandidacy() {
                         type="button"
                         className="btn sm danger-o"
                         onClick={() => {
-                          setWithdrawing({ candidate, election_title, position_title });
+                          setWithdrawing({
+                            candidate,
+                            election_title,
+                            position_title,
+                          });
                           setReason("");
                         }}
                       >
@@ -212,7 +222,10 @@ function MyCandidacy() {
                           alt=""
                           width={56}
                           height={56}
-                          style={{ objectFit: "cover", border: "1px solid var(--line)" }}
+                          style={{
+                            objectFit: "cover",
+                            border: "1px solid var(--line)",
+                          }}
                         />
                       ) : null}
                       <label className="btn sm" style={{ cursor: "pointer" }}>

@@ -38,7 +38,11 @@ export class ApiError extends Error {
   constructor(
     message: string,
     status: number,
-    options: { fields?: Record<string, string>; code?: string; requestId?: string } = {}
+    options: {
+      fields?: Record<string, string>;
+      code?: string;
+      requestId?: string;
+    } = {}
   ) {
     super(displayMessage(message, status, options));
     this.name = "ApiError";
@@ -63,7 +67,11 @@ export class ApiError extends Error {
 function displayMessage(
   message: string,
   status: number,
-  options: { fields?: Record<string, string>; code?: string; requestId?: string }
+  options: {
+    fields?: Record<string, string>;
+    code?: string;
+    requestId?: string;
+  }
 ): string {
   const parts: string[] = [message];
   if (options.fields && Object.keys(options.fields).length > 0) {
@@ -123,7 +131,10 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 export const auth = {
   me: () => api<User>("/auth/me"),
   login: (email: string, password: string) =>
-    api<AuthPayload>("/auth/login", { method: "POST", body: { email, password } }),
+    api<AuthPayload>("/auth/login", {
+      method: "POST",
+      body: { email, password },
+    }),
   logout: () => api<unknown>("/auth/logout", { method: "POST" }),
   /** Direct registration: create account and get tokens immediately. */
   register: (body: { first_name: string; last_name: string; email: string; password: string }) =>
@@ -144,19 +155,28 @@ export const auth = {
   }) => api<AuthPayload>("/auth/signup/complete", { method: "POST", body }),
   /** Verify email for an already-registered user using a code. */
   verifyEmail: (code: string) =>
-    api<{ message: string }>("/auth/verify-email", { method: "POST", body: { code } }),
+    api<{ message: string }>("/auth/verify-email", {
+      method: "POST",
+      body: { code },
+    }),
   /** Re-send the email verification link to the signed-in user. */
   resendVerification: () =>
     api<{ message: string }>("/auth/verify-email/resend", { method: "POST" }),
   /** Request a password reset link via email. */
   forgotPassword: (email: string) =>
-    api<{ message: string }>("/auth/forgot-password", { method: "POST", body: { email } }),
+    api<{ message: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: { email },
+    }),
   /** Reset password using the token from the email link. */
   resetPassword: (body: { token: string; password: string }) =>
     api<{ message: string }>("/auth/reset-password", { method: "POST", body }),
   /** Invite an administrator (creates account without password, emails reset link). */
   inviteAdmin: (body: { first_name: string; last_name: string; email: string }) =>
-    api<{ data: User; message: string }>("/staff/admins/invite", { method: "POST", body }),
+    api<{ data: User; message: string }>("/staff/admins/invite", {
+      method: "POST",
+      body,
+    }),
 };
 
 /** Multipart upload. The API sniffs the real type and enforces accepts/max_size. */
@@ -194,10 +214,16 @@ export const candidates = {
   application: (electionId: string) =>
     api<CandidateApplicationView>(`/elections/${electionId}/candidate-application`),
   apply: (electionId: string, body: Record<string, unknown>) =>
-    api<Candidate>(`/elections/${electionId}/candidates/apply`, { method: "POST", body }),
+    api<Candidate>(`/elections/${electionId}/candidates/apply`, {
+      method: "POST",
+      body,
+    }),
   mine: () => api<{ candidates: MyCandidate[] }>("/candidates/my"),
   withdraw: (candidateId: string, reason: string) =>
-    api<Candidate>(`/candidates/my/${candidateId}/withdraw`, { method: "POST", body: { reason } }),
+    api<Candidate>(`/candidates/my/${candidateId}/withdraw`, {
+      method: "POST",
+      body: { reason },
+    }),
   /**
    * Replace the image shown on the ballot (approved candidates only, before
    * voting opens). When unset the passport photo is used.
@@ -227,11 +253,19 @@ export const positions = {
   list: (electionId: string) =>
     api<{ positions: Position[] }>(`/elections/${electionId}/positions`),
   create: (electionId: string, body: Record<string, unknown>) =>
-    api<Position>(`/elections/${electionId}/positions`, { method: "POST", body }),
+    api<Position>(`/elections/${electionId}/positions`, {
+      method: "POST",
+      body,
+    }),
   update: (electionId: string, positionId: string, body: Record<string, unknown>) =>
-    api<Position>(`/elections/${electionId}/positions/${positionId}`, { method: "PUT", body }),
+    api<Position>(`/elections/${electionId}/positions/${positionId}`, {
+      method: "PUT",
+      body,
+    }),
   remove: (electionId: string, positionId: string) =>
-    api<unknown>(`/elections/${electionId}/positions/${positionId}`, { method: "DELETE" }),
+    api<unknown>(`/elections/${electionId}/positions/${positionId}`, {
+      method: "DELETE",
+    }),
 
   // Standalone (positions-first) endpoints. A position exists before any
   // election does; these paths are not election-scoped.
@@ -342,7 +376,10 @@ export const elections = {
    */
   remove: (id: string) => api<unknown>(`/elections/${id}`, { method: "DELETE" }),
   transition: (id: string, to: string, reason = "") =>
-    api<Election>(`/elections/${id}/transitions`, { method: "POST", body: { to, reason } }),
+    api<Election>(`/elections/${id}/transitions`, {
+      method: "POST",
+      body: { to, reason },
+    }),
   readiness: (id: string) =>
     api<{
       ready: boolean;
@@ -352,9 +389,12 @@ export const elections = {
   roles: {
     list: (id: string) => api<ElectionRole[]>(`/elections/${id}/roles`),
     lookup: (id: string, email: string) =>
-      api<{ user_id: string; email: string; full_name: string; election_id: string }>(
-        `/elections/${id}/roles/lookup?email=${encodeURIComponent(email)}`
-      ),
+      api<{
+        user_id: string;
+        email: string;
+        full_name: string;
+        election_id: string;
+      }>(`/elections/${id}/roles/lookup?email=${encodeURIComponent(email)}`),
     assign: (id: string, userId: string, role: string) =>
       api<ElectionRole>(`/elections/${id}/roles/${userId}`, {
         method: "PUT",

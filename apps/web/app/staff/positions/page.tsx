@@ -338,7 +338,10 @@ function ManagePositions() {
                 min={0}
                 value={form.min_selections}
                 onChange={(event) =>
-                  setForm({ ...form, min_selections: Number(event.target.value) })
+                  setForm({
+                    ...form,
+                    min_selections: Number(event.target.value),
+                  })
                 }
               />
             </div>
@@ -351,7 +354,10 @@ function ManagePositions() {
                 min={1}
                 value={form.max_selections}
                 onChange={(event) =>
-                  setForm({ ...form, max_selections: Number(event.target.value) })
+                  setForm({
+                    ...form,
+                    max_selections: Number(event.target.value),
+                  })
                 }
               />
             </div>
@@ -364,7 +370,10 @@ function ManagePositions() {
                 min={0}
                 value={form.max_candidates}
                 onChange={(event) =>
-                  setForm({ ...form, max_candidates: Number(event.target.value) })
+                  setForm({
+                    ...form,
+                    max_candidates: Number(event.target.value),
+                  })
                 }
               />
               <span className="hint">How many applications can be approved. 0 means no limit.</span>

@@ -68,7 +68,11 @@ export function PositionResult({ position }: { position: PositionResultType }) {
                 {tied.has(row.candidate_id) ? <span className="lead-tag">Tied</span> : null}
               </span>
               <div className={`bar${winnerNames.has(row.candidate_id) ? " lead" : ""}`}>
-                <i style={{ width: `${Math.min(100, Math.max(0, row.share_percent))}%` }} />
+                <i
+                  style={{
+                    width: `${Math.min(100, Math.max(0, row.share_percent))}%`,
+                  }}
+                />
               </div>
               <span className="vl">
                 <b>{formatNumber(row.votes)}</b> · {formatPercent(row.share_percent)}

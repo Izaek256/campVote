@@ -34,12 +34,7 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <button
-        type="button"
-        className="btn ghost sm"
-        aria-label="Toggle theme"
-        disabled
-      >
+      <button type="button" className="btn ghost sm" aria-label="Toggle theme" disabled>
         <Icon name="moon" size="s" />
       </button>
     );

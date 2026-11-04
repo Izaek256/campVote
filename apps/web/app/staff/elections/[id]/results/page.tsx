@@ -24,7 +24,10 @@ import type { ResultSnapshot, Results, ResultsHistory } from "@/lib/types";
  */
 function Workspace({ id }: { id: string }) {
   const toast = useToast();
-  const [election, setElection] = useState<{ title: string; status: string } | null>(null);
+  const [election, setElection] = useState<{
+    title: string;
+    status: string;
+  } | null>(null);
   const [results, setResults] = useState<Results | null>(null);
   const [history, setHistory] = useState<ResultsHistory | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,7 +45,12 @@ function Workspace({ id }: { id: string }) {
       title: string;
       outcome_before: string;
       outcome_after: string;
-      candidates?: Array<{ name: string; before: number; after: number; delta: number }>;
+      candidates?: Array<{
+        name: string;
+        before: number;
+        after: number;
+        delta: number;
+      }>;
     }>;
   } | null>(null);
 

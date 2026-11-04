@@ -65,7 +65,10 @@ function ElectionView({ id }: { id: string }) {
       })
       .catch(() => {
         if (active)
-          setEligibility({ eligible: false, reason: "Eligibility could not be checked." });
+          setEligibility({
+            eligible: false,
+            reason: "Eligibility could not be checked.",
+          });
       });
     return () => {
       active = false;
