@@ -1,15 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/components/toast";
 import { ApiError, auth } from "@/lib/api";
 
-export default function ResetPasswordPage() {
-  const _router = useRouter();
+function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const toast = useToast();
 
@@ -174,5 +173,13 @@ export default function ResetPasswordPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="auth-wrap"><div className="auth-card">Loading...</div></div>}>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
