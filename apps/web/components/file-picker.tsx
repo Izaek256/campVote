@@ -136,26 +136,17 @@ export function FilePicker({
 			{hint && <span className="hint">{hint}</span>}
 
 			<div
-				className={`affix ${hasError ? "bad" : ""}`}
+				className={`affix file-picker ${hasError ? "bad" : ""} ${dragActive ? "drag-active" : ""}`}
 				onDragEnter={handleDrag}
 				onDragLeave={handleDrag}
 				onDragOver={handleDrag}
 				onDrop={handleDrop}
-				style={{
-					position: "relative",
-					border: dragActive
-						? "2px dashed var(--primary)"
-						: "1.5px solid var(--line-strong)",
-					background: dragActive ? "var(--primary-soft)" : "var(--surface)",
-					borderRadius: "var(--r)",
-					minHeight: 44,
-					transition: "all 0.2s var(--ease)",
-				}}
 			>
 				<input
 					ref={inputRef}
 					type="file"
 					id={`file-picker-${label.replace(/\s+/g, "-")}`}
+					className="file-picker-input"
 					accept={
 						isImage
 							? "image/jpeg,image/png,image/gif,image/webp"
@@ -163,54 +154,18 @@ export function FilePicker({
 					}
 					onChange={handleInputChange}
 					disabled={disabled || uploading}
-					style={{
-						width: "100%",
-						height: "100%",
-						opacity: 0,
-						position: "absolute",
-						top: 0,
-						left: 0,
-						cursor: disabled || uploading ? "not-allowed" : "pointer",
-					}}
 				/>
 				{!value ? (
-					<div
-						className="row"
-						style={{
-							padding: "10px 12px",
-							alignItems: "center",
-							gap: 12,
-							minHeight: 44,
-						}}
-					>
-						<div
-							style={{
-								display: "grid",
-								placeItems: "center",
-								width: 24,
-								height: 24,
-								color: uploading
-									? "var(--ink-3)"
-									: dragActive
-										? "var(--primary)"
-										: "var(--ink-3)",
-							}}
-						>
+					<div className="file-picker-empty">
+						<div className={`file-picker-icon ${uploading ? "uploading" : ""} ${dragActive ? "drag" : ""}`}>
 							{uploading ? (
 								<Icon name="clock" size="s" />
 							) : (
 								<Icon name={isImage ? "image" : "file"} size="s" />
 							)}
 						</div>
-						<div style={{ flex: 1, minWidth: 0 }}>
-							<span
-								style={{
-									display: "block",
-									fontSize: "15px",
-									color:
-										uploading || dragActive ? "var(--ink-3)" : "var(--ink)",
-								}}
-							>
+						<div className="file-picker-text">
+							<span className="file-picker-label">
 								{uploading
 									? "Uploading..."
 									: dragActive
@@ -218,10 +173,7 @@ export function FilePicker({
 										: "Choose file"}
 							</span>
 							{hint && (
-								<span
-									className="hint"
-									style={{ display: "block", marginTop: 2 }}
-								>
+								<span className="hint">
 									{isImage ? "JPEG, PNG, GIF, WebP" : "PDF"} · max{" "}
 									{formatSize(maxSize)}
 								</span>
@@ -234,62 +186,26 @@ export function FilePicker({
 								!disabled && !uploading && inputRef.current?.click()
 							}
 							disabled={disabled || uploading}
-							style={{ pointerEvents: "none" }}
 						>
 							Browse
 						</button>
 					</div>
 				) : (
-					<div
-						className="row"
-						style={{
-							padding: "10px 12px",
-							alignItems: "center",
-							gap: 12,
-							minHeight: 44,
-						}}
-					>
+					<div className="file-picker-filled">
 						{isImage ? (
 							// eslint-disable-next-line @next/next/no-img-element
 							<img
 								src={value}
 								alt="Preview"
-								style={{
-									width: 40,
-									height: 40,
-									objectFit: "cover",
-									borderRadius: 4,
-									border: "1px solid var(--line)",
-								}}
+								className="file-picker-preview"
 							/>
 						) : (
-							<div
-								style={{
-									width: 40,
-									height: 40,
-									display: "grid",
-									placeItems: "center",
-									background: "var(--sunken)",
-									borderRadius: 4,
-								}}
-							>
-								<div style={{ color: "var(--ink-3)" }}>
-									<Icon name="file" size="s" />
-								</div>
+							<div className="file-picker-preview file-picker-preview-pdf">
+								<Icon name="file" size="s" />
 							</div>
 						)}
-						<div style={{ flex: 1, minWidth: 0 }}>
-							<span
-								className="hint"
-								style={{
-									display: "block",
-									overflow: "hidden",
-									textOverflow: "ellipsis",
-									whiteSpace: "nowrap",
-								}}
-							>
-								{value.split("/").pop()}
-							</span>
+						<div className="file-picker-filename">
+							<span className="hint">{value.split("/").pop()}</span>
 						</div>
 						<div className="row" style={{ gap: 8 }}>
 							<button
@@ -314,9 +230,7 @@ export function FilePicker({
 			</div>
 
 			{hasError && (
-				<span className="err" style={{ display: "block", marginTop: 4 }}>
-					{error || uploadError}
-				</span>
+				<span className="err">{error || uploadError}</span>
 			)}
 		</div>
 	);
