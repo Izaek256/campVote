@@ -273,7 +273,9 @@ export function FilePicker({
 									borderRadius: 4,
 								}}
 							>
-								<Icon name="file" size="s" style={{ color: "var(--ink-3)" }} />
+								<div style={{ color: "var(--ink-3)" }}>
+									<Icon name="file" size="s" />
+								</div>
 							</div>
 						)}
 						<div style={{ flex: 1, minWidth: 0 }}>
