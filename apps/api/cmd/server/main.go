@@ -77,18 +77,13 @@ func main() {
 		log.Fatalf("Read replicas: %v", err)
 	}
 
-	// DB_PROVIDER=memory keeps everything in RAM, so the only process that can
-	// usefully migrate it is this one: a separate migrate command would build the
-	// schema in a
-	// process that then exits, and this one would start on an empty database and
-	// answer "no such table" to every request. Nothing is at risk either way,
-	// because an in-memory database starts empty by definition.
-	if strings.HasPrefix(cfg.DatabaseURL, "sqlite:file::memory:") {
-		log.Println("DB_PROVIDER=memory: migrating in process, because the schema cannot outlive it")
-		if err := models.Migrate(db); err != nil {
-			log.Fatalf("Failed to migrate the in-memory database: %v", err)
-		}
+	// Run database migrations on startup
+	// This ensures the schema is up-to-date with the model definitions
+	log.Println("Running database migrations...")
+	if err := models.Migrate(db); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
 	}
+	log.Println("Database migrations completed successfully")
 
 	// Bootstrap the first administrator if none exists and env vars are set.
 	// This is a one-time operation: once an admin is in the database, this does
