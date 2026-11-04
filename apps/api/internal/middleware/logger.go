@@ -2,14 +2,15 @@ package middleware
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"campvote/apps/api/internal/logging"
 	"campvote/apps/api/internal/respond"
+
+	"github.com/gin-gonic/gin"
 )
 
 // RequestID injects a unique X-Request-ID header into every request and
@@ -99,8 +100,11 @@ func MaxBodySize(limit int64) gin.HandlerFunc {
 	}
 }
 
-// Logger creates a structured logging middleware with request ID correlation.
-// Silently skips internal dashboard paths to keep the terminal readable.
+// Logger writes one access line per request: status, method, path, duration
+// and client, in the shared format from internal/logging. The request id is
+// carried on error responses, where a support report needs it to find the
+// line; internal dashboard paths are skipped, since they are noise nobody
+// reads and they drown out the requests that matter.
 func Logger() gin.HandlerFunc {
 	// Paths that generate noise and aren't useful to see in dev logs
 	skipPrefixes := []string{
@@ -130,23 +134,17 @@ func Logger() gin.HandlerFunc {
 
 		c.Next()
 
-		latency := time.Since(start)
-		status := c.Writer.Status()
-		method := c.Request.Method
-		clientIP := c.ClientIP()
-		requestID, _ := c.Get("request_id")
-
 		if query != "" {
 			path = path + "?" + query
 		}
 
-		log.Printf("[%d] %s %s | %s | %v | id=%v",
-			status,
-			method,
+		logging.Request(
+			c.Writer.Status(),
+			c.Request.Method,
 			path,
-			clientIP,
-			latency,
-			requestID,
+			time.Since(start),
+			c.ClientIP(),
+			c.GetString("request_id"),
 		)
 	}
 }

@@ -26,6 +26,7 @@ import (
 	"campvote/apps/api/internal/database"
 	"campvote/apps/api/internal/events"
 	"campvote/apps/api/internal/jobs"
+	"campvote/apps/api/internal/logging"
 	"campvote/apps/api/internal/mail"
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/routes"
@@ -35,6 +36,10 @@ import (
 )
 
 func main() {
+	// One format for the whole process, installed before anything can print,
+	// so the boot reads as a block instead of a mix of styles.
+	logging.Setup()
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -256,6 +261,7 @@ func main() {
 
 	// Setup router
 	router := routes.Setup(db, cfg, svc)
+	logging.Info("Registered %d routes", len(router.Routes()))
 
 	// Start the SecObs notification poller (turns Sentinel/Pulse findings
 	// into in-app notifications). Runs once a minute on its own goroutine;
@@ -344,22 +350,30 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	// Boot header, printed once and before the listener accepts anything, so
+	// the environment and the URLs sit together instead of being spread down
+	// the startup lines. Only what is actually mounted is listed.
+	base := fmt.Sprintf("http://localhost:%s", cfg.Port)
+	rows := [][2]string{
+		{"env", cfg.AppEnv},
+		{"port", cfg.Port},
+	}
+	if cfg.GORMStudioEnabled {
+		rows = append(rows, [2]string{"studio", base + "/studio"})
+	}
+	if cfg.AppEnv != "production" || cfg.APIDocsPublic {
+		rows = append(rows, [2]string{"docs", base + "/docs"})
+	}
+	if cfg.PulseEnabled {
+		rows = append(rows, [2]string{"pulse", base + "/pulse/ui/"})
+	}
+	if cfg.SentinelEnabled {
+		rows = append(rows, [2]string{"sentinel", base + "/sentinel/ui"})
+	}
+	logging.Banner("campVote API", rows)
+
 	// Start server in goroutine
 	go func() {
-		log.Printf("Server starting on port %s", cfg.Port)
-		if cfg.GORMStudioEnabled {
-			log.Printf("GORM Studio available at http://localhost:%s/studio", cfg.Port)
-		}
-		if cfg.AppEnv != "production" || cfg.APIDocsPublic {
-			log.Printf("API Documentation at http://localhost:%s/docs", cfg.Port)
-		}
-
-		if cfg.PulseEnabled {
-			log.Printf("Pulse dashboard at http://localhost:%s/pulse/ui/", cfg.Port)
-		}
-		if cfg.SentinelEnabled {
-			log.Printf("Sentinel dashboard at http://localhost:%s/sentinel/ui", cfg.Port)
-		}
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Server failed: %v", err)
 		}

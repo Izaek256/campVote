@@ -2,8 +2,10 @@ package routes
 
 import (
 	"context"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -691,6 +693,15 @@ func mountAuthRoutes(v1 *gin.RouterGroup, authHandler *handlers.AuthHandler, sso
 func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
+	}
+
+	// Gin narrates every route it mounts — "[GIN-debug] GET /api/v1/..." for
+	// over a hundred lines before the server is even listening, which is most
+	// of a boot log and buries the lines worth reading. Quiet by default: the
+	// caller prints a one-line count instead, and LOG_ROUTES=true restores the
+	// dump when the wiring itself is what is being debugged.
+	if os.Getenv("LOG_ROUTES") != "true" {
+		gin.DefaultWriter = io.Discard
 	}
 
 	r := gin.New()

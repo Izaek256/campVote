@@ -179,6 +179,7 @@ func (r *redisBackplane) Subscribe(ctx context.Context, deliver func([]byte)) {
 	// not survive Redis being unreachable at startup or being restarted long
 	// enough for the subscription to be torn down, so the outer loop retries.
 	backoff := time.Second
+	warned := false
 	for {
 		if ctx.Err() != nil {
 			return
@@ -195,7 +196,15 @@ func (r *redisBackplane) Subscribe(ctx context.Context, deliver func([]byte)) {
 			if ctx.Err() != nil {
 				return
 			}
-			log.Printf("[realtime] backplane subscribe failed, retrying in %s: %v", backoff, err)
+			// One line per outage, not one per retry. With no Redis running the
+			// old loop reprinted the same failure every thirty seconds forever,
+			// which is a wall of text that buries the startup lines it is meant
+			// to explain. The loop keeps retrying quietly and says so again only
+			// when it connects or the connection drops a second time.
+			if !warned {
+				log.Printf("[realtime] backplane cannot reach Redis, so live updates stay on this process; retrying in %s: %v", backoff, err)
+				warned = true
+			}
 			select {
 			case <-ctx.Done():
 				return
@@ -209,6 +218,7 @@ func (r *redisBackplane) Subscribe(ctx context.Context, deliver func([]byte)) {
 
 		log.Printf("[realtime] backplane connected on %q", r.channel)
 		backoff = time.Second
+		warned = false
 
 		ch := sub.Channel()
 		for msg := range ch {
