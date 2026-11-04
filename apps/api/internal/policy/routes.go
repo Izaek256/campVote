@@ -153,13 +153,6 @@ func init() {
 	permitted("elections.certify", "POST", "/api/v1/elections/:id/results/certify")
 	permitted("results.view", "GET", "/api/v1/elections/:id/results/history")
 
-	// Downloadable documents. The results ledger renders exactly what
-	// /results already publishes, so it is authenticated rather than
-	// permission-gated and the handler refuses it until voting has closed. The
-	// info sheet carries only public election configuration — never a ballot
-	// choice and never a voter.
-	authenticated("GET", "/api/v1/elections/:id/results.pdf", "/api/v1/elections/:id/info.pdf")
-
 	// The voter's own eligibility and ballot. Any signed-in caller may ask;
 	// the handler returns the ballot only when the server-side eligibility
 	// check passes for this election.

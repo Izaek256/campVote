@@ -196,6 +196,17 @@ export interface ResultSnapshot {
   ballots_spoiled: number;
 }
 
+// Participation split by faculty. Counts only: the server never sends a name,
+// an address or anything that could be joined back to a choice, and it
+// withholds the figures for a group smaller than the reporting threshold.
+export interface FacultyTurnout {
+  faculty: string;
+  eligible: number;
+  ballots: number;
+  percent: number;
+  suppressed?: boolean;
+}
+
 export interface Results {
   election_id: string;
   election_status?: ElectionStatus;
@@ -203,6 +214,7 @@ export interface Results {
   label: ResultStatus | "UNAVAILABLE";
   reason?: string;
   snapshot?: ResultSnapshot;
+  turnout_by_faculty?: FacultyTurnout[];
 }
 
 export interface ResultsHistory {

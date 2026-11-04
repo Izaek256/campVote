@@ -181,7 +181,7 @@ export default function RegisterPage() {
         </div>
         <Link className="brand row" href="/login" style={{ marginBottom: 24 }}>
           <span className="mark">
-            <Icon name="moon" size="l" />
+            <Icon name="ballot" size="l" />
           </span>
           <span style={{ fontWeight: 700, fontSize: 18 }}>
             camp<b style={{ fontWeight: 400 }}>Vote</b>

@@ -1,8 +1,18 @@
+/**
+ * The campVote icon set.
+ *
+ * One grammar for every glyph: a 24px grid, 1.75 stroke, square caps and mitre
+ * joins, drawn with `currentColor` so an icon takes the colour of its context.
+ * A few short aliases (up, dl, out, shield, hist, down) are kept because older
+ * screens reference them; each points at the same path as its full name.
+ */
 const paths: Record<string, React.ReactNode> = {
   check: <path d="M20 6 9 17l-5-5" />,
   x: <path d="M18 6 6 18M6 6l12 12" />,
   plus: <path d="M12 5v14M5 12h14" />,
   arrow: <path d="M4 12h16m-7-7 7 7-7 7" />,
+  "chevron-down": <path d="m6 9 6 6 6-6" />,
+  // Alias: older screens ask for "down".
   down: <path d="m6 9 6 6 6-6" />,
   search: (
     <>
@@ -35,7 +45,7 @@ const paths: Record<string, React.ReactNode> = {
       <path d="M12 16v-5M12 8h.01" />
     </>
   ),
-  cal: <path d="M3 5h18v16H3zM3 10h18M8 2v6M16 2v6" />,
+  calendar: <path d="M3 5h18v16H3zM3 10h18M8 2v6M16 2v6" />,
   clock: (
     <>
       <circle cx="12" cy="12" r="10" />
@@ -43,9 +53,15 @@ const paths: Record<string, React.ReactNode> = {
     </>
   ),
   file: <path d="M5 2h9l5 5v15H5zM14 2v5h5M8 13h8M8 17h6" />,
+  upload: <path d="M12 16V4m0 0L7 9m5-5 5 5M4 20h16" />,
+  // Alias: older screens ask for "up".
   up: <path d="M12 16V4m0 0L7 9m5-5 5 5M4 20h16" />,
+  download: <path d="M12 4v12m0 0-5-5m5 5 5-5M4 20h16" />,
+  // Alias: older screens ask for "dl".
   dl: <path d="M12 4v12m0 0-5-5m5 5 5-5M4 20h16" />,
   sliders: <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />,
+  logout: <path d="M9 21H3V3h6M16 17l5-5-5-5M21 12H9" />,
+  // Alias: older screens ask for "out".
   out: <path d="M9 21H3V3h6M16 17l5-5-5-5M21 12H9" />,
   eye: (
     <>
@@ -55,9 +71,83 @@ const paths: Record<string, React.ReactNode> = {
   ),
   trash: <path d="M3 6h18M8 6V3h8v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />,
   edit: <path d="M4 20h4L20 8l-4-4L4 16zM14 6l4 4" />,
+  "shield-check": <path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5zM9 12l2 2 4-4" />,
+  // Alias: older screens ask for "shield".
   shield: <path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5zM9 12l2 2 4-4" />,
+  history: <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2" />,
+  // Alias: older screens ask for "hist".
   hist: <path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2" />,
-  moon: <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />,
+  "cast-vote": <path d="M12 3v9m0 0-4-4m4 4 4-4M3 14h18v7H3z" />,
+  certified: (
+    <>
+      <path d="M8 2h8l6 6v8l-6 6H8l-6-6V8z" />
+      <path d="M8 12l3 3 5-6" />
+    </>
+  ),
+  "candidate-id": (
+    <>
+      <path d="M2 5h20v14H2z" />
+      <circle cx="15" cy="10" r="2" />
+      <path d="M12 17c0-2 1.3-3 3-3s3 1 3 3M5 9h4M5 13h3" />
+    </>
+  ),
+  roster: <path d="M3 5h3M3 12h3M3 19h3M10 5h11M10 12h11M10 19h11" />,
+  hash: <path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16" />,
+  qr: <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM20 14v7h-3M14 20h1" />,
+  printer: <path d="M6 9V3h12v6M6 18H3V9h18v9h-3M6 14h12v7H6z" />,
+  "file-pdf": <path d="M5 2h9l5 5v15H5zM14 2v5h5M8 18v-5h2a1.5 1.5 0 0 1 0 3H8" />,
+  mail: <path d="M2 5h20v14H2zM2 5l10 8 10-8" />,
+  verified: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M7 12l4 4 6-7" />
+    </>
+  ),
+  cancelled: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M5 5l14 14" />
+    </>
+  ),
+  play: <path d="M6 4v16l14-8z" />,
+  stop: <path d="M5 5h14v14H5z" />,
+  turnout: (
+    <>
+      <path d="M12 3a9 9 0 1 0 9 9h-9z" />
+      <path d="M16 3.5A9 9 0 0 1 20.5 8H16z" />
+    </>
+  ),
+  copy: <path d="M8 8h13v13H8zM3 3h13v3M3 3v13h3" />,
+  refresh: <path d="M21 4v6h-6M3 20v-6h6M20 10A8 8 0 0 0 5 7M4 14a8 8 0 0 0 15 3" />,
+  "audit-log": <path d="M4 3h16v18H4zM8 8h8M8 12h8M8 16h4" />,
+  ranked: (
+    <>
+      <path d="M4 6h2M4 12h2M4 18h2M10 6h10M10 12h10M10 18h10" />
+      <path d="M12 9v6" />
+    </>
+  ),
+  timer: (
+    <>
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l3 2M9 2h6" />
+    </>
+  ),
+  // The theme toggle pairs a sun with a moon; both drawn in the same grammar.
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M18.4 5.6l1.4-1.4M4.2 19.8l1.4-1.4" />
+    </>
+  ),
+  moon: <path d="M20.5 14.8A8.5 8.5 0 1 1 9.2 3.5a7 7 0 0 0 11.3 11.3z" />,
+  // Used by the file picker to mark an image upload.
+  image: (
+    <>
+      <path d="M3 4h18v16H3z" />
+      <circle cx="8.5" cy="9" r="1.5" />
+      <path d="M21 17l-5-5-4 4-2-2-6 6" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof paths;

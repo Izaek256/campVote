@@ -57,15 +57,7 @@ func (h *TurnoutHandler) GetTurnout(c *gin.Context) {
 	eligible := result.Turnout.EligibleVoters
 	voted := result.Turnout.BallotsCast
 
-	// A threshold of zero, the MVP default, publishes turnout for a class-sized
-	// election. Set TURNOUT_PRIVACY_THRESHOLD above zero to withhold counts for
-	// groups smaller than that number.
-	threshold := 0
-	if raw := strings.TrimSpace(os.Getenv("TURNOUT_PRIVACY_THRESHOLD")); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil && parsed >= 0 {
-			threshold = parsed
-		}
-	}
+	threshold := turnoutPrivacyThreshold()
 	suppressed := threshold > 0 && eligible < threshold
 
 	positions := make([]positionParticipation, 0, len(result.Positions))
@@ -92,4 +84,21 @@ func (h *TurnoutHandler) GetTurnout(c *gin.Context) {
 		"positions":    positions,
 		"last_refresh": election.UpdatedAt,
 	})
+}
+
+// turnoutPrivacyThreshold is the smallest group whose participation may be
+// published. A threshold of zero, the MVP default, publishes turnout for a
+// class-sized election; set TURNOUT_PRIVACY_THRESHOLD above zero to withhold
+// counts for anything smaller. It applies to the whole election and, through
+// eligibility.FacultyTurnoutBreakdown, to each faculty within it.
+func turnoutPrivacyThreshold() int {
+	raw := strings.TrimSpace(os.Getenv("TURNOUT_PRIVACY_THRESHOLD"))
+	if raw == "" {
+		return 0
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed < 0 {
+		return 0
+	}
+	return parsed
 }

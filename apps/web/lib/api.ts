@@ -239,43 +239,6 @@ export async function upload(
   return payload?.data as UploadRef;
 }
 
-/**
- * Download a file the API streams, honouring the session cookie.
- *
- * A plain link would drop the cookie on a cross-origin navigation, so we fetch
- * the bytes with credentials and hand the browser a blob instead. A refusal is
- * surfaced as the usual ApiError, with its request id, so the caller can show
- * why the document is not available yet.
- */
-export async function download(path: string, filename: string): Promise<void> {
-  const response = await fetch(`${API}/api/v1${path}`, {
-    method: "GET",
-    credentials: "include",
-    headers: { Accept: "application/pdf" },
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new ApiError(
-      payload?.error?.message ?? `The document could not be downloaded (${response.status})`,
-      response.status,
-      {
-        fields: payload?.error?.details,
-        code: payload?.error?.code,
-        requestId: response.headers.get("X-Request-ID") ?? undefined,
-      }
-    );
-  }
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
 export const candidates = {
   application: (electionId: string) =>
     api<CandidateApplicationView>(`/elections/${electionId}/candidate-application`),
@@ -300,11 +263,14 @@ export const candidates = {
       body: { ballot_photo_url: ballotPhotoUrl },
     }),
   /**
-   * Publish or update a manifesto (text and/or a document link). Approved
-   * candidates only, before voting opens.
+   * Publish, update or remove a manifesto (text and/or a document link).
+   * Approved candidates only, before voting opens. `clear: true` removes both
+   * the text and the document link in one request.
    */
-  setManifesto: (candidateId: string, body: { manifesto?: string; manifesto_url?: string }) =>
-    api<Candidate>(`/candidates/my/${candidateId}/manifesto`, { method: "POST", body }),
+  setManifesto: (
+    candidateId: string,
+    body: { manifesto?: string; manifesto_url?: string; clear?: boolean }
+  ) => api<Candidate>(`/candidates/my/${candidateId}/manifesto`, { method: "POST", body }),
   /**
    * The approved candidates of an election, with manifestos, for an eligible
    * voter. Answers before voting opens so manifestos can be read in advance.
@@ -450,15 +416,21 @@ export const staff = {
 /**
  * Downloadable documents for an election.
  *
- * The results ledger renders exactly what the results screen publishes, so the
- * API refuses it until the election's policy allows publication; the caller
- * shows the refusal. The information sheet is public configuration.
+ * They are rendered in the browser so they can be laid out to the UI kit's
+ * design. The results ledger still reports exactly what the results screen
+ * publishes, and is refused until the election's policy allows publication so
+ * the caller shows the same refusal. Both generators are loaded on demand:
+ * they pull in the PDF toolkit, which no other screen needs.
  */
 export const documents = {
-  resultsPdf: (electionId: string) =>
-    download(`/elections/${electionId}/results.pdf`, `results-${electionId}.pdf`),
-  infoPdf: (electionId: string) =>
-    download(`/elections/${electionId}/info.pdf`, `election-info-${electionId}.pdf`),
+  resultsPdf: async (electionId: string) => {
+    const { downloadResultsLedger } = await import("./pdf");
+    await downloadResultsLedger(electionId);
+  },
+  infoPdf: async (electionId: string) => {
+    const { downloadInfoSheet } = await import("./pdf");
+    await downloadInfoSheet(electionId);
+  },
 };
 
 export const elections = {

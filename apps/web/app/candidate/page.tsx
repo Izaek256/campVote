@@ -72,11 +72,13 @@ function VotesDialog({ entry, onClose }: { entry: MyCandidate | null; onClose: (
                   ) : (
                     <span className="chip draft">Not elected</span>
                   )}
-                  <span className="hint">{certified ? "Certified count" : "Provisional count"}</span>
+                  <span className="hint">
+                    {certified ? "Certified count" : "Provisional count"}
+                  </span>
                 </div>
                 <p className="hint" style={{ margin: 0 }}>
-                  Your share is of the valid votes for this position. Only your own figure is
-                  shown; ballots never identify a voter.
+                  Your share is of the valid votes for this position. Only your own figure is shown;
+                  ballots never identify a voter.
                 </p>
               </>
             ) : (
@@ -111,13 +113,15 @@ function MyCandidacy() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const toast = useToast();
-  const [withdrawing, setWithdrawing] = useState<
-    Pick<MyCandidate, "candidate" | "election_title" | "position_title"> | null
-  >(null);
+  const [withdrawing, setWithdrawing] = useState<Pick<
+    MyCandidate,
+    "candidate" | "election_title" | "position_title"
+  > | null>(null);
   const [votesFor, setVotesFor] = useState<MyCandidate | null>(null);
   const [reason, setReason] = useState("");
   const [photoBusy, setPhotoBusy] = useState("");
   const [manifestoBusy, setManifestoBusy] = useState("");
+  const [removingFor, setRemovingFor] = useState<MyCandidate["candidate"] | null>(null);
   const [manifestoDraft, setManifestoDraft] = useState<
     Record<string, { text: string; url: string }>
   >({});
@@ -178,10 +182,12 @@ function MyCandidacy() {
 
   /** The manifesto form value for a candidate, defaulting to what they saved. */
   function draftFor(candidate: MyCandidate["candidate"]) {
-    return manifestoDraft[candidate.id] ?? {
-      text: candidate.manifesto ?? "",
-      url: candidate.manifesto_url ?? "",
-    };
+    return (
+      manifestoDraft[candidate.id] ?? {
+        text: candidate.manifesto ?? "",
+        url: candidate.manifesto_url ?? "",
+      }
+    );
   }
 
   function updateDraft(candidateId: string, patch: Partial<{ text: string; url: string }>) {
@@ -207,6 +213,25 @@ function MyCandidacy() {
       await load();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "The manifesto could not be saved.");
+    } finally {
+      setManifestoBusy("");
+    }
+  }
+
+  /**
+   * Remove a published manifesto (text and document) so the candidate can start
+   * again. The server refuses this once voting has opened, like any edit.
+   */
+  async function removeManifesto(candidate: MyCandidate["candidate"]) {
+    setManifestoBusy(candidate.id);
+    try {
+      await candidates.setManifesto(candidate.id, { clear: true });
+      setManifestoDraft((prev) => ({ ...prev, [candidate.id]: { text: "", url: "" } }));
+      toast.success("Manifesto removed.");
+      setRemovingFor(null);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The manifesto could not be removed.");
     } finally {
       setManifestoBusy("");
     }
@@ -261,8 +286,7 @@ function MyCandidacy() {
             // and once the election has closed the candidacy is over: the card
             // is read-only and shows the votes that name received.
             const closed = item.election_status === "CLOSED";
-            const votingOpen =
-              closed || new Date(item.election_starts_at).getTime() <= Date.now();
+            const votingOpen = closed || new Date(item.election_starts_at).getTime() <= Date.now();
             const canWithdraw =
               !votingOpen &&
               candidate.approval_status !== "WITHDRAWN" &&
@@ -306,8 +330,7 @@ function MyCandidacy() {
                       </p>
                       {closed ? (
                         <p className="hint">
-                          This election has closed. You stood as a candidate and the count is
-                          final.
+                          This election has closed. You stood as a candidate and the count is final.
                         </p>
                       ) : null}
                       {candidate.slogan ? <p style={{ marginTop: 6 }}>{candidate.slogan}</p> : null}
@@ -453,6 +476,17 @@ function MyCandidacy() {
                       >
                         {manifestoBusy === candidate.id ? "Saving…" : "Save manifesto"}
                       </button>
+                      {candidate.manifesto || candidate.manifesto_url ? (
+                        <button
+                          type="button"
+                          className="btn sm danger-o"
+                          disabled={manifestoBusy === candidate.id}
+                          onClick={() => setRemovingFor(candidate)}
+                        >
+                          <Icon name="trash" size="s" />
+                          Remove manifesto
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}
@@ -485,6 +519,22 @@ function MyCandidacy() {
             placeholder="Why are you withdrawing?"
           />
         </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={removingFor !== null}
+        title="Remove your manifesto?"
+        confirmLabel="Remove manifesto"
+        destructive
+        busy={manifestoBusy !== "" && removingFor !== null && manifestoBusy === removingFor.id}
+        onClose={() => setRemovingFor(null)}
+        onConfirm={() => removingFor && removeManifesto(removingFor)}
+      >
+        <p>
+          This removes the manifesto text and any document you attached for{" "}
+          <b>{removingFor?.full_name || "your candidacy"}</b>. Voters will no longer read it, and
+          you can publish a new one until voting opens.
+        </p>
       </ConfirmDialog>
 
       <VotesDialog entry={votesFor} onClose={() => setVotesFor(null)} />

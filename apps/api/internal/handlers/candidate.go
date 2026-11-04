@@ -408,15 +408,17 @@ func (h *CandidateHandler) SetBallotPhoto(c *gin.Context) {
 	respond.OK(c, candidate, "Ballot photo saved")
 }
 
-// SetManifesto lets an approved candidate publish or update the manifesto
-// voters read before they vote. It accepts the manifesto text and/or a link to
-// a document. Like the ballot photo it is refused once voting has opened, so a
-// published campaign cannot change underneath voters.
+// SetManifesto lets an approved candidate publish, update or remove the
+// manifesto voters read before they vote. It accepts the manifesto text and/or
+// a link to a document; sending "clear" removes both. Like the ballot photo it
+// is refused once voting has opened, so a published campaign cannot change
+// underneath voters.
 func (h *CandidateHandler) SetManifesto(c *gin.Context) {
 	userID := c.GetString("user_id")
 	var input struct {
 		Manifesto    string `json:"manifesto"`
 		ManifestoURL string `json:"manifesto_url"`
+		Clear        bool   `json:"clear"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		respond.BadRequest(c, "Add your manifesto text or a link to a document")
@@ -424,7 +426,7 @@ func (h *CandidateHandler) SetManifesto(c *gin.Context) {
 	}
 	manifesto := strings.TrimSpace(input.Manifesto)
 	manifestoURL := strings.TrimSpace(input.ManifestoURL)
-	if manifesto == "" && manifestoURL == "" {
+	if !input.Clear && manifesto == "" && manifestoURL == "" {
 		respond.BadRequest(c, "Add your manifesto text or a link to a document")
 		return
 	}
@@ -432,7 +434,7 @@ func (h *CandidateHandler) SetManifesto(c *gin.Context) {
 		respond.BadRequest(c, "Your manifesto is too long")
 		return
 	}
-	if !storedFileURL(manifestoURL) {
+	if !input.Clear && !storedFileURL(manifestoURL) {
 		respond.BadRequest(c, "Uploaded files must be links to this site or an https address")
 		return
 	}
@@ -462,6 +464,12 @@ func (h *CandidateHandler) SetManifesto(c *gin.Context) {
 		return
 	}
 
+	// A removal clears both the text and the document link in one write.
+	if input.Clear {
+		manifesto = ""
+		manifestoURL = ""
+	}
+
 	if err := h.DB.Model(&candidate).
 		Updates(map[string]interface{}{"manifesto": manifesto, "manifesto_url": manifestoURL}).Error; err != nil {
 		respond.Internal(c, err)
@@ -469,9 +477,14 @@ func (h *CandidateHandler) SetManifesto(c *gin.Context) {
 	}
 	candidate.Manifesto = manifesto
 	candidate.ManifestoURL = manifestoURL
-	h.audit(c, candidate.ElectionID, models.AuditActionCandidateUpdated,
-		"Manifesto updated: "+candidate.FullName)
-	respond.OK(c, candidate, "Manifesto saved")
+	message := "Manifesto saved"
+	detail := "Manifesto updated: "
+	if input.Clear {
+		message = "Manifesto removed"
+		detail = "Manifesto removed: "
+	}
+	h.audit(c, candidate.ElectionID, models.AuditActionCandidateUpdated, detail+candidate.FullName)
+	respond.OK(c, candidate, message)
 }
 
 // CandidatesForVoters lists an election's approved candidates, with their

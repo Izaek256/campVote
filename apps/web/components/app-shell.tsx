@@ -134,7 +134,7 @@ export function AppShell({
       <aside className={`admin-side${open ? " open" : ""}`}>
         <div style={{ display: "flex", alignItems: "center" }}>
           <Link className="b" href={admin ? "/staff" : "/elections"} onClick={close}>
-            <Icon name="moon" />
+            <Icon name="ballot" />
             campVote
           </Link>
           <button type="button" className="close" aria-label="Close navigation" onClick={close}>

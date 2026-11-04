@@ -213,6 +213,7 @@ svg.i.l {
   display: grid;
   place-items: center;
   border-radius: var(--r);
+  color: var(--bg);
 }
 .mark svg {
   width: 20px;
