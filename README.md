@@ -42,10 +42,11 @@ Install current supported versions of Git, Docker Engine/Desktop with Compose, G
 
 ## Setup options
 
-You can run campVote in two ways:
+You can run campVote in several ways:
 
-1. **Docker Compose (recommended)** - All services run in containers
-2. **Local development** - PostgreSQL in Docker, apps run locally
+1. **Docker Compose (all services)** - PostgreSQL, API and web run in containers
+2. **API container only (external database)** - only the API runs in Docker and connects to a PostgreSQL you host elsewhere
+3. **Local development** - run the Go API and Next.js apps locally, against PostgreSQL in Docker or installed locally
 
 Choose the setup that fits your workflow.
 
@@ -231,7 +232,88 @@ docker system prune -f
 
 ---
 
-## Option 2: Local Development (PostgreSQL in Docker, Apps Local)
+## Option 2: API Container Only (External Database)
+
+Use this when PostgreSQL is **not** part of this repository's Docker Compose — for example a managed database on a different host or service (Neon, Supabase, RDS, or a Postgres server you run elsewhere). Only the Go API runs in a container; it connects to the external database through `DATABASE_URL`.
+
+**Note:** `docker-compose.yaml` hardcodes the database host as its internal `postgres` service, so for this scenario build the API image and run it directly with `docker run` (pointing `DATABASE_URL` at your own database) instead of `docker compose up`.
+
+### Prerequisites
+
+- Docker Engine installed
+- An external PostgreSQL database reachable from the container, with a database and user already created
+- Its connection string, for example `postgres://USER:PASSWORD@DB_HOST:5432/DB_NAME?sslmode=require`
+
+### Step-by-step setup
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Izaek256/campVote.git
+cd campVote
+
+# 2. Build the API image (build context is apps/api)
+docker build -t campvote-api ./apps/api
+
+# 3. Run the container against your external database.
+#    JWT_SECRET is required and must be at least 32 characters (openssl rand -hex 32).
+docker run -d --name campvote-api \
+  -p 8080:8080 \
+  -e APP_ENV=development \
+  -e APP_URL=http://localhost:8080 \
+  -e DATABASE_URL='postgres://USER:PASSWORD@DB_HOST:5432/DB_NAME?sslmode=require' \
+  -e JWT_SECRET='replace-with-a-long-random-secret-32plus-chars' \
+  -e CORS_ORIGINS='http://localhost:3000' \
+  -e REDIS_URL='' \
+  -e STORAGE_DRIVER=local \
+  -e STORAGE_LOCAL_ROOT=/app/uploads \
+  -v campvote_uploads:/app/uploads \
+  campvote-api
+
+# 3b. Or, on your VPS, copy your .env file across and pass it with --env-file
+#     instead of repeating every -e flag above.
+docker run -d --name campvote-api \
+  -p 8080:8080 \
+  --env-file .env \
+  -v campvote_uploads:/app/uploads \
+  campvote-api
+```
+
+When using `--env-file .env`, make sure that file already contains the values this container needs: `DATABASE_URL` (pointing at your external database host, not `localhost`) and a `JWT_SECRET` of at least 32 characters. Because the container is not on the Compose network, also set `REDIS_URL` to a host-reachable address or leave it empty, and set `APP_URL` and `CORS_ORIGINS` to your frontend's address. Docker ignores blank lines and lines beginning with `#`, so the comments in `.env.example` are fine to keep.
+
+The image's entrypoint runs the database migrations and then starts the API, so no separate migrate step is required. The API is then available at http://localhost:8080, with the health check at `/api/health`.
+
+### Create the first administrator
+
+The container already carries `DATABASE_URL`, so bootstrap reuses it:
+
+```bash
+docker exec -e BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
+  -e BOOTSTRAP_ADMIN_PASSWORD='your-secure-password-12+chars' \
+  -e BOOTSTRAP_ADMIN_FIRST_NAME=Admin \
+  -e BOOTSTRAP_ADMIN_LAST_NAME=User \
+  campvote-api ./bootstrap
+```
+
+### Notes
+
+- `REDIS_URL` is left empty here to disable background jobs (elections then open/close lazily on request). Set it to a reachable Redis URL to enable the election scheduler and job queue.
+- If you run with `APP_ENV=production` and `STORAGE_DRIVER=local`, you must also set `ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true` (with the uploads volume backed up), or switch to an S3-compatible driver.
+- Mail: set `MAIL_MAILER` and the relevant `SMTP_*`/provider variables to a reachable server, since the bundled Mailpit service is not running in this setup.
+- Set `APP_URL` and `CORS_ORIGINS` to the addresses of your deployed web frontend.
+
+### Stopping
+
+```bash
+# Stop and remove the container (uploaded files stay on the volume)
+docker stop campvote-api && docker rm campvote-api
+
+# Also remove the uploaded-files volume (destructive)
+docker volume rm campvote_uploads
+```
+
+---
+
+## Option 3: Local Development (PostgreSQL in Docker, Apps Local)
 
 This runs PostgreSQL in Docker but runs the Go API and Next.js apps locally on your machine. This is the standard setup for active development.
 
@@ -332,7 +414,7 @@ No demo accounts are seeded. Continue with the manual setup in this section:
 
 ---
 
-## Option 3: Local Development (PostgreSQL Local on Windows, Apps Local)
+## Option 4: Local Development (PostgreSQL Local on Windows, Apps Local)
 
 This runs PostgreSQL locally on Windows (not in Docker) and runs the Go API and Next.js apps locally. Use this if you have PostgreSQL installed directly on Windows.
 
