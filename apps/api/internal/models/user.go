@@ -13,6 +13,7 @@ import (
 
 	"campvote/apps/api/internal/appendonly"
 	"campvote/apps/api/internal/crypto"
+	"campvote/apps/api/internal/migrations"
 )
 
 // Role constants
@@ -285,6 +286,15 @@ func Migrate(db *gorm.DB) error {
 
 	if err := SeedRoles(db); err != nil {
 		return fmt.Errorf("seeding default roles: %w", err)
+	}
+
+	// Run manual migrations for changes that AutoMigrate doesn't handle
+	if err := migrations.AddCandidateUserID(db); err != nil {
+		return fmt.Errorf("adding candidate user_id column: %w", err)
+	}
+
+	if err := migrations.AddPerformanceIndexes(db); err != nil {
+		return fmt.Errorf("adding performance indexes: %w", err)
 	}
 
 	log.Println(separator)
