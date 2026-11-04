@@ -10,10 +10,17 @@ import { RequireAuth } from "@/components/require-auth";
 import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
 import { ApiError, elections } from "@/lib/api";
-import { categoryLabel, formatShortEAT, statusLabel, timezoneClock } from "@/lib/format";
+import { categoryLabel, formatShortEAT, timezoneClock } from "@/lib/format";
 import type { Election } from "@/lib/types";
 
-type Filter = "ALL" | "OPEN" | "CLOSED";
+type Filter = "ALL" | "OPEN" | "MANIFESTOS" | "CLOSED";
+
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: "ALL", label: "All" },
+  { value: "OPEN", label: "Open" },
+  { value: "MANIFESTOS", label: "Manifestos" },
+  { value: "CLOSED", label: "Closed" },
+];
 
 function ElectionsView() {
   const { user } = useAuth();
@@ -43,6 +50,12 @@ function ElectionsView() {
 
   const filtered = useMemo(() => {
     if (filter === "ALL") return visible;
+    // The manifestos a voter can read before casting a ballot: an election
+    // still in draft, or one scheduled but not yet open. Candidates publish
+    // their campaigns here so the choice can be made in advance.
+    if (filter === "MANIFESTOS") {
+      return visible.filter((e) => !e.accepting_votes && e.status !== "CLOSED");
+    }
     return visible.filter((e) => e.status === filter);
   }, [visible, filter]);
 
@@ -74,7 +87,7 @@ function ElectionsView() {
       </div>
 
       <div className="row" style={{ marginBottom: 20 }}>
-        {(["ALL", "OPEN", "CLOSED"] as Filter[]).map((value) => (
+        {FILTERS.map(({ value, label }) => (
           <button
             key={value}
             type="button"
@@ -82,7 +95,7 @@ function ElectionsView() {
             aria-pressed={filter === value}
             onClick={() => setFilter(value)}
           >
-            {value === "ALL" ? "All" : statusLabel(value as Election["status"])}
+            {label}
           </button>
         ))}
       </div>
@@ -115,7 +128,9 @@ function ElectionsView() {
               ? "No election has been published yet. Check back when the Electoral Commission opens one."
               : visible.length === 0
                 ? "You have voted in every election you can see. Your ballots and results are in the Results tab."
-                : "No election matches this filter."}
+                : filter === "MANIFESTOS"
+                  ? "No election is open for reading yet. Manifestos appear here as soon as candidates are approved, before voting opens."
+                  : "No election matches this filter."}
           </span>
           {visible.length === 0 && items.length > 0 ? (
             <Link className="btn primary" href="/results">
@@ -157,7 +172,8 @@ function ElectionsView() {
                     </Link>
                   ) : (
                     <Link className="btn block" href={`/elections/${election.id}`}>
-                      View election
+                      <Icon name="users" size="s" />
+                      Read manifestos
                     </Link>
                   )}
                 </div>

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { ToastProvider } from "@/components/toast";
@@ -7,6 +7,11 @@ import { CAMPUS_NAME } from "@/lib/config";
 export const metadata: Metadata = {
   title: `campVote — ${CAMPUS_NAME} elections`,
   description: `Vote in authorised ${CAMPUS_NAME} elections.`,
+};
+
+// The browser chrome and mobile status bar wear the kit's primary green.
+export const viewport: Viewport = {
+  themeColor: "#12783F",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

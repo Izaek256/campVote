@@ -74,6 +74,10 @@ func init() {
 	adminOr("users.create", "POST", "/api/v1/users")
 	adminOr("users.edit", "PUT", "/api/v1/users/:id", "/api/v1/users/:id/roles")
 	adminOr("users.edit", "POST", "/api/v1/users/:id/unlock")
+	// Administrator invitation. The route is registered without a policy in
+	// the staff group, which the default-deny guard refuses; declaring it here
+	// mirrors the inline guard ADMIN or perm:users.create.
+	adminOr("users.create", "POST", "/api/v1/admins/invite")
 	adminOr("users.delete", "DELETE", "/api/v1/users/:id")
 	adminOr("users.delete", "POST", "/api/v1/users/:id/gdpr-erase")
 	adminOr("audit.view", "GET", "/api/v1/gdpr/journal", "/api/v1/admin/activity",
@@ -121,8 +125,9 @@ func init() {
 	adminOnly("DELETE", "/api/v1/admin/deleted-accounts/:id")
 
 	// ── Campus election access ────────────────────────────────────────────
-	// The list is any signed-in caller's index of elections; the handler hides
-	// other people's drafts.
+	// The list is any signed-in caller's index of elections; the handler
+	// narrows it per caller — a draft to the students it will admit, a closed
+	// election to every student so the outcome is transparent.
 	authenticated("GET", "/api/v1/elections")
 	permitted("elections.create", "POST", "/api/v1/elections")
 	permitted("elections.view", "GET", "/api/v1/elections/:id")
@@ -148,19 +153,31 @@ func init() {
 	permitted("elections.certify", "POST", "/api/v1/elections/:id/results/certify")
 	permitted("results.view", "GET", "/api/v1/elections/:id/results/history")
 
+	// Downloadable documents. The results ledger renders exactly what
+	// /results already publishes, so it is authenticated rather than
+	// permission-gated and the handler refuses it until voting has closed. The
+	// info sheet carries only public election configuration — never a ballot
+	// choice and never a voter.
+	authenticated("GET", "/api/v1/elections/:id/results.pdf", "/api/v1/elections/:id/info.pdf")
+
 	// The voter's own eligibility and ballot. Any signed-in caller may ask;
 	// the handler returns the ballot only when the server-side eligibility
 	// check passes for this election.
 	authenticated("GET", "/api/v1/elections/:id/eligibility", "/api/v1/elections/:id/ballot",
 		"/api/v1/elections/:id/lifecycle", "/api/v1/elections/:id/my-vote-status",
-		"/api/v1/elections/:id/candidate-application")
+		"/api/v1/elections/:id/candidate-application",
+		"/api/v1/elections/:id/candidates-for-voters")
 	authenticated("POST", "/api/v1/elections/:id/ballot/start", "/api/v1/elections/:id/ballot/submit")
 
 	// Candidate self-service (ISSUE-21). Any signed-in caller may ask; the
-	// handler checks roster eligibility and the application window.
+	// handler checks roster eligibility and the application window. The ballot
+	// photo and manifesto are further limited to the candidate's own approved
+	// record, and only before voting opens.
 	authenticated("GET", "/api/v1/candidates/my")
 	authenticated("POST", "/api/v1/elections/:id/candidates/apply",
-		"/api/v1/candidates/my/:candidate_id/withdraw")
+		"/api/v1/candidates/my/:candidate_id/withdraw",
+		"/api/v1/candidates/my/:candidate_id/ballot-photo",
+		"/api/v1/candidates/my/:candidate_id/manifesto")
 
 	// Officer candidate review and ballot definition (ISSUE-06). These were
 	// registered without a policy, so the guard denied every one of them.

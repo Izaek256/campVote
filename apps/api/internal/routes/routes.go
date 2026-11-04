@@ -1377,6 +1377,13 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.POST("/elections/:id/results/recount", resultsHandler.Recount)
 		protected.POST("/elections/:id/results/certify", resultsHandler.Certify)
 
+		// Downloadable documents. The ledger renders exactly what /results
+		// publishes for this caller and refuses until the policy allows it;
+		// the information sheet is public configuration under the same
+		// visibility rule as the election list.
+		protected.GET("/elections/:id/results.pdf", resultsHandler.ResultsPDF)
+		protected.GET("/elections/:id/info.pdf", resultsHandler.InfoPDF)
+
 		// Candidate self-service. Applications are allowed before polls open,
 		// so the handler checks the roster directly rather than the ballot gate.
 		protected.GET("/candidates/my", candidateHandler.GetMyCandidacies)
@@ -1384,6 +1391,13 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.POST("/elections/:id/candidates/apply", candidateHandler.Apply)
 		protected.POST("/candidates/my/:candidate_id/withdraw", candidateHandler.WithdrawMine)
 		protected.POST("/candidates/my/:candidate_id/ballot-photo", candidateHandler.SetBallotPhoto)
+		protected.POST("/candidates/my/:candidate_id/manifesto", candidateHandler.SetManifesto)
+
+		// The approved candidates of an election, with manifestos, for an
+		// eligible voter — readable before voting opens. Gated by the same
+		// eligibility rule as the election list; identity documents are never
+		// returned.
+		protected.GET("/elections/:id/candidates-for-voters", candidateHandler.CandidatesForVoters)
 
 		// Standalone position applications. A student sees only the positions
 		// their email domain, year and course make them eligible for, and may

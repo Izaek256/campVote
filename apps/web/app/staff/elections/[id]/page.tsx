@@ -10,7 +10,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
-import { ApiError, elections } from "@/lib/api";
+import { ApiError, candidates, elections, positions } from "@/lib/api";
 import {
   EAT,
   categoryLabel,
@@ -19,7 +19,7 @@ import {
   formatPercent,
   statusLabel,
 } from "@/lib/format";
-import type { Election, ElectionRole, EligibilityReport, Results } from "@/lib/types";
+import type { Candidate, Election, ElectionRole, EligibilityReport, Position, Results } from "@/lib/types";
 
 function toEatInput(iso: string): string {
   const date = new Date(iso);
@@ -102,6 +102,8 @@ function Manage({ id }: { id: string }) {
     problems: Record<string, string>;
   } | null>(null);
   const [roles, setRoles] = useState<ElectionRole[]>([]);
+  const [positionList, setPositionList] = useState<Position[]>([]);
+  const [candidateList, setCandidateList] = useState<Candidate[]>([]);
   const [roleEmail, setRoleEmail] = useState("");
   const [roleName, setRoleName] = useState("ELECTION_OFFICIAL");
   const [roleBusy, setRoleBusy] = useState(false);
@@ -164,6 +166,15 @@ function Manage({ id }: { id: string }) {
       return [] as ElectionRole[];
     });
     setRoles(roleResult ?? []);
+    // Everything linked to the election, so an officer sees the whole state
+    // without opening each section: the positions, who is approved and who is
+    // still awaiting review.
+    const [positionResult, candidateResult] = await Promise.all([
+      positions.list(id).catch(() => ({ positions: [] as Position[] })),
+      candidates.list(id).catch(() => ({ candidates: [] as Candidate[] })),
+    ]);
+    setPositionList(positionResult.positions ?? []);
+    setCandidateList(candidateResult.candidates ?? []);
     setNotes(messages);
   }, [id, toast.error]);
 
@@ -482,6 +493,95 @@ function Manage({ id }: { id: string }) {
 
       <div className="split">
         <div className="stack">
+          <section className="panel">
+            <div className="section-h" style={{ marginTop: 0 }}>
+              <h2>Positions &amp; candidates</h2>
+              <span className="mono">
+                {positionList.length} position{positionList.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            {positionList.length === 0 ? (
+              <div className="stack" style={{ gap: 10 }}>
+                <p className="hint" style={{ margin: 0 }}>
+                  This election has no positions yet. A draft opens automatically only once every
+                  position has at least one approved candidate, so add a position here and approve
+                  its candidates.
+                </p>
+                <Link className="btn sm primary" href={`/staff/elections/${id}/positions`}>
+                  <Icon name="plus" size="s" />
+                  Add a position
+                </Link>
+              </div>
+            ) : (
+              <div className="stack">
+                {positionList.map((position) => {
+                  const applications = candidateList.filter(
+                    (candidate) => candidate.position_id === position.id
+                  );
+                  const approved = applications.filter(
+                    (candidate) => candidate.approval_status === "APPROVED"
+                  );
+                  const awaiting = applications.filter(
+                    (candidate) =>
+                      candidate.approval_status === "NOMINATED" ||
+                      candidate.approval_status === "PENDING"
+                  );
+                  return (
+                    <div
+                      className="panel stack"
+                      key={position.id}
+                      style={{ background: "var(--sunken)" }}
+                    >
+                      <div className="row-between">
+                        <b>{position.title}</b>
+                        <span className="hint">
+                          {approved.length} approved · {applications.length} applied
+                        </span>
+                      </div>
+                      {approved.length > 0 ? (
+                        <div className="stack" style={{ gap: 4 }}>
+                          <span className="lbl">Approved candidates</span>
+                          {approved.map((candidate) => (
+                            <span key={candidate.id} className="hint">
+                              {candidate.ballot_number ? `#${candidate.ballot_number} · ` : ""}
+                              {candidate.full_name}
+                              {candidate.manifesto || candidate.manifesto_url
+                                ? " · manifesto ready"
+                                : " · no manifesto yet"}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="hint">
+                          No approved candidates yet — add and approve at least one candidate before
+                          the election can open.
+                        </span>
+                      )}
+                      {awaiting.length > 0 ? (
+                        <div className="stack" style={{ gap: 4 }}>
+                          <span className="lbl">Applicants awaiting review</span>
+                          {awaiting.map((candidate) => (
+                            <span key={candidate.id} className="hint">
+                              {candidate.full_name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div className="row">
+                        <Link className="btn sm" href={`/staff/elections/${id}/candidates`}>
+                          Review candidates
+                        </Link>
+                        <Link className="btn sm" href={`/staff/elections/${id}/positions`}>
+                          Edit positions
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
           <section className="panel">
             <div className="section-h" style={{ marginTop: 0 }}>
               <h2>Lifecycle</h2>

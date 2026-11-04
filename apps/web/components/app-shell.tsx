@@ -22,7 +22,8 @@ interface NavSection {
 
 // Every election is built in this order. On desktop these steps live in the
 // sidebar so they are reachable from anywhere inside the election; on mobile
-// they are the same list inside the navigation drawer.
+// they are the same list inside the navigation drawer. Each entry maps to a
+// page, so a step is never listed twice.
 const ELECTION_STEPS: {
   key: string;
   label: string;
@@ -30,10 +31,8 @@ const ELECTION_STEPS: {
   hash?: string;
 }[] = [
   { key: "", label: "Details", icon: "file" },
-  { key: "", label: "Eligibility", icon: "shield", hash: "#eligibility" },
   { key: "positions", label: "Positions", icon: "ballot" },
   { key: "candidates", label: "Candidates", icon: "users" },
-  { key: "", label: "Schedule", icon: "cal", hash: "#schedule" },
   { key: "monitor", label: "Monitor", icon: "eye" },
   { key: "results", label: "Results", icon: "chart" },
   { key: "turnout", label: "Turnout", icon: "users" },
@@ -45,7 +44,6 @@ const ADMIN_SECTIONS: NavSection[] = [
     items: [
       { href: "/staff", label: "Dashboard", icon: "chart", exact: true },
       { href: "/elections", label: "All elections", icon: "ballot" },
-      { href: "/staff/positions", label: "Positions", icon: "file" },
     ],
   },
   {
@@ -145,16 +143,10 @@ export function AppShell({
         </div>
 
         {admin ? (
-          <>
-            <Link className="quick" href="/staff?new=1" onClick={close}>
-              <Icon name="plus" size="s" />
-              New election
-            </Link>
-            <Link className="quick" href="/staff/positions?new=1" onClick={close}>
-              <Icon name="plus" size="s" />
-              New position
-            </Link>
-          </>
+          <Link className="quick" href="/staff?new=1" onClick={close}>
+            <Icon name="plus" size="s" />
+            New election
+          </Link>
         ) : null}
 
         {admin && activeElectionId ? (

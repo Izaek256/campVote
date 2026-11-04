@@ -293,7 +293,25 @@ export interface Candidate {
 export interface MyCandidate {
   candidate: Candidate;
   election_title: string;
+  election_status: ElectionStatus;
+  election_starts_at: string;
+  election_ends_at: string;
   position_title: string;
+  /**
+   * The candidate's own line from the published count. Present only once the
+   * election has closed; it is the candidate's figure, never about a voter.
+   */
+  result?: CandidacyResult;
+}
+
+/** A candidate's own result in a closed election, from the stored snapshot. */
+export interface CandidacyResult {
+  position_title: string;
+  votes: number;
+  share_percent: number;
+  is_winner: boolean;
+  is_tie: boolean;
+  snapshot_status: ResultStatus | string;
 }
 
 export type PositionStatus = "OPEN" | "CLOSED";
