@@ -175,7 +175,7 @@ func TestAuthHandler_SendVerificationEmail_EmailsTheCode(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.NotContains(t, body, "verify_code")
 
-	fake.AssertSentWithin(t, 5*time.Second, "jane@example.com", "Confirm your email")
+	fake.AssertSentWithin(t, 5*time.Second, "jane@example.com", "Your CampVote sign-in code")
 }
 
 // With MAIL_ECHO_CODES=true and a working mailer, the code must still NOT be
@@ -205,7 +205,7 @@ func TestAuthHandler_SendVerificationEmail_DoesNotEchoCodeWhenMailerSucceeds(t *
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.NotContains(t, body, "verify_code", "code must not be echoed even with MAIL_ECHO_CODES=true when the mailer succeeds")
 
-	fake.AssertSentWithin(t, 5*time.Second, "jane@example.com", "Confirm your email")
+	fake.AssertSentWithin(t, 5*time.Second, "jane@example.com", "Your CampVote sign-in code")
 }
 
 // A development deployment with no mailer must still let the person finish
@@ -252,7 +252,7 @@ func TestAuthHandler_SignupInitiate_EmailsTheCode(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.NotContains(t, body, "verification_code", "code must not be echoed when the mailer succeeds")
 
-	fake.AssertSentWithin(t, 5*time.Second, "new.student@example.com", "Confirm your email")
+	fake.AssertSentWithin(t, 5*time.Second, "new.student@example.com", "Your CampVote sign-in code")
 }
 
 // With MAIL_ECHO_CODES=true and a working mailer, the signup code must NOT be
@@ -276,7 +276,7 @@ func TestAuthHandler_SignupInitiate_DoesNotEchoCodeWhenMailerSucceeds(t *testing
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.NotContains(t, body, "verification_code", "code must not be echoed even with MAIL_ECHO_CODES=true when the mailer succeeds")
 
-	fake.AssertSentWithin(t, 5*time.Second, "new.student@example.com", "Confirm your email")
+	fake.AssertSentWithin(t, 5*time.Second, "new.student@example.com", "Your CampVote sign-in code")
 }
 
 // With MAIL_ECHO_CODES=true and no mailer, the signup code is returned in the
@@ -316,7 +316,7 @@ func TestAuthHandler_SignupInitiate_HidesCodeInProduction(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	assert.NotContains(t, body, "verification_code", "production must never expose the code")
 
-	fake.AssertSentWithin(t, 5*time.Second, "new.student@example.com", "Confirm your email")
+	fake.AssertSentWithin(t, 5*time.Second, "new.student@example.com", "Your CampVote sign-in code")
 }
 
 func TestAuthHandler_Register_Success(t *testing.T) {

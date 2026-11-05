@@ -455,12 +455,12 @@ func (h *AuthHandler) deliverSignupVerificationEmail(ctx context.Context, email,
 
 	return dispatchMail(ctx, h.Mailer, h.Jobs, "signup:"+email+":"+code, mail.SendOptions{
 		To:       email,
-		Subject:  "Confirm your email address",
+		Subject:  "Your CampVote sign-in code",
 		Template: "email-verification",
 		Data: map[string]interface{}{
 			"AppName": h.Config.AppName,
-			"Title":   "Confirm your email address",
-			"Message": "Enter this code to finish creating your account.",
+			"Title":   "Your verification code",
+			"Message": "Enter this code in " + h.Config.AppName + " to finish creating your account.",
 			"Code":    code,
 			"Minutes": 10,
 			"Year":    time.Now().Year(),

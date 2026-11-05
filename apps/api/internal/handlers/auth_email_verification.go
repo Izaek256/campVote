@@ -113,15 +113,16 @@ func (h *AuthHandler) deliverVerificationEmail(ctx context.Context, user models.
 		// replays the same one does not send the mail twice.
 		err := dispatchMail(ctx, h.Mailer, h.Jobs, "verify:"+user.ID+":"+code, mail.SendOptions{
 			To:       user.Email,
-			Subject:  "Confirm your email address",
+			Subject:  "Your CampVote sign-in code",
 			Template: "email-verification",
 			Data: map[string]interface{}{
-				"AppName": h.Config.AppName,
-				"Title":   "Confirm your email address",
-				"Message": "Enter this code on the verification page to confirm this address.",
-				"Code":    code,
-				"Minutes": 10,
-				"Year":    time.Now().Year(),
+				"AppName":   h.Config.AppName,
+				"FirstName": user.FirstName,
+				"Title":     "Your verification code",
+				"Message":   "Enter this code in " + h.Config.AppName + " to finish signing in.",
+				"Code":      code,
+				"Minutes":   10,
+				"Year":      time.Now().Year(),
 			},
 		})
 		if err != nil {
