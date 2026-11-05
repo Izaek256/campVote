@@ -1,4 +1,4 @@
-# campVote compose — the Go API is the only thing containerised.
+# CampVote compose — the Go API is the only thing containerised.
 #
 #   docker compose up -d            (add --build after changing backend code)
 #

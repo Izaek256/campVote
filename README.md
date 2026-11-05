@@ -1,8 +1,8 @@
-# campVote — MMU Campus E-Voting System
+# CampVote — MMU Campus E-Voting System
 
 Repository: <https://github.com/Izaek256/campVote>
 
-campVote is a proposed web-based voting platform for guild elections and other authorized campus elections at Mountains of the Moon University (MMU). This repository is intended for an academic project and prototype. It is **not certified for real or legally binding elections**.
+CampVote is a proposed web-based voting platform for guild elections and other authorized campus elections at Mountains of the Moon University (MMU). This repository is intended for an academic project and prototype. It is **not certified for real or legally binding elections**.
 
 ## Start here
 
@@ -42,13 +42,16 @@ Install current supported versions of Git, Docker Engine/Desktop with Compose, G
 
 ## Setup options
 
-You can run campVote in several ways:
+You can run CampVote in several ways:
 
 1. **Docker Compose (API container only)** - the Go API is the only container; its database is external, from `.env`, and the Next.js app runs on your machine
 2. **API container with `docker run`** - the same single container without Compose, for a managed database or a host that has no Compose
-3. **Local development** - run the Go API and Next.js apps locally, against PostgreSQL in Docker or installed locally
+3. **Local development** - run the Go API and Next.js apps locally, against PostgreSQL in Docker
+4. **Windows local development** - run everything locally against PostgreSQL installed on Windows
+5. **Full stack in Docker (WSL2/Linux)** - PostgreSQL, the API and the web app all run as containers; open one URL
+6. **Windows database in Docker** - PostgreSQL runs in Docker Desktop while the API and web app run on Windows or in WSL
 
-Choose the setup that fits your workflow.
+Choose the setup that fits your workflow. Options 1, 3, 4, 5 and 6 read configuration from `.env`; Option 2 passes variables explicitly or with `--env-file`. Option 5 starts its own containerised database.
 
 ---
 
@@ -90,7 +93,9 @@ cp .env.example .env
 #   SEED_DEMO_DATA true seeds synthetic demo accounts (development only)
 
 # 3. Build and start the API container
-docker compose up --build -d      # or: docker compose up -d, if the image is built
+pnpm docker:up                    # builds with host networking, then starts
+# On a Docker install whose default bridge has DNS/egress, the plain form works:
+#   docker compose up --build -d
 
 # 4. Check service status — api should report healthy
 docker compose ps
@@ -101,6 +106,21 @@ pnpm dev:web   # http://localhost:3000
 ```
 
 The image's entrypoint (`apps/api/entrypoint.sh`) runs the migrations against `DATABASE_URL` before starting the server, so a first `up` needs no separate migrate step.
+
+### If the image build cannot reach the network
+
+Docker 29 requires an explicit `--allow=network.host` when a build wants the host
+network, and `build.entitlements` in `docker-compose.yaml` only *requests* it —
+Compose cannot grant it. Some hosts also have no DNS or egress on the default
+Docker bridge, so the Dockerfile's `apk add` and `go mod download` fail there
+with `DNS: transient error` or a timeout.
+
+`pnpm docker:up` (or `./scripts/docker-api.sh up`) handles both: it runs
+`docker build --network=host --allow=network.host -t campvote-api:latest ./apps/api`
+and then `docker compose up -d --no-build`. Build the image alone with
+`pnpm docker:build`. This is a property of the Docker installation, not of the
+application; on a host whose bridge network works, `docker compose up --build -d`
+is still the ordinary command.
 
 ### Why the API container uses `network_mode: host`
 
@@ -191,8 +211,9 @@ docker compose config
 # Restart the API
 docker compose restart api
 
-# Rebuild the API image after backend changes
-docker compose up -d --build api
+# Rebuild the API image after backend changes (see the build note above;
+# plain `docker compose up -d --build api` works only with a bridge that has egress)
+pnpm docker:up
 
 # Health, including whether redis/jobs are off on purpose
 curl -s http://localhost:8080/api/health
@@ -211,7 +232,12 @@ These failures are specific to this split setup:
 - **Uploads fail with a permission error on an older install.** `/app/storage` is a named volume, and Docker takes its ownership from the image the first time it is created. A volume created before the image owned that directory stays root-owned, so `docker volume rm campvote_campvote_storage` and restart to get an app-owned one.
 - **The web app on the host cannot sign in.** It must reach the API at `http://localhost:8080`, an origin `CORS_ORIGINS` must list. `NEXT_PUBLIC_API_URL` is baked at build time, so change it and restart `pnpm dev:web` rather than only the container.
 - **Stored images 404, or the API logs `WARNING: APP_URL is http://localhost:3000 but this server listens on port 8080`.** `APP_URL` is where the API thinks it is reachable, and it builds file URLs from it; the web app rewrites that origin to `NEXT_PUBLIC_API_URL` before loading a file, so images still open. Set `APP_URL=http://localhost:8080` in `.env` to silence the warning and store the honest URL — the same advice applies to the host run.
-- **The build cannot reach the internet** (`temporary error` from `apk`, or `go mod download` timing out) on a machine whose default bridge network has no egress. Build with host networking: `docker build --network=host -t campvote-api ./apps/api`, then `docker compose up -d`. This is a property of that Docker installation, not of the image; nothing in the repository needs changing.
+- **The build cannot reach the internet** (`temporary error` from `apk`, `go mod download` timing out, or `additional privileges requested: pass --allow=network.host`) on a machine whose default bridge network has no egress. Docker 29 grants a host-network build only through the CLI flag, so build directly and then start the existing image:
+  ```bash
+  docker build --network=host --allow=network.host -t campvote-api:latest ./apps/api
+  docker compose up -d --no-build
+  ```
+  `pnpm docker:up` runs exactly those two steps. This is a property of that Docker installation, not of the image.
 
 ---
 
@@ -236,8 +262,10 @@ cd campVote
 
 # 2. Build the API image (build context is apps/api)
 docker build -t campvote-api ./apps/api
-# `docker compose build api` produces the same image under the same tag,
-# campvote-api, because Compose names it after the project directory and service.
+# If the build fails to reach the package mirrors or the Go proxy, this host's
+# default Docker bridge has no egress. Docker 29 also requires an explicit
+# entitlement for host networking, so use:
+#   docker build --network=host --allow=network.host -t campvote-api ./apps/api
 # An image that is only ever built this way does not exist on any registry: a
 # `docker run campvote-api` on a machine that has never built it fails with
 # "pull access denied", which is Docker Hub saying it has no such repository.
@@ -509,7 +537,182 @@ No demo accounts are seeded.
 
 ---
 
-## Common tasks (both setups)
+## Option 5: Full Stack in Docker (WSL2 / Linux)
+
+This runs **PostgreSQL, the Go API and the Next.js web app** as three containers
+on a private Docker network. It is the quickest way to get the whole product
+running on a Windows machine with WSL2, or on any Linux development machine.
+
+The compose file is `docker-compose.wsl.yaml`. It is deliberately separate from
+`docker-compose.yaml`, which stays API-only and expects a database outside
+Docker. The full stack uses its own PostgreSQL container and fixed local-only
+database credentials; your external `DATABASE_URL` is overridden inside the API
+container.
+
+### Prerequisites
+
+- WSL2 with Docker Engine and the Compose plugin installed **inside the WSL
+  distribution**, or Docker Desktop with WSL integration enabled
+- Git
+- pnpm if you use the helper script (or run `docker compose` directly)
+
+### Start the stack
+
+```bash
+# 1. Clone inside WSL (not on /mnt/c; builds are much slower there)
+git clone https://github.com/Izaek256/campVote.git
+cd campVote
+
+# 2. Create the environment file and set at least JWT_SECRET
+cp .env.example .env
+# JWT_SECRET=...            32+ characters: openssl rand -hex 32
+# APP_ENV=development        enables the development behaviour
+# SEED_DEMO_DATA=true        optional synthetic demo accounts/elections
+# MAIL_MAILER=log            verification codes appear in the API logs
+
+# 3. Build and start db + api + web
+pnpm docker:stack
+
+# On a Docker install whose default bridge has DNS and egress, this is enough:
+docker compose -f docker-compose.wsl.yaml up -d --build
+```
+
+`pnpm docker:stack` builds both images with the host network first, then starts
+the stack with `--no-build`. It exists because Docker 29 rejects a host-network
+build without an explicit CLI entitlement, and some WSL/Linux hosts have no DNS
+on the default Docker bridge. Build the images without starting them with
+`pnpm docker:stack:build`.
+
+### Access and verify
+
+- **Web app**: http://localhost:3000
+- **API**: http://localhost:8080
+- **Health**: http://localhost:8080/api/health
+
+```bash
+docker compose -f docker-compose.wsl.yaml ps
+docker compose -f docker-compose.wsl.yaml logs -f api web
+curl -s http://localhost:8080/api/health
+```
+
+Wait for `api` to report healthy before opening the web app: the web container
+starts after the API health check passes.
+
+### Create the first administrator and optional data
+
+Migrations run automatically from the API image entrypoint before the server
+starts, against the `db` container.
+
+```bash
+# Create the first administrator (once, on a fresh database)
+docker compose -f docker-compose.wsl.yaml exec \
+  -e BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
+  -e BOOTSTRAP_ADMIN_PASSWORD='your-secure-password-12+chars' \
+  -e BOOTSTRAP_ADMIN_FIRST_NAME=Admin \
+  -e BOOTSTRAP_ADMIN_LAST_NAME=User \
+  api ./bootstrap
+
+# Optional scaffold/demo data
+docker compose -f docker-compose.wsl.yaml exec api ./seed
+
+# Open a psql shell on the containerised database
+docker compose -f docker-compose.wsl.yaml exec db \
+  psql -U campvote_dev -d campvote_dev
+```
+
+### Stop and reset
+
+```bash
+# Stop and remove the containers; database and uploads volumes are kept
+docker compose -f docker-compose.wsl.yaml down
+
+# Destructive: also delete the database, uploads and log-driver mail
+docker compose -f docker-compose.wsl.yaml down -v
+```
+
+The database is local to this stack. It does not read or write the external
+PostgreSQL named in `.env`, and `down -v` deletes its data. Do not use this
+compose file for production.
+
+---
+
+## Option 6: PostgreSQL in Docker Desktop on Windows (Apps Local)
+
+This runs only PostgreSQL in Docker Desktop. The Go API and Next.js app run
+directly on Windows or in WSL, which keeps hot reload and host tooling simple.
+Use Option 5 instead when you want the whole stack containerised.
+
+The compose file is `docker-compose.windows.yaml`.
+
+### Prerequisites
+
+- Docker Desktop on Windows with the WSL2 backend and Compose
+- Go 1.23+
+- Node.js 20+ and pnpm
+- Git
+
+### Step-by-step setup
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Izaek256/campVote.git
+cd campVote
+
+# 2. Install workspace dependencies
+npm install -g pnpm@10.33.4
+pnpm install
+
+# 3. Create .env
+cp .env.example .env
+
+# 4. Start PostgreSQL in Docker Desktop
+docker compose -f docker-compose.windows.yaml up -d
+docker compose -f docker-compose.windows.yaml ps
+
+# 5. Point the API at the published port
+#    .env:
+#    DATABASE_URL=postgres://campvote_dev:campvote_dev_password@localhost:5432/campvote_dev?sslmode=disable&client_encoding=UTF8
+#    JWT_SECRET=...   32+ characters
+#
+#    If POSTGRES_PASSWORD in .env differs from campvote_dev_password, use that
+#    same password in DATABASE_URL and percent-encode @, %, / and #.
+
+# 6. Run migrations and start the apps
+cd apps/api
+go run ./cmd/migrate
+cd ../..
+pnpm dev
+```
+
+From WSL, `localhost:5432` reaches the port published by Docker Desktop when
+WSL integration is enabled. If your setup does not forward it, use the Windows
+host address in `DATABASE_URL`, or run the database inside WSL with
+`docker-compose.wsl.yaml` instead.
+
+If port 5432 is already held by a PostgreSQL service on Windows, change the
+published port in `docker-compose.windows.yaml` (for example `5433:5432`) and use
+that port in `DATABASE_URL`.
+
+### Access and stop
+
+- **Web app**: http://localhost:3000
+- **API**: http://localhost:8080
+- **Database**: `localhost:5432`, database/user `campvote_dev`
+
+```bash
+# Stop PostgreSQL; its data stays on the volume
+docker compose -f docker-compose.windows.yaml down
+
+# Destructive: remove the database volume too
+docker compose -f docker-compose.windows.yaml down -v
+```
+
+Create the first administrator with the `cmd/bootstrap` commands in Option 3 or
+Option 4 once the database is running.
+
+---
+
+## Common tasks (all setups)
 
 ### Frontend-specific notes
 
@@ -546,11 +749,13 @@ Key variables in `.env`:
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `APP_ENV` | Yes | Set to `development` for demo data |
+| `APP_NAME` | No | Display name used in titles, email and the admin header; defaults to `CampVote` |
 | `APP_URL` | Yes | Where the API is reachable in a browser; file URLs are built from it, so on localhost it should name the API's own port, `http://localhost:8080` |
 | `CORS_ORIGINS` | Yes for the browser | Comma-separated origins allowed to call the API, e.g. `http://localhost:3000` |
 | `DATABASE_URL` | Yes | PostgreSQL connection string — the only thing the API uses to find the database, containerised or not |
 | `JWT_SECRET` | Yes | Signing secret for tokens and session cookies, 32+ characters |
-| `POSTGRES_PASSWORD` | No | Only a note to yourself and for `docker run` of a database container; no application code reads it |
+| `POSTGRES_DB` / `POSTGRES_USER` | No | Database and user for `docker-compose.windows.yaml`; default `campvote_dev` |
+| `POSTGRES_PASSWORD` | No | Password for `docker-compose.windows.yaml`, and a fallback when `DATABASE_URL` is unset; keep it in step with `DATABASE_URL` |
 | `REDIS_URL` | No | Empty means no cache, jobs or cron, on purpose; unset falls back to `redis://localhost:6380`. See Option 1 |
 | `STORAGE_DRIVER` | No | `local` keeps uploads on disk at `STORAGE_LOCAL_ROOT` (`storage/app`); unset means `minio`, which falls back to the disk when no credentials are set |
 | `MAIL_MAILER` | No | `log` prints each message to stdout and to `MAIL_LOG_PATH`; unset in development tries SMTP on `localhost:1025` then falls back to the log |

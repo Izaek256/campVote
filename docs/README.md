@@ -1,4 +1,4 @@
-# Documentation Index — campVote
+# Documentation Index — CampVote
 
 ## 1. Baseline Specifications
 
@@ -29,6 +29,7 @@
 ## 4. Operations
 
 - [`operations/docker-compose.md`](operations/docker-compose.md) — Why compose containerises only the API (database, cache, mail and web external, configured through `.env`), what that costs, and the verified setup commands.
+- [`operations/docker-full-stack.md`](operations/docker-full-stack.md) — WSL2/Linux full stack (PostgreSQL + API + web) and the Windows Docker Desktop PostgreSQL setup, with commands, networking and verification.
 
 ## 5. UI
 

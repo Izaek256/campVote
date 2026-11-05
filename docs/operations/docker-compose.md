@@ -3,7 +3,13 @@
 **Date:** 2026-11-05
 **Branch:** `feature/domains-admins-uploads-email`
 **Files:** `docker-compose.yaml`, `apps/api/Dockerfile`, `apps/api/entrypoint.sh`,
-`.env.example`, `README.md`, `docs/MVP_NOTES.md`, `docs/README.md`
+`scripts/docker-api.sh`, `package.json`, `.env.example`, `README.md`,
+`docs/MVP_NOTES.md`, `docs/README.md`
+
+**Related:** [`docker-full-stack.md`](docker-full-stack.md) covers the opt-in
+WSL2/Linux full stack (`docker-compose.wsl.yaml`) and the Windows Docker Desktop
+PostgreSQL setup (`docker-compose.windows.yaml`). This document remains about
+the API-only default.
 
 ## Goal
 
@@ -111,9 +117,42 @@ Mounting one volume over `/app/storage` rather than one per directory means a
 single `down -v` clears both uploads and mail, and the config defaults need no
 container-specific overrides at all.
 
+## Build-time network: Docker 29's entitlement gate
+
+The image build runs `apk add` and `go mod download`, which need DNS and
+outbound HTTPS. On this machine the default Docker bridge has neither (a
+container on it cannot resolve `dl-cdn.alpinelinux.org`, while the same container
+with `--network host` can), so a plain build fails at the first `apk add` with
+`DNS: transient error`.
+
+The obvious fix is a host-network build, but Docker 29 / BuildKit refuses one
+unless the CLI grants the entitlement:
+
+```text
+additional privileges requested: pass "--allow=network.host" to grant requested privileges
+```
+
+`build.entitlements: [network.host]` in `docker-compose.yaml` only *requests* the
+entitlement; it does not grant it, and Compose v5 has no `--allow` flag for
+`docker compose build`. Adding it to the compose file therefore made
+`docker compose build` fail on every host, including those whose bridge network
+works. It was removed, and `scripts/docker-api.sh` (exposed as
+`pnpm docker:build` / `pnpm docker:up`) builds directly:
+
+```bash
+docker build --network=host --allow=network.host -t campvote-api:latest ./apps/api
+docker compose up -d --no-build
+```
+
+The tag matches what Compose expects, so the started container is the freshly
+built image. The runtime `network_mode: host` remains, so a `localhost` in
+`DATABASE_URL` reaches the external PostgreSQL.
+
 ## Commands
 
 ```bash
+pnpm docker:up                        # build with host networking, then start; migrations run on start
+# On a host whose default bridge has DNS/egress, this plain form is enough:
 docker compose up --build -d          # build and start the API; migrations run on start
 docker compose ps                     # api healthy
 docker compose logs -f api            # server log, including mailed codes
@@ -131,6 +170,10 @@ Compose v5.6.1).
 
 | Check | Result |
 |---|---|
+| Bridge vs host DNS | `alpine:3.20` on the default bridge could not resolve `dl-cdn.alpinelinux.org` (timed out); the same container with `--network host` resolved it and fetched `APKINDEX.tar.gz` over HTTPS. The Go proxy (`proxy.golang.org`) answered from both host and a host-network container. |
+| `docker compose build api` | refused with `additional privileges requested: pass "--allow=network.host" to grant requested privileges` — the reason the compose `entitlements` key was removed and the build moved to the script |
+| `pnpm docker:build` | exported `campvote-api:latest` successfully; `apk add` and the cached `go mod download` layer both resolved under host networking |
+| `pnpm docker:up` | built the image, started `campvote-api-1`, and printed `Up (health: starting)` before the health check settled |
 | `docker compose config` | one service; the environment it prints is the `.env` file's own values, with nothing added |
 | `docker compose ps` | `campvote-api-1` `Up (healthy)`; no other container started, no ports published |
 | `GET http://localhost:8080/api/health` from the host | `status: ok`; `database.ok` with 67 tables over the external database; `redis.state: off` ("Redis was not reachable when the API started… set `REDIS_URL=` in .env to mean it"); `jobs.state: off`; `email.driver: failover(smtp,log)` ok; `storage.driver: local` ok |
@@ -139,6 +182,13 @@ Compose v5.6.1).
 | Writability as `app` | `uid=100(app)`; `touch` succeeded in `/app/storage/app` and `/app/storage/mail`, both owned `app:app` |
 | `docker compose run --rm api echo …` | logged `Running echo … instead of the server` and printed the argument — the pass-through fix above |
 | `APP_URL` warning | `WARNING: APP_URL is http://localhost:3000 but this server listens on port 8080` appeared because this `.env` points `APP_URL` at the frontend; stored-file URLs are rewritten to `NEXT_PUBLIC_API_URL` by `apps/web/lib/api.ts`, so files still open. Documented rather than overridden. |
+
+A full `--no-cache` rebuild was also attempted to prove a cold `go mod download`
+under host networking. It completed the `apk add` stage but was still inside
+`go mod download` after 12+ minutes on this link and was stopped; it had not
+errored. The normal build reused the validated module layer, so the Dockerfile
+itself was exercised end to end without a code change. Treat a cold build on a
+slow connection as slow, not hung, unless it prints a network error.
 
 Not run: CI. `.github/workflows/ci.yml` builds no Docker image, so nothing here is
 covered by the pipeline; the checks above are the manual ones listed in this

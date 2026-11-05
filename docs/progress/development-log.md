@@ -540,3 +540,47 @@ Already enforced server-side: `GET /positions/eligible` (`position_workflow.go`)
 - No browser/Playwright evidence for the confetti modal, the ballot-photo upload or the duration presets (no local Playwright suite).
 - The apply form keeps **Ballot photo** as an optional extra on top of the required **Passport photo**; the two remain distinct columns.
 
+
+---
+
+## [2026-11-05] Docker 29 build fix, WSL full stack, Windows PostgreSQL, and CampVote branding
+
+**Branch:** `feature/domains-admins-uploads-email`.
+**Goal:** make the API image build on a host whose Docker bridge has no DNS, add an opt-in WSL2/Linux stack that containerises PostgreSQL, the API and the web app, add a Windows Docker Desktop PostgreSQL setup, and stop the application defaulting to `grit-app` instead of CampVote.
+
+### Docker
+- Diagnosed the build failure as the default Docker bridge having no DNS/egress on this machine, plus Docker 29 refusing `--network=host` unless the CLI grants `network.host`.
+- Removed `build.network`/`build.entitlements` from `docker-compose.yaml`: Compose can only request the entitlement, so leaving it made `docker compose build` fail on every host.
+- Added `scripts/docker-api.sh` (`pnpm docker:build`, `pnpm docker:up`) to build the API directly with `--network=host --allow=network.host`, then start with `--no-build`.
+- Added `docker-compose.wsl.yaml`: `db` + `api` + `web` on a private bridge, with `DATABASE_URL` overridden to `db:5432`, published 8080/3000, API/web health gates and named volumes for PostgreSQL and uploads.
+- Added `docker-compose.windows.yaml`: PostgreSQL only, loopback-published on 5432, with values from `.env` and local defaults.
+- Added `scripts/docker-stack.sh` (`pnpm docker:stack`, `:build`, `:down`) for hosts where Compose cannot build with host networking.
+- Fixed `apps/web/Dockerfile`'s public-directory copy by adding `apps/web/public/.gitkeep`; the first web image build failed because the directory did not exist.
+- Changed the web health probe to `127.0.0.1:3000`; Alpine resolved `localhost` to `::1` while Next.js listened on IPv4 only.
+
+### Branding
+- Backend defaults now use `CampVote`: `APP_NAME`, TOTP issuer, settings `app.name`, OCSF product name and the tracing fallback (`campvote-api`).
+- Database fallbacks use the lowercase `campvote` identifier rather than the display name.
+- UI text, auth emails, PDF metadata/footers, the app shell, manifest, page titles and the server banner now read **CampVote**.
+- `.env.example` gained `APP_NAME=CampVote` and the `POSTGRES_DB`/`POSTGRES_USER` values used by the Windows compose file.
+- Framework references to Grit (CLI markers, generator comments) were intentionally left alone; they describe the scaffold, not the application name.
+
+### Checks Run
+- `docker compose -f docker-compose.wsl.yaml config` — PASS; services and rewritten `DATABASE_URL` inspected.
+- `docker compose -f docker-compose.windows.yaml config` — PASS; not started because the host already uses port 5432.
+- API and web images built with `--network=host --allow=network.host` — PASS.
+- `docker compose -f docker-compose.wsl.yaml up -d --no-build` followed by health checks — PASS; API `/api/health` 200 with 67 tables on the compose database, web `/` 307 → `/elections` → 200, `/login` 200; all three containers healthy.
+- `go build ./...` — PASS.
+- `go test ./internal/config ./internal/settings ./internal/mail -count=1` — PASS.
+- `pnpm --filter @campvote/web type-check` — PASS (after `pnpm install --frozen-lockfile`).
+- `pnpm --filter @campvote/web test` — PASS, 25/25.
+- `go test ./internal/handlers` — pre-existing `TestAuthHandler_Login_Success` failure; reproduced on `HEAD` in a detached worktree, so not introduced here.
+
+### Documentation
+- Added `docs/operations/docker-full-stack.md`; linked it from `docs/README.md` and cross-referenced it from `docs/operations/docker-compose.md`.
+- README gained Option 5 (WSL2/Linux full stack) and Option 6 (PostgreSQL in Docker Desktop on Windows), plus the build-network note and updated environment-variable table.
+
+### Deferred / Known limitations
+- The full stack has no Redis, MinIO, Mailpit or reverse proxy; `REDIS_URL` is empty, so jobs and scheduled transitions are off.
+- The Windows compose file was configuration-checked but not started on this machine (port 5432 is occupied by the host PostgreSQL).
+- The pre-existing handlers login-test failure remains open.
