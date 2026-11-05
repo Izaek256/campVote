@@ -65,7 +65,11 @@ func (m *Mailer) Send(ctx context.Context, opts SendOptions) error {
 	if err != nil {
 		return fmt.Errorf("rendering template %q: %w", opts.Template, err)
 	}
-	return m.SendMessage(ctx, &Message{To: []string{opts.To}, Subject: opts.Subject, HTML: htmlBody})
+	// Always include a text/plain part alongside the HTML. Google Workspace (and
+	// several spam filters) silently drop HTML-only messages from external
+	// senders; multipart/alternative with both parts passes cleanly.
+	textBody := htmlToText(htmlBody)
+	return m.SendMessage(ctx, &Message{To: []string{opts.To}, Subject: opts.Subject, HTML: htmlBody, Text: textBody})
 }
 
 // SendRaw sends an email with raw HTML content (no template rendering).

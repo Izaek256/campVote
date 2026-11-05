@@ -34,7 +34,7 @@ This document records what the code actually does today and which test proves it
 - Codes: six digits from `crypto/rand`, stored as an HMAC-SHA256 hash keyed with the application `JWT_SECRET`, 10-minute TTL. The keyed hash matters because the six-digit space is small enough to brute-force from a plain hash. Issuing a new code marks every earlier unused code for that user as used.
 - Replay, expiry, unknown and email-changed all return `400 INVALID_LINK` with one message.
 - `REQUIRE_EMAIL_VERIFICATION` (default `false`) gates sign-in. It is opt-in so existing local accounts are not locked out; **production deployments should set it to `true`**. Social/SSO sign-ins are unaffected because the IdP already proved the address.
-- `POST /api/auth/send-verification` is authenticated (prevents using it as a spam relay) and rate-limited in the router. In development the response also carries `verify_code`, guarded on `APP_ENV=development`.
+- `POST /api/auth/send-verification` is authenticated (prevents using it as a spam relay) and rate-limited in the router. When `MAIL_ECHO_CODES=true` (default false) and `APP_ENV` is not production, the response also carries `verify_code` — but only when mail delivery actually failed (no mailer configured, or a send error). This is a development fallback so the flow can complete without a working mail server; a deployment with working SMTP never exposes the code. The same gate applies to `POST /api/auth/signup/initiate`, which carries `verification_code` under the same conditions. Without the flag, the code is in the server log (`docker compose logs api`) and in `storage/mail/`.
 
 ## Login, rate limiting and lockout
 

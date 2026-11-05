@@ -117,8 +117,20 @@ func resendKeySet(key string) bool {
 }
 
 // fromAddress is MAIL_FROM with MAIL_FROM_NAME as its display name.
+//
+// MAIL_FROM unset used to become noreply@localhost, which real SMTP providers
+// refuse because the sender is not an address the authenticated account owns.
+// When SMTP_USERNAME is set, use that instead: on Gmail, Outlook and most
+// campus mail servers the authenticated mailbox is the only sender they allow.
+// The log driver keeps a local-only address, which no provider ever sees.
 func fromAddress(cfg *config.Config) string {
 	from := strings.TrimSpace(cfg.MailFrom)
+	if from == "" {
+		from = strings.TrimSpace(cfg.Mail.SMTPUsername)
+	}
+	if from == "" {
+		from = "noreply@localhost"
+	}
 	if cfg.Mail.FromName == "" || strings.Contains(from, "<") {
 		return from
 	}

@@ -811,6 +811,26 @@ func TestFromConfigPicksTheDriver(t *testing.T) {
 		t.Fatal(err)
 	}
 	expect(t, "from with MAIL_FROM_NAME", m.From(), "\"CampVote\" <noreply@example.com>")
+
+	// A provider rejects a sender its authenticated account does not own, so
+	// SMTP without MAIL_FROM must send as the SMTP username. Leaving the old
+	// noreply@localhost default in place made correct credentials fail at the
+	// provider with "sender address rejected".
+	smtp := config.Config{
+		AppEnv: "development",
+		Mail: config.MailConfig{
+			Mailer:       "smtp",
+			SMTPHost:     "smtp.example.com",
+			SMTPPort:     "587",
+			SMTPUsername: "sender@example.com",
+			SMTPPassword: "secret",
+		},
+	}
+	m, err = FromConfig(&smtp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(t, "from falls back to SMTP_USERNAME", m.From(), "sender@example.com")
 }
 
 func TestMailerKeepsItsAPI(t *testing.T) {

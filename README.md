@@ -676,6 +676,7 @@ cp .env.example .env
 # APP_ENV=development        enables the development behaviour
 # SEED_DEMO_DATA=true        optional synthetic demo accounts/elections
 # MAIL_MAILER=log            verification codes appear in the API logs
+# MAIL_ECHO_CODES=true       (optional) also echo codes in API responses for dev
 
 # 3. Build and start db + api + web
 pnpm docker:stack
@@ -944,6 +945,7 @@ Key variables in `.env`:
 | `REDIS_URL` | No | Empty means no cache, jobs or cron, on purpose; unset falls back to `redis://localhost:6380`. See Option 1 |
 | `STORAGE_DRIVER` | No | `local` keeps uploads on disk at `STORAGE_LOCAL_ROOT` (`storage/app`); unset means `minio`, which falls back to the disk when no credentials are set |
 | `MAIL_MAILER` | No | `log` prints each message to stdout and to `MAIL_LOG_PATH`; unset in development tries SMTP on `localhost:1025` then falls back to the log |
+| `MAIL_ECHO_CODES` | No | Default `false`. When `true` and not production, verification codes are returned in the API response for `/auth/send-verification` and `/auth/signup/initiate` — but only when mail delivery failed (no mailer or send error). Dev-only fallback so the registration flow works without a mail server. Never set in production. |
 | `REQUIRE_EMAIL_VERIFICATION` | No | Default `false` for local dev |
 | `LOGIN_MAX_ATTEMPTS` | No | Default `10` (set `0` to disable) |
 | `PASSWORD_BREACH_CHECK` | No | Default `false` |

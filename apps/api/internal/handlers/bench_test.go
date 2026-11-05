@@ -22,9 +22,11 @@ func newBenchRouter(b *testing.B) *gin.Engine {
 
 	db := newTestDB(b)
 	cfg := &config.Config{
-		JWTSecret:        "bench-secret-key",
-		JWTAccessExpiry:  15 * time.Minute,
-		JWTRefreshExpiry: 7 * 24 * time.Hour,
+		JWTSecret:          "bench-secret-key",
+		JWTAccessExpiry:    15 * time.Minute,
+		JWTRefreshExpiry:   7 * 24 * time.Hour,
+		StudentEmailDomain: "example.com",
+		AdminEmailDomain:   "example.com",
 	}
 	authSvc := &services.AuthService{
 		Secret:        cfg.JWTSecret,
@@ -97,9 +99,11 @@ func BenchmarkAuthRegister(b *testing.B) {
 	gin.SetMode(gin.TestMode)
 	db := newTestDB(b)
 	cfg := &config.Config{
-		JWTSecret:        "bench-secret-key",
-		JWTAccessExpiry:  15 * time.Minute,
-		JWTRefreshExpiry: 7 * 24 * time.Hour,
+		JWTSecret:          "bench-secret-key",
+		JWTAccessExpiry:    15 * time.Minute,
+		JWTRefreshExpiry:   7 * 24 * time.Hour,
+		StudentEmailDomain: "bench.dev",
+		AdminEmailDomain:   "bench.dev",
 	}
 	h := &AuthHandler{
 		DB: db,

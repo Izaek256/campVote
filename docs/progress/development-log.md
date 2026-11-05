@@ -585,3 +585,39 @@ Already enforced server-side: `GET /positions/eligible` (`position_workflow.go`)
 - The full stack has no Redis, MinIO, Mailpit or reverse proxy; `REDIS_URL` is empty, so jobs and scheduled transitions are off.
 - The Windows compose file was configuration-checked but not started on this machine (port 5432 is occupied by the host PostgreSQL).
 - The pre-existing handlers login-test failure remains open.
+
+---
+
+## [2026-11-05] Fix: Verification Code Echo Security Hole + Mail Delivery
+
+### Goal
+Fix undelivered verification-code emails and close a security hole where the code was leaked in API responses whenever `APP_ENV != "production"` (the Docker default), allowing anyone to verify any email address.
+
+### Root Cause
+1. **No SMTP credentials in `.env`**: Host `.env` had no `MAIL_MAILER`, `SMTP_*`, or `RESEND_API_KEY`. The container's effective driver was `failover(smtp,log)`, which tried `localhost:1025`, failed, and fell back to the log driver — codes were saved to `storage/mail/*.html` but never sent to an inbox.
+2. **`MAIL_FROM` defaulted to `noreply@localhost`**, which real SMTP providers reject ("sender address rejected").
+3. **Security hole**: The dev echo of `verification_code`/`verify_code` triggered on `AppEnv != "production"` alone. Since Docker defaults to `APP_ENV=development`, a deployment with working SMTP would still return the code in the API response, letting anyone verify any email address.
+4. **Regression**: commit `a8daaea` removed the dev echo from `SignupInitiate`, but `apps/web` and `docs/auth.md` still expected it.
+5. **Test breakage**: `testCfg()` had no campus domain, so `IsStudentEmail` returned 403 for `@example.com`.
+
+### Changes
+- **`apps/api/internal/config/config.go`**: Added `EchoCodes bool` to `MailConfig` (`MAIL_ECHO_CODES`, default false). `MailFrom` default changed from `noreply@localhost` to `""`.
+- **`apps/api/internal/handlers/auth_email_verification.go`**: `deliverVerificationEmail` now returns `(string, error)`; the no-mailer-dev path returns `ErrNoMailer` instead of `nil`. `SendVerificationEmail` echoes `verify_code` only when `MAIL_ECHO_CODES=true`, not production, AND delivery failed (`err != nil`).
+- **`apps/api/internal/handlers/auth.go`**: `SignupInitiate` echoes `verification_code` under the same conditions. `deliverSignupVerificationEmail` returns `ErrNoMailer` in the no-mailer-dev case. Uses `dispatchMail` with the `email-verification` template. Removed hardcoded HTML helpers and unused `fmt` import.
+- **`apps/api/internal/mail/from_config.go`**: `fromAddress` falls back to `SMTP_USERNAME` then `noreply@localhost` when `MAIL_FROM` is empty.
+- **`apps/api/cmd/server/main.go`**: Startup warning when the effective mail driver contains "log".
+- **Tests**: `testCfg()` and bench configs set campus domains. New tests prove the code is NOT echoed when a mailer succeeds (with and without `MAIL_ECHO_CODES`), IS echoed when no mailer and flag is on, and is hidden in production. SMTP_USERNAME from-fallback test added.
+- **`.env.example`**: Mail block rewritten with SMTP guidance, `SMTP_ENCRYPTION`, blank `MAIL_FROM`, and `MAIL_ECHO_CODES` documentation.
+- **`docs/auth.md`**: Updated dev echo behaviour description.
+- **`README.md`**: Added `MAIL_ECHO_CODES` to env table and quick-start comments.
+
+### Checks Run
+- `gofmt -l .` — only pre-existing files flagged (my files clean after `gofmt -w`).
+- `go build ./...` — PASS.
+- `go test ./... -count=1` — PASS (all packages, including handlers 21s, mail, config).
+- Targeted test run for all echo/security tests — PASS.
+
+### Known Limitations / Open Questions
+- Could not verify real inbox delivery: `.env` has no SMTP credentials. The user needs to provide them.
+- `MAIL_ECHO_CODES` defaults to false; the dev echo only works when explicitly opted in AND delivery fails.
+- The `failover(smtp,log)` driver in dev-without-SMTP hides SMTP failures behind the log fallback; the new startup warning makes this visible.

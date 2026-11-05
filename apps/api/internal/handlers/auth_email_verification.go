@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
+
 	"campvote/apps/api/internal/mail"
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/respond"
@@ -32,9 +34,27 @@ func (h *AuthHandler) SendVerificationEmail(c *gin.Context) {
 		return
 	}
 
-	_ = h.deliverVerificationEmail(c.Request.Context(), *user)
+	code, err := h.deliverVerificationEmail(c.Request.Context(), *user)
+	if err != nil {
+		// In development the caller still gets the code below, so a missing or
+		// failing mailer does not block local testing. In production a code
+		// nobody received is not a success, and the response must say so.
+		log.Printf("email verification: sending to %s: %v", user.Email, err)
+		if h.Config.AppEnv == "production" || code == "" {
+			respond.Fail(c, respond.CodeMailFailed, "We could not send the verification email. Try again in a moment.")
+			return
+		}
+	}
 
 	body := gin.H{"message": "Verification code sent. It is valid for 10 minutes."}
+	// Dev-only fallback, gated behind MAIL_ECHO_CODES=true: when delivery
+	// actually failed (no mailer or send error) the code is returned here so
+	// the flow can still be completed without a working mail server. A
+	// development deploy with working SMTP must not leak the code, which
+	// would let anyone verify any address.
+	if h.Config.Mail.EchoCodes && h.Config.AppEnv != "production" && err != nil && code != "" {
+		body["verify_code"] = code
+	}
 
 	c.JSON(http.StatusOK, body)
 }
@@ -68,14 +88,13 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 // keeps the response just as short and, unlike a goroutine, retries a provider
 // that is briefly down and survives a deploy. Without a queue the send is
 // inline, which is what development without Redis does.
-func (h *AuthHandler) deliverVerificationEmail(ctx context.Context, user models.User) string {
+func (h *AuthHandler) deliverVerificationEmail(ctx context.Context, user models.User) (string, error) {
 	var code string
 	issued := false
 	for attempt := 0; attempt < 5 && !issued; attempt++ {
 		generated, err := services.GenerateVerificationCode()
 		if err != nil {
-			log.Printf("email verification: generating code for %s: %v", user.Email, err)
-			return ""
+			return "", fmt.Errorf("generating a code for %s: %w", user.Email, err)
 		}
 		code = generated
 		if _, err := services.CreateEmailVerificationToken(h.DB, user.ID, user.Email, code, h.Config.JWTSecret); err != nil {
@@ -85,14 +104,14 @@ func (h *AuthHandler) deliverVerificationEmail(ctx context.Context, user models.
 		issued = true
 	}
 	if !issued {
-		return ""
+		return "", fmt.Errorf("storing a verification code for %s", user.Email)
 	}
 
 	if h.Jobs != nil || h.Mailer != nil {
 		// Keyed on the code, so one enqueue per mail: a client that retries
 		// the request mints a new code and gets a new key, and a proxy that
 		// replays the same one does not send the mail twice.
-		if err := dispatchMail(ctx, h.Mailer, h.Jobs, "verify:"+user.ID+":"+code, mail.SendOptions{
+		err := dispatchMail(ctx, h.Mailer, h.Jobs, "verify:"+user.ID+":"+code, mail.SendOptions{
 			To:       user.Email,
 			Subject:  "Confirm your email address",
 			Template: "email-verification",
@@ -104,17 +123,17 @@ func (h *AuthHandler) deliverVerificationEmail(ctx context.Context, user models.
 				"Minutes": 10,
 				"Year":    time.Now().Year(),
 			},
-		}); err != nil {
-			log.Printf("email verification: sending to %s: %v", user.Email, err)
+		})
+		if err != nil {
+			return code, err
 		}
-		return code
+		return code, nil
 	}
 
 	if h.Config.AppEnv == "production" {
-		log.Printf("email verification: NO MAILER CONFIGURED: %s cannot receive a code. Set MAIL_MAILER (see .env.example).", user.Email)
-		return ""
+		return code, ErrNoMailer
 	}
 
 	log.Printf("email verification code for %s: %s", user.Email, code)
-	return code
+	return code, ErrNoMailer
 }

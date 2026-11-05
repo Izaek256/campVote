@@ -327,8 +327,11 @@ func Load() (*Config, error) {
 		StoragePublicPrefixes: resolveStoragePublicPrefixes(),
 
 		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
-		MailFrom:     getEnv("MAIL_FROM", "noreply@localhost"),
-		Mail:         loadMailConfig(),
+		// Empty means "not set": the mail package then uses SMTP_USERNAME for
+		// SMTP and a local-only address for the log driver. A default here
+		// would silently override that and providers reject noreply@localhost.
+		MailFrom: getEnv("MAIL_FROM", ""),
+		Mail:     loadMailConfig(),
 
 		// The Wails desktop webview is allowed by middleware.isWailsOrigin (it
 		// matches the wails.localhost host on any port), so it needs no entry
@@ -1162,6 +1165,7 @@ type MailConfig struct {
 	SESAccessKeyID     string
 	SESSecretAccessKey string
 	SESSessionToken    string
+	EchoCodes          bool // MAIL_ECHO_CODES: dev-only opt-in to echo verification codes in API responses when delivery fails
 }
 
 func loadMailConfig() MailConfig {
@@ -1193,5 +1197,6 @@ func loadMailConfig() MailConfig {
 		SESAccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
 		SESSecretAccessKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
 		SESSessionToken:    getEnv("AWS_SESSION_TOKEN", ""),
+		EchoCodes:          getEnv("MAIL_ECHO_CODES", "false") == "true",
 	}
 }

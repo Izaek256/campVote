@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -224,7 +223,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	// Off the request path: signup should not wait on SMTP, and a mail failure
 	// must not fail an account that was created successfully.
-	_ = h.deliverVerificationEmail(c.Request.Context(), user)
+	_, _ = h.deliverVerificationEmail(c.Request.Context(), user)
 
 	tokens, err := h.AuthService.GenerateTokenPair(user.ID, user.Email, user.Role)
 	if err != nil {
@@ -328,15 +327,25 @@ func (h *AuthHandler) SignupInitiate(c *gin.Context) {
 
 	// A mail failure does not fail the request: the person can ask again, and
 	// the response must not reveal whether the address was already pending.
-	if err := h.deliverSignupVerificationEmail(c.Request.Context(), req.Email, code); err != nil {
-		log.Printf("auth: failed to send signup verification email to %s: %v", req.Email, err)
+	mailErr := h.deliverSignupVerificationEmail(c.Request.Context(), req.Email, code)
+	if mailErr != nil && !errors.Is(mailErr, ErrNoMailer) {
+		log.Printf("auth: failed to send signup verification email to %s: %v", req.Email, mailErr)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"message": "If that address can be registered, a verification code has been sent to it. The code expires in 10 minutes.",
-	})
-}
+	}
+	// Dev-only fallback, gated behind MAIL_ECHO_CODES=true: when delivery
+	// actually failed (no mailer or send error) the code is returned here so
+	// the flow can still be completed without a working mail server. A
+	// development deploy with working SMTP must not leak the code, which
+	// would let anyone verify any address.
+	if h.Config.Mail.EchoCodes && h.Config.AppEnv != "production" && mailErr != nil {
+		response["verification_code"] = code
+	}
 
+	c.JSON(http.StatusOK, response)
+}
 
 // SignupComplete completes the signup process using the verification code.
 // POST /api/v1/auth/signup/complete
@@ -434,53 +443,30 @@ func (h *AuthHandler) SignupComplete(c *gin.Context) {
 
 // deliverSignupVerificationEmail sends a verification code email for signup.
 func (h *AuthHandler) deliverSignupVerificationEmail(ctx context.Context, email, code string) error {
-	if h.Mailer == nil {
+	if h.Mailer == nil && h.Jobs == nil {
+		if h.Config.AppEnv == "production" {
+			// Never print a live code in production; a missing mailer is a
+			// deployment error the operator needs to see instead.
+			return ErrNoMailer
+		}
 		log.Printf("auth: no mailer configured, verification code for %s: %s", email, code)
-		return nil
+		return ErrNoMailer
 	}
 
-	templateData := map[string]interface{}{
-		"Code":      code,
-		"AppName":   "CampVote",
-		"ExpiresIn": "10 minutes",
-	}
-
-	return h.Mailer.SendMessage(ctx, &mail.Message{
-		To:      []string{email},
-		Subject: "Verify your email for CampVote",
-		HTML:    signupVerificationEmailTemplate(templateData),
-		Text:    plainTextSignupVerification(code),
+	return dispatchMail(ctx, h.Mailer, h.Jobs, "signup:"+email+":"+code, mail.SendOptions{
+		To:       email,
+		Subject:  "Confirm your email address",
+		Template: "email-verification",
+		Data: map[string]interface{}{
+			"AppName": h.Config.AppName,
+			"Title":   "Confirm your email address",
+			"Message": "Enter this code to finish creating your account.",
+			"Code":    code,
+			"Minutes": 10,
+			"Year":    time.Now().Year(),
+		},
 	})
 }
-
-func signupVerificationEmailTemplate(data map[string]interface{}) string {
-	return `
-<!DOCTYPE html>
-<html>
-<head>
-	<meta charset="UTF-8">
-	<title>Verify Your Email</title>
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-	<div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-		<h2 style="color: #12783f;">Verify Your Email Address</h2>
-		<p>Thank you for signing up for CampVote. Please use the following verification code to complete your registration:</p>
-		<div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
-			{{.Code}}
-		</div>
-		<p>This code will expire in {{.ExpiresIn}}.</p>
-		<p>If you did not request this code, please ignore this email.</p>
-		<p style="color: #666; font-size: 12px;">MMU Electoral Commission</p>
-	</div>
-</body>
-</html>
-`
-}
-
-func plainTextSignupVerification(code string) string {
-	return fmt.Sprintf("Your CampVote verification code is: %s\n\nThis code will expire in 10 minutes.\n\nIf you did not request this code, please ignore this email.", code)
-}
-
 
 // invalidCredentials is the one answer a sign-in gets until its password has
 // been checked and found right. An unknown address, a wrong password, a locked

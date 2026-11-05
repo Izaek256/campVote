@@ -172,7 +172,11 @@ func main() {
 		log.Fatalf("Email: %v", mailErr)
 	}
 	if mailer != nil {
-		log.Printf("Email: sending with %s", mailer.Driver())
+		driver := mailer.Driver()
+		log.Printf("Email: sending with %s", driver)
+		if strings.Contains(driver, "log") {
+			log.Println("Warning: the active mail driver writes to logs, not inboxes. Verification and reset codes will not reach users. Set MAIL_MAILER=smtp (or another provider) to deliver email.")
+		}
 	} else {
 		log.Println("Warning: no mail driver configured (emails disabled). Set MAIL_MAILER, or RESEND_API_KEY for Resend.")
 	}
