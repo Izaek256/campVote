@@ -579,6 +579,7 @@ Already enforced server-side: `GET /positions/eligible` (`position_workflow.go`)
 ### Documentation
 - Added `docs/operations/docker-full-stack.md`; linked it from `docs/README.md` and cross-referenced it from `docs/operations/docker-compose.md`.
 - README gained Option 5 (WSL2/Linux full stack) and Option 6 (PostgreSQL in Docker Desktop on Windows), plus the build-network note and updated environment-variable table.
+- README documents, per setup, what to do after a code change and how to start a stopped service again, with a summary table under Common tasks. Containerised setups require an image rebuild; host setups hot-reload and run migrations manually.
 
 ### Deferred / Known limitations
 - The full stack has no Redis, MinIO, Mailpit or reverse proxy; `REDIS_URL` is empty, so jobs and scheduled transitions are off.

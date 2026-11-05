@@ -107,6 +107,33 @@ pnpm dev:web   # http://localhost:3000
 
 The image's entrypoint (`apps/api/entrypoint.sh`) runs the migrations against `DATABASE_URL` before starting the server, so a first `up` needs no separate migrate step.
 
+### Change API code or restart the container
+
+The Go binary is **compiled into the image**. `docker compose restart api` or
+`docker compose start api` does not rebuild it, so code edits will not appear.
+
+```bash
+# After changing Go code: rebuild the image, then start it
+pnpm docker:up
+
+# On a host whose Docker bridge has normal DNS/egress, this plain form also works
+docker compose up -d --build api
+
+# No code change, container simply stopped (container still exists)
+docker compose start api
+
+# No code change, container removed by `docker compose down`
+docker compose up -d --no-build
+
+# Follow the restart and check health
+docker compose logs -f api
+curl -s http://localhost:8080/api/health
+```
+
+Migrations run again automatically on every start, so a schema/model change does
+not need a separate migrate command. `docker compose stop` keeps the container;
+`docker compose down` removes it. Neither deletes the external database.
+
 ### If the image build cannot reach the network
 
 Docker 29 requires an explicit `--allow=network.host` when a build wants the host
@@ -318,6 +345,38 @@ docker exec -e BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
 - Mail: set `MAIL_MAILER` and the relevant `SMTP_*`/provider variables to a reachable server. For a browser-free local loop, `MAIL_MAILER=log` writes each message to stdout and to `MAIL_LOG_PATH` instead of sending it — useful here, because docker-compose.yaml no longer bundles Mailpit either.
 - Set `APP_URL` and `CORS_ORIGINS` to the addresses of your deployed web frontend.
 
+### Change API code or restart the container
+
+There is no Compose here, so the container is managed with `docker` directly. The
+Go binary is compiled into the image: `docker restart campvote-api` reuses the
+old image and will not pick up code edits.
+
+```bash
+# After changing Go code: rebuild the image
+docker build --network=host --allow=network.host -t campvote-api ./apps/api
+# On a host whose Docker bridge has normal DNS/egress, this plain form works:
+#   docker build -t campvote-api ./apps/api
+
+# Remove the old container, then run the new image
+docker stop campvote-api && docker rm campvote-api
+docker run -d --name campvote-api \
+  -p 8080:8080 \
+  --env-file .env \
+  -v campvote_storage:/app/storage \
+  campvote-api
+
+# No code change, container simply stopped: start it again
+docker start campvote-api
+
+# Follow the restart and check health
+docker logs -f campvote-api
+curl -s http://localhost:8080/api/health
+```
+
+`docker start` only works while the container still exists. After `docker rm`,
+use the whole `docker run` command again. Migrations run automatically from the
+image entrypoint on every start, including a plain `docker start`.
+
 ### Stopping
 
 ```bash
@@ -413,6 +472,29 @@ pnpm dev:api
 
 # Start only the voter portal
 pnpm dev:web
+```
+
+### Change code or restart
+
+Both applications run on the host, so there is no image to rebuild:
+
+- **API**: `pnpm dev:api` (or `pnpm dev`) runs `air`, which rebuilds and
+  restarts the server after every Go change.
+- **Web**: `pnpm dev:web` (or `pnpm dev`) is Next.js dev mode with hot reload.
+- **Migrations are not automatic here.** After changing a model or adding a
+  migration, run `cd apps/api && go run ./cmd/migrate` yourself.
+
+If the apps were stopped, start them again with `pnpm dev`, or one at a time
+with `pnpm dev:api` / `pnpm dev:web`.
+
+The PostgreSQL container is independent of the app code:
+
+```bash
+# Container still exists, just stopped
+docker start campvote-postgres
+docker ps --filter name=campvote-postgres
+
+# Container was removed: rerun step 4; the named volume keeps the data
 ```
 
 ### Stopping local development
@@ -521,6 +603,29 @@ cd apps/api && go run ./cmd/server
 cd apps/web && pnpm dev
 ```
 
+### Change code or restart
+
+Both applications run on the host with hot reload, so image rebuilds do not
+apply:
+
+- **API**: `pnpm dev:api` (or `pnpm dev`) reloads Go changes through `air`.
+- **Web**: `pnpm dev:web` (or `pnpm dev`) hot-reloads Next.js changes.
+- **Migrations are not automatic here.** After changing a model or adding a
+  migration, run `cd apps/api && go run ./cmd/migrate`.
+
+If the apps were stopped, start them again with `pnpm dev`, or individually with
+`pnpm dev:api` / `pnpm dev:web` (or `go run ./cmd/server`).
+
+PostgreSQL is a Windows service in this setup, not a container:
+
+```powershell
+# PowerShell as Administrator; use the name Get-Service reports
+Get-Service *postgres*
+Restart-Service postgresql-x64-16
+```
+
+Use Option 6 if you would rather run the database in Docker Desktop.
+
 ### Stopping local development
 
 ```bash
@@ -620,6 +725,48 @@ docker compose -f docker-compose.wsl.yaml exec db \
   psql -U campvote_dev -d campvote_dev
 ```
 
+### Change code and restart the stack
+
+Both images bake their code in: the API image compiles the Go binary, and the web
+image contains a production Next.js build. `docker compose ... restart` or
+`start` reuses the current images and does not pick up edits.
+
+```bash
+# After changing API or web code: rebuild both images, then recreate the stack
+pnpm docker:stack
+
+# On a host with normal bridge DNS/egress, the plain form also works
+docker compose -f docker-compose.wsl.yaml up -d --build
+
+# No code change: start stopped containers as they are
+docker compose -f docker-compose.wsl.yaml start
+
+# No code change, containers removed by `down`: reuse the existing images
+docker compose -f docker-compose.wsl.yaml up -d --no-build
+
+# Follow the restart and check health
+docker compose -f docker-compose.wsl.yaml logs -f api web
+curl -s http://localhost:8080/api/health
+```
+
+Rebuild only the image that changed to save time:
+
+```bash
+# API only
+docker build --network=host --allow=network.host -t campvote-api:latest ./apps/api
+docker compose -f docker-compose.wsl.yaml up -d --no-build api
+
+# Web only
+docker build --network=host --allow=network.host \
+  --build-arg NEXT_PUBLIC_API_URL=http://localhost:8080 \
+  -t campvote-web:latest -f apps/web/Dockerfile .
+docker compose -f docker-compose.wsl.yaml up -d --no-build web
+```
+
+Rebuilding does not touch the `db` container or its data. The API entrypoint
+reruns migrations whenever the API container starts, including after
+`docker compose ... start`.
+
 ### Stop and reset
 
 ```bash
@@ -707,12 +854,47 @@ docker compose -f docker-compose.windows.yaml down
 docker compose -f docker-compose.windows.yaml down -v
 ```
 
+### Change code or restart the database
+
+Only PostgreSQL is containerised here, so there is no application image to
+rebuild:
+
+- **App code** changes are handled by the host hot reload described in Option 3
+  or 4: `pnpm dev`, or `pnpm dev:api` / `pnpm dev:web`.
+- **Migrations are not automatic here.** After changing a model or adding a
+  migration, run `cd apps/api && go run ./cmd/migrate`.
+- **Stopped database**: `start` if the container still exists, `up -d` if it was
+  removed with `down`. The named volume keeps the data and the image is not
+  rebuilt.
+
+```bash
+docker compose -f docker-compose.windows.yaml start
+docker compose -f docker-compose.windows.yaml ps
+docker compose -f docker-compose.windows.yaml logs postgres
+```
+
 Create the first administrator with the `cmd/bootstrap` commands in Option 3 or
 Option 4 once the database is running.
 
 ---
 
 ## Common tasks (all setups)
+
+### After a code change or a stopped service
+
+| Setup | After changing code | Start again after stopping |
+|---|---|---|
+| 1. API container (Compose) | `pnpm docker:up` | `docker compose start api`; if removed by `down`, `docker compose up -d --no-build` |
+| 2. API container (`docker run`) | rebuild the image, `docker rm`, then `docker run` again | `docker start campvote-api` while the container exists |
+| 3. Local dev, database in Docker | host hot reload; `go run ./cmd/migrate` after schema changes | `pnpm dev`, and `docker start campvote-postgres` |
+| 4. Local dev, database on Windows | host hot reload; `go run ./cmd/migrate` after schema changes | `pnpm dev`, and start the PostgreSQL Windows service |
+| 5. Full stack in Docker | `pnpm docker:stack` | `docker compose -f docker-compose.wsl.yaml start`; if removed by `down`, add `up -d --no-build` |
+| 6. Database in Docker Desktop | host hot reload; `go run ./cmd/migrate` after schema changes | `docker compose -f docker-compose.windows.yaml start`, or `up -d` if removed |
+
+Only the local-development setups hot-reload code. Options 1, 2 and 5 compile
+the code into their images, so they need a rebuild. `stop` keeps containers,
+`down` removes them, and `down -v` also deletes that compose project's volumes —
+which is the only command here that deletes a containerised database.
 
 ### Frontend-specific notes
 
