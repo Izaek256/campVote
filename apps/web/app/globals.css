@@ -3074,7 +3074,7 @@ pre.code {
   }
 }
 
-/* ===== campVote application shell =====
+/* ===== CampVote application shell =====
    Built only from the kit's tokens and components. The kit's own index shell
    (.shell/.index/.spec) is not used by the product. */
 body {

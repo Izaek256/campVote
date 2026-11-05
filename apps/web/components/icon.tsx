@@ -1,5 +1,5 @@
 /**
- * The campVote icon set.
+ * The CampVote icon set.
  *
  * One grammar for every glyph: a 24px grid, 1.75 stroke, square caps and mitre
  * joins, drawn with `currentColor` so an icon takes the colour of its context.

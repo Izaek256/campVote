@@ -126,7 +126,7 @@ func serviceName(cfg *config.Config) string {
 	if cfg != nil && cfg.AppName != "" {
 		return cfg.AppName
 	}
-	return "grit-api"
+	return "campvote-api"
 }
 
 // sampler decides how much is kept.

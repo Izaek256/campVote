@@ -5,7 +5,7 @@ import { ToastProvider } from "@/components/toast";
 import { CAMPUS_NAME } from "@/lib/config";
 
 export const metadata: Metadata = {
-  title: `campVote — ${CAMPUS_NAME} elections`,
+  title: `CampVote — ${CAMPUS_NAME} elections`,
   description: `Vote in authorised ${CAMPUS_NAME} elections.`,
 };
 

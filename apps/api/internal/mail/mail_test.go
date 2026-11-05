@@ -77,7 +77,7 @@ func noRetryDelay(t *testing.T) {
 
 func sampleMessage() *Message {
 	return &Message{
-		From:        "Grit App <noreply@example.com>",
+		From:        "CampVote <noreply@example.com>",
 		ReplyTo:     "support@example.com",
 		To:          []string{"Ada <ada@example.com>", "bob@example.com"},
 		Cc:          []string{"carol@example.com"},
@@ -162,7 +162,7 @@ func TestResendRequestShape(t *testing.T) {
 	}
 
 	body := decodeJSON(t, r.Body)
-	expect(t, "from", body["from"], "Grit App <noreply@example.com>")
+	expect(t, "from", body["from"], "CampVote <noreply@example.com>")
 	expect(t, "to", body["to"], []interface{}{"Ada <ada@example.com>", "bob@example.com"})
 	expect(t, "cc", body["cc"], []interface{}{"carol@example.com"})
 	expect(t, "bcc", body["bcc"], []interface{}{"dan@example.com"})
@@ -261,7 +261,7 @@ func TestPostmarkRequestShape(t *testing.T) {
 	expect(t, "Content-Type", r.Header.Get("Content-Type"), "application/json")
 
 	body := decodeJSON(t, r.Body)
-	expect(t, "From", body["From"], "Grit App <noreply@example.com>")
+	expect(t, "From", body["From"], "CampVote <noreply@example.com>")
 	expect(t, "To", body["To"], "Ada <ada@example.com>,bob@example.com")
 	expect(t, "Cc", body["Cc"], "carol@example.com")
 	expect(t, "Bcc", body["Bcc"], "dan@example.com")
@@ -295,7 +295,7 @@ func TestSendGridRequestShape(t *testing.T) {
 	body := decodeJSON(t, r.Body)
 	from := asMap(t, "from", body["from"])
 	expect(t, "from email", from["email"], "noreply@example.com")
-	expect(t, "from name", from["name"], "Grit App")
+	expect(t, "from name", from["name"], "CampVote")
 	p := asMap(t, "personalization", asList(t, "personalizations", body["personalizations"])[0])
 	to := asList(t, "to", p["to"])
 	expect(t, "to[0] email", asMap(t, "to[0]", to[0])["email"], "ada@example.com")
@@ -336,7 +336,7 @@ func TestMailgunRequestShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading the form: %v", err)
 	}
-	expect(t, "from", form.Value["from"], []string{"Grit App <noreply@example.com>"})
+	expect(t, "from", form.Value["from"], []string{"CampVote <noreply@example.com>"})
 	expect(t, "to", form.Value["to"], []string{"Ada <ada@example.com>", "bob@example.com"})
 	expect(t, "cc", form.Value["cc"], []string{"carol@example.com"})
 	expect(t, "bcc", form.Value["bcc"], []string{"dan@example.com"})
@@ -386,7 +386,7 @@ func TestSESRequestShape(t *testing.T) {
 	}
 
 	body := decodeJSON(t, r.Body)
-	expect(t, "FromEmailAddress", body["FromEmailAddress"], "Grit App <noreply@example.com>")
+	expect(t, "FromEmailAddress", body["FromEmailAddress"], "CampVote <noreply@example.com>")
 	dest := asMap(t, "Destination", body["Destination"])
 	expect(t, "ToAddresses", dest["ToAddresses"], []interface{}{"ada@example.com", "bob@example.com"})
 	expect(t, "CcAddresses", dest["CcAddresses"], []interface{}{"carol@example.com"})
@@ -464,7 +464,7 @@ func TestMIMEMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("not a valid message: %v", err)
 	}
-	expect(t, "From", msg.Header.Get("From"), "\"Grit App\" <noreply@example.com>")
+	expect(t, "From", msg.Header.Get("From"), "\"CampVote\" <noreply@example.com>")
 	expect(t, "To", msg.Header.Get("To"), "\"Ada\" <ada@example.com>, <bob@example.com>")
 	expect(t, "Cc", msg.Header.Get("Cc"), "<carol@example.com>")
 	expect(t, "Reply-To", msg.Header.Get("Reply-To"), "<support@example.com>")
@@ -805,12 +805,12 @@ func TestFromConfigPicksTheDriver(t *testing.T) {
 		})
 	}
 
-	named := config.Config{AppEnv: "development", MailFrom: "noreply@example.com", Mail: config.MailConfig{FromName: "Grit App"}}
+	named := config.Config{AppEnv: "development", MailFrom: "noreply@example.com", Mail: config.MailConfig{FromName: "CampVote"}}
 	m, err := FromConfig(&named)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(t, "from with MAIL_FROM_NAME", m.From(), "\"Grit App\" <noreply@example.com>")
+	expect(t, "from with MAIL_FROM_NAME", m.From(), "\"CampVote\" <noreply@example.com>")
 }
 
 func TestMailerKeepsItsAPI(t *testing.T) {

@@ -441,13 +441,13 @@ func (h *AuthHandler) deliverSignupVerificationEmail(ctx context.Context, email,
 
 	templateData := map[string]interface{}{
 		"Code":      code,
-		"AppName":   "campVote",
+		"AppName":   "CampVote",
 		"ExpiresIn": "10 minutes",
 	}
 
 	return h.Mailer.SendMessage(ctx, &mail.Message{
 		To:      []string{email},
-		Subject: "Verify your email for campVote",
+		Subject: "Verify your email for CampVote",
 		HTML:    signupVerificationEmailTemplate(templateData),
 		Text:    plainTextSignupVerification(code),
 	})
@@ -464,7 +464,7 @@ func signupVerificationEmailTemplate(data map[string]interface{}) string {
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
 	<div style="max-width: 600px; margin: 0 auto; padding: 20px;">
 		<h2 style="color: #12783f;">Verify Your Email Address</h2>
-		<p>Thank you for signing up for campVote. Please use the following verification code to complete your registration:</p>
+		<p>Thank you for signing up for CampVote. Please use the following verification code to complete your registration:</p>
 		<div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
 			{{.Code}}
 		</div>
@@ -478,7 +478,7 @@ func signupVerificationEmailTemplate(data map[string]interface{}) string {
 }
 
 func plainTextSignupVerification(code string) string {
-	return fmt.Sprintf("Your campVote verification code is: %s\n\nThis code will expire in 10 minutes.\n\nIf you did not request this code, please ignore this email.", code)
+	return fmt.Sprintf("Your CampVote verification code is: %s\n\nThis code will expire in 10 minutes.\n\nIf you did not request this code, please ignore this email.", code)
 }
 
 

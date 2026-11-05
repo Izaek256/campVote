@@ -370,7 +370,7 @@ func main() {
 	if cfg.SentinelEnabled {
 		rows = append(rows, [2]string{"sentinel", base + "/sentinel/ui"})
 	}
-	logging.Banner("campVote API", rows)
+	logging.Banner("CampVote API", rows)
 
 	// Start server in goroutine
 	go func() {

@@ -299,7 +299,7 @@ func Load() (*Config, error) {
 	storageDriver := resolveStorageDriver()
 
 	cfg := &Config{
-		AppName: getEnv("APP_NAME", "grit-app"),
+		AppName: getEnv("APP_NAME", "CampVote"),
 		// Production unless told otherwise: a server that forgot APP_ENV is strict.
 		AppEnv: getEnv("APP_ENV", "production"),
 		// PORT first: every platform that routes to a container injects it, and
@@ -364,7 +364,7 @@ func Load() (*Config, error) {
 		AIGatewayModel:  getEnv("AI_GATEWAY_MODEL", "anthropic/claude-sonnet-4-6"),
 		AIGatewayURL:    getEnv("AI_GATEWAY_URL", "https://ai-gateway.vercel.sh/v1"),
 
-		TOTPIssuer: getEnv("TOTP_ISSUER", getEnv("APP_NAME", "grit-app")),
+		TOTPIssuer: getEnv("TOTP_ISSUER", getEnv("APP_NAME", "CampVote")),
 		// Off by default and deliberately so: switching it on for an existing
 		// project would lock out every user at once, because they all have a
 		// NULL email_verified_at.
@@ -778,7 +778,7 @@ func resolveDatabaseURL() string {
 		pass := getEnv("POSTGRES_PASSWORD", "grit")
 		host := getEnv("POSTGRES_HOST", "localhost")
 		port := getEnv("POSTGRES_PORT", "5432")
-		db := getEnv("POSTGRES_DB", getEnv("APP_NAME", "grit-app"))
+		db := getEnv("POSTGRES_DB", "campvote")
 		return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
 			user, pass, host, port, db, getEnv("POSTGRES_SSLMODE", "disable"))
 
@@ -789,7 +789,7 @@ func resolveDatabaseURL() string {
 		pass := getEnv("MYSQL_PASSWORD", "grit")
 		host := getEnv("MYSQL_HOST", "localhost")
 		port := getEnv("MYSQL_PORT", "3306")
-		db := getEnv("MYSQL_DB", getEnv("APP_NAME", "grit-app"))
+		db := getEnv("MYSQL_DB", "campvote")
 		return fmt.Sprintf("mysql:%s:%s@tcp(%s:%s)/%s", user, pass, host, port, db)
 
 	case "sqlite", "sqlite3", "file":

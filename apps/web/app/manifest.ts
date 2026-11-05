@@ -7,8 +7,8 @@ import { CAMPUS_NAME } from "@/lib/config";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: `campVote — ${CAMPUS_NAME} elections`,
-    short_name: "campVote",
+    name: `CampVote — ${CAMPUS_NAME} elections`,
+    short_name: "CampVote",
     description: `Vote in authorised ${CAMPUS_NAME} elections.`,
     start_url: "/",
     display: "standalone",

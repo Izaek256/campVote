@@ -135,7 +135,7 @@ export function AppShell({
         <div style={{ display: "flex", alignItems: "center" }}>
           <Link className="b" href={admin ? "/staff" : "/elections"} onClick={close}>
             <Icon name="ballot" />
-            campVote
+            CampVote
           </Link>
           <button type="button" className="close" aria-label="Close navigation" onClick={close}>
             <Icon name="x" />
@@ -219,7 +219,7 @@ export function AppShell({
           >
             <Icon name="menu" />
           </button>
-          <b>{title ?? (admin ? "Admin" : "campVote")}</b>
+          <b>{title ?? (admin ? "Admin" : "CampVote")}</b>
           <span className="row" style={{ marginLeft: "auto" }}>
             <ThemeToggle />
             <span className="chip draft">{admin ? "Admin" : "Student voter"}</span>

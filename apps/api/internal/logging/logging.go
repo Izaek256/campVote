@@ -171,7 +171,7 @@ func Request(status int, method, path string, d time.Duration, ip, requestID str
 // Banner prints the boot header: a title and aligned key/value rows, as a
 // single entry so the timestamps do not repeat down the block.
 //
-//	logging.Banner("campVote API", [][2]string{
+//	logging.Banner("CampVote API", [][2]string{
 //		{"env", cfg.AppEnv},
 //		{"listening", "http://localhost:" + cfg.Port},
 //	})

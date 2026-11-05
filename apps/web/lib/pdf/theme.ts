@@ -2,7 +2,7 @@
  * Shared tokens and small text helpers for the client-rendered election
  * documents.
  *
- * These are the campVote UI kit colours and nothing else: ink for structure,
+ * These are the CampVote UI kit colours and nothing else: ink for structure,
  * one green for emphasis, sunken/line for tables. Every timestamp is printed in
  * EAT, and no document here can carry a voter's identity — a ballot has none.
  */

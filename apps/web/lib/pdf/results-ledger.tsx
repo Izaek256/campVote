@@ -282,14 +282,14 @@ export function ResultsLedgerDocument({ election, snapshot, faculties = [] }: Pr
   return (
     <Document
       title={`Results • ${election.title}`}
-      author="campVote Electoral Commission"
+      author="CampVote Electoral Commission"
       subject={`Election ${election.id}`}
-      creator="campVote"
+      creator="CampVote"
     >
       <Page size="A4" style={styles.page} wrap>
         <View style={styles.band}>
           <View style={styles.bandRow}>
-            <Text style={styles.wordmark}>campVote</Text>
+            <Text style={styles.wordmark}>CampVote</Text>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{certified ? "CERTIFIED" : "PROVISIONAL"}</Text>
             </View>
@@ -413,7 +413,7 @@ export function ResultsLedgerDocument({ election, snapshot, faculties = [] }: Pr
 
         <View style={styles.footer} fixed>
           <View style={styles.footerGroup}>
-            <Text style={styles.footerText}>campVote</Text>
+            <Text style={styles.footerText}>CampVote</Text>
             <Text style={styles.footerSep}>•</Text>
             <Text style={styles.footerText}>{election.id}</Text>
             <Text style={styles.footerSep}>•</Text>

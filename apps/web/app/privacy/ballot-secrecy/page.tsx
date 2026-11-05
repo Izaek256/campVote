@@ -5,7 +5,7 @@ export default function BallotSecrecyPage() {
 
       <div className="prose prose-lg max-w-none">
         <h2 className="text-xl font-semibold mt-6 mb-3">Your Ballot Privacy</h2>
-        <p>campVote is designed to protect your ballot choices. Here's what you should know:</p>
+        <p>CampVote is designed to protect your ballot choices. Here's what you should know:</p>
 
         <h3 className="text-lg font-semibold mt-6 mb-2">What is protected:</h3>
         <ul className="list-disc pl-6 space-y-1">
