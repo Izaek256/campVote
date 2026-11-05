@@ -26,7 +26,11 @@
 - [`implementation/SETUP_LOG.md`](implementation/SETUP_LOG.md) — Verified toolchain versions and scaffold facts.
 - [`maintenance/repository-cleanup.md`](maintenance/repository-cleanup.md) — Repository audit and file hygiene log.
 
-## 4. UI
+## 4. Operations
+
+- [`operations/docker-compose.md`](operations/docker-compose.md) — Why compose containerises only the API (database, cache, mail and web external, configured through `.env`), what that costs, and the verified setup commands.
+
+## 5. UI
 
 - [`ui-views.md`](ui-views.md) — Registry of every UI view: route, roles, API, states, owning issue.
 - [`ui-kit/campVote-UI-Kit.html`](ui-kit/campVote-UI-Kit.html) — Design reference (A0): components, tokens and layout patterns every view follows.
@@ -34,12 +38,12 @@
 - [`features/admin-user-management.md`](features/admin-user-management.md) — ISSUE-20 admin user management UI + missing admin infrastructure (FR-AUTH-06, FR-AUTH-07).
 - [`features/positions-first-workflow.md`](features/positions-first-workflow.md) — Phase 2 positions-first workflow: standalone positions, position eligibility, max candidates, admin/student views.
 
-## 5. Audit & Traceability
+## 6. Audit & Traceability
 
 - [`traceability.md`](traceability.md) — SRS v1.1 → implementation traceability matrix (per-requirement status, code & test locations).
 - [`audit/issue-00-audit.md`](audit/issue-00-audit.md) — ISSUE-00 full implementation audit: source of truth, stack, tables, seeds, routes, tests, re-scoped plan.
 
-## 6. Templates & Quality
+## 7. Templates & Quality
 
 - [`debugging/BUG_REPORT_TEMPLATE.md`](debugging/BUG_REPORT_TEMPLATE.md) — Systematic defect investigation template.
 - [`reviews/REVIEW_TEMPLATE.md`](reviews/REVIEW_TEMPLATE.md) — Structured code review checklist.
