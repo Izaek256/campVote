@@ -1,0 +1,222 @@
+"use client";
+
+import Link from "next/link";
+import { use, useCallback, useEffect, useState } from "react";
+import { EmptyState } from "@/components/empty-state";
+import { Icon } from "@/components/icon";
+import { LoadError } from "@/components/load-error";
+import { RequireAuth } from "@/components/require-auth";
+import { SiteHeader } from "@/components/site-header";
+import { StatusChip } from "@/components/status-chip";
+import { useToast } from "@/components/toast";
+import { useChannel } from "@/hooks/use-realtime";
+import { ApiError, documents, elections } from "@/lib/api";
+import { formatNumber, formatPercent } from "@/lib/format";
+import type { PositionResult, Results } from "@/lib/types";
+
+function PositionTally({ position, certified }: { position: PositionResult; certified: boolean }) {
+  return (
+    <section className="panel" style={{ marginBottom: 16 }}>
+      <div className="section-h" style={{ marginTop: 0 }}>
+        <h2>{position.title}</h2>
+        <span className="mono">
+          {position.outcome.replaceAll("_", " ").toLowerCase()} ·{" "}
+          {formatNumber(position.valid_votes)} valid votes
+        </span>
+      </div>
+      <div className="tally">
+        {position.rows
+          .slice()
+          .sort((a, b) => b.votes - a.votes)
+          .map((row) => (
+            <div className="trow" key={row.candidate_id}>
+              <span>
+                <b>{row.name}</b>
+                {row.is_winner ? (
+                  <span className="lead-tag">{certified ? "Elected" : "Leading"}</span>
+                ) : null}
+                {row.is_tie ? <span className="lead-tag">Tie</span> : null}
+              </span>
+              <div className={`bar${row.is_winner ? " lead" : ""}`}>
+                <i
+                  style={{
+                    width: `${Math.min(100, Math.max(0, row.share_percent))}%`,
+                  }}
+                />
+              </div>
+              <span className="vl">
+                <b>{formatNumber(row.votes)}</b> · {formatPercent(row.share_percent)}
+              </span>
+            </div>
+          ))}
+      </div>
+      <p className="hint" style={{ marginTop: 10 }}>
+        Share of {formatNumber(position.valid_votes)} valid votes. Blank or abstaining selections
+        are not counted for a candidate.
+      </p>
+    </section>
+  );
+}
+
+function ResultsView({ id }: { id: string }) {
+  const toast = useToast();
+  const [results, setResults] = useState<Results | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await elections.results(id);
+      setResults(data);
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Results could not be loaded.";
+      setLoadError(message);
+      if (err instanceof ApiError && err.status === 403) {
+        toast.warn(message);
+      } else {
+        toast.error(message);
+      }
+    }
+  }, [id, toast]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // The downloadable ledger holds exactly what this page publishes.
+  async function downloadLedger() {
+    setDownloading(true);
+    try {
+      await documents.resultsPdf(id);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "The results document could not be downloaded."
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  // The automatic tally at close publishes on this channel, so a page already
+  // open updates without a refresh or a staff click.
+  useChannel(`public-election-results.${id}`, {
+    "results.updated": () => {
+      void load();
+    },
+  });
+
+  const snapshot = results?.snapshot;
+  const certified = snapshot?.status === "CERTIFIED";
+
+  return (
+    <main className="app-wrap">
+      <nav className="crumbs" aria-label="Breadcrumb" style={{ marginBottom: 16 }}>
+        <Link href="/elections">Elections</Link>
+        <span>/</span>
+        <Link href={`/elections/${id}`}>Election</Link>
+        <span>/</span>
+        <span>Results</span>
+      </nav>
+
+      <div className="page-head">
+        <div>
+          <span className="lbl">Results</span>
+          <h1>Published tallies</h1>
+          <p>
+            Percentages name their denominator. A leader is not a winner until the result is
+            certified.
+          </p>
+        </div>
+        <div className="row">
+          {results?.election_status ? <StatusChip status={results.election_status} /> : null}
+          {snapshot ? (
+            <button
+              type="button"
+              className="btn sm"
+              disabled={downloading}
+              onClick={downloadLedger}
+            >
+              <Icon name="dl" size="s" />
+              {downloading ? "Preparing…" : "Download PDF"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {loadError ? (
+        <LoadError
+          title="We could not load the results"
+          message={loadError}
+          backHref="/elections"
+          backLabel="Back to elections"
+        />
+      ) : !results ? (
+        <div className="panel stack" role="status" aria-busy="true" aria-label="Loading results">
+          <span className="skel" style={{ height: 18, width: "30%" }} />
+          <span className="skel" style={{ height: 14 }} />
+          <span className="skel" style={{ height: 14, width: "80%" }} />
+        </div>
+      ) : null}
+
+      {results && !snapshot ? (
+        <EmptyState title="No results published yet">
+          {results.reason ?? "The count has not produced a published snapshot."}
+        </EmptyState>
+      ) : null}
+
+      {results && snapshot ? (
+        <>
+          <div className={`banner ${certified ? "ok" : ""}`} style={{ marginBottom: 20 }}>
+            <Icon name={certified ? "shield" : "clock"} />
+            <div>
+              <b>{certified ? "Certified final" : "Provisional result"}</b>
+              {certified
+                ? "The result has been certified. Corrections need a recorded exception."
+                : "Not a final result. A leader is not a winner until certified."}
+            </div>
+          </div>
+
+          <div className="kpis" style={{ marginBottom: 20 }}>
+            <div className="kpi">
+              <span className="l">Eligible voters</span>
+              <span className="v">{formatNumber(snapshot.eligible_voters)}</span>
+            </div>
+            <div className="kpi">
+              <span className="l">Ballots cast</span>
+              <span className="v">{formatNumber(snapshot.ballots_cast)}</span>
+            </div>
+            <div className="kpi">
+              <span className="l">Turnout</span>
+              <span className="v">{formatPercent(snapshot.turnout_percent)}</span>
+            </div>
+          </div>
+
+          {snapshot.positions.length === 0 ? (
+            <EmptyState title="No tallies yet">
+              The count has not produced any published tally rows.
+            </EmptyState>
+          ) : (
+            snapshot.positions.map((position) => (
+              <PositionTally key={position.position_id} position={position} certified={certified} />
+            ))
+          )}
+
+          <p className="hint">
+            Snapshot version {snapshot.version} · computed{" "}
+            {new Date(snapshot.computed_at).toLocaleString()}
+          </p>
+        </>
+      ) : null}
+    </main>
+  );
+}
+
+export default function ResultsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return (
+    <RequireAuth>
+      <SiteHeader />
+      <ResultsView id={id} />
+    </RequireAuth>
+  );
+}

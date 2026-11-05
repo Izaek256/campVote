@@ -1,0 +1,31 @@
+{
+  "name": "campvote",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" --if-present run dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "format": "biome format --write .",
+    "format:check": "biome check .",
+    "type-check": "turbo type-check",
+    "dev:api": "cd apps/api && air",
+    "dev:web": "cd apps/web && pnpm dev",
+    "docker:build": "sh scripts/docker-api.sh build",
+    "docker:up": "sh scripts/docker-api.sh up",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:stack": "sh scripts/docker-stack.sh up",
+    "docker:stack:build": "sh scripts/docker-stack.sh build",
+    "docker:stack:down": "sh scripts/docker-stack.sh down",
+    "test": "turbo test",
+    "test:api": "cd apps/api && go test -v ./...",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@playwright/test": "^1.48.0",
+    "turbo": "^2.0.0"
+  },
+  "packageManager": "pnpm@10.33.4"
+}

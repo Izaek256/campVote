@@ -1,0 +1,118 @@
+import type { ElectionStatus } from "./types";
+
+/** Campus display zone. Stored timestamps are UTC; voters read EAT. */
+export const EAT = "Africa/Kampala";
+
+const dateTime = new Intl.DateTimeFormat("en-GB", {
+  timeZone: EAT,
+  weekday: "short",
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+/** "Wed 28 Oct 2026, 17:00 EAT" */
+export function formatEAT(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return `${dateTime.format(date).replace(",", "")} EAT`;
+}
+
+/** "Wed 28 Oct, 17:00 EAT" for cards and tables. */
+export function formatShortEAT(iso: string): string {
+  return formatEAT(iso).replace(/\s\d{4},/, ",");
+}
+
+export function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en-GB").format(value);
+}
+
+export function formatPercent(value: number, digits = 1): string {
+  return `${value.toFixed(digits)}%`;
+}
+
+export interface Remaining {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  expired: boolean;
+}
+
+export function remaining(endsAt: string, now = Date.now()): Remaining {
+  const diff = new Date(endsAt).getTime() - now;
+  if (!Number.isFinite(diff) || diff <= 0) {
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, expired: true };
+  }
+  const total = Math.floor(diff / 1000);
+  return {
+    days: Math.floor(total / 86400),
+    hours: Math.floor((total % 86400) / 3600),
+    minutes: Math.floor((total % 3600) / 60),
+    seconds: total % 60,
+    expired: false,
+  };
+}
+
+const labels: Record<ElectionStatus, string> = {
+  DRAFT: "Draft",
+  OPEN: "Open",
+  CLOSED: "Closed",
+};
+
+const chipClasses: Record<ElectionStatus, string> = {
+  DRAFT: "draft",
+  OPEN: "open",
+  CLOSED: "closed",
+};
+
+export function statusLabel(status: ElectionStatus): string {
+  return labels[status] ?? status;
+}
+
+export function statusClass(status: ElectionStatus): string {
+  return chipClasses[status] ?? "draft";
+}
+
+const candidateLabels: Record<string, string> = {
+  NOMINATED: "Submitted",
+  PENDING: "Under review",
+  APPROVED: "Approved",
+  REJECTED: "Not approved",
+  WITHDRAWN: "Withdrawn",
+};
+
+const candidateClasses: Record<string, string> = {
+  NOMINATED: "sched",
+  PENDING: "review",
+  APPROVED: "final",
+  REJECTED: "cancel",
+  WITHDRAWN: "draft",
+};
+
+export function candidateStatusLabel(status: string): string {
+  return candidateLabels[status] ?? status;
+}
+
+export function candidateStatusClass(status: string): string {
+  return candidateClasses[status] ?? "draft";
+}
+
+export function categoryLabel(category: string): string {
+  return category.charAt(0) + category.slice(1).toLowerCase();
+}
+
+export function timezoneClock(serverTime: string): string {
+  const date = new Date(serverTime);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: EAT,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}

@@ -1,4 +1,4 @@
-# Contributing to campVote
+# Contributing to CampVote
 
 These guidelines apply to humans and AI coding agents. `AGENTS.md` contains the detailed development rules. Repository-owner decisions and GitHub branch protections take precedence.
 

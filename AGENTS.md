@@ -1,4 +1,4 @@
-# AI Agent Development Rules — campVote
+# AI Agent Development Rules — CampVote
 
 These rules apply to every AI coding agent working on this repository. Read them before planning, implementing, debugging, reviewing, or refactoring.
 
@@ -48,6 +48,7 @@ main
 - Never push directly to `main` or `develop`.
 - Never merge your own PR unless the repository owner explicitly authorizes it.
 - Never force-push shared branches or bypass required review/CI checks.
+- **All branches must pass CI/CD tests before merging.** The CI workflow (`.github/workflows/ci.yml`) runs backend tests, frontend type checks, linting, and builds. A PR cannot merge into `develop` or `main` unless all required checks pass.
 - Follow `CONTRIBUTING.md` for exact workflow and commit conventions.
 
 ## 4. Clear, understandable file structure
