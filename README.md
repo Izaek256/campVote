@@ -481,8 +481,9 @@ Both applications run on the host, so there is no image to rebuild:
 - **API**: `pnpm dev:api` (or `pnpm dev`) runs `air`, which rebuilds and
   restarts the server after every Go change.
 - **Web**: `pnpm dev:web` (or `pnpm dev`) is Next.js dev mode with hot reload.
-- **Migrations are not automatic here.** After changing a model or adding a
-  migration, run `cd apps/api && go run ./cmd/migrate` yourself.
+- **Migrations**: the API runs them at startup, so restarting `pnpm dev:api`
+  after a model change applies them. To apply them without starting the server,
+  run `cd apps/api && go run ./cmd/migrate`.
 
 If the apps were stopped, start them again with `pnpm dev`, or one at a time
 with `pnpm dev:api` / `pnpm dev:web`.
@@ -610,8 +611,9 @@ apply:
 
 - **API**: `pnpm dev:api` (or `pnpm dev`) reloads Go changes through `air`.
 - **Web**: `pnpm dev:web` (or `pnpm dev`) hot-reloads Next.js changes.
-- **Migrations are not automatic here.** After changing a model or adding a
-  migration, run `cd apps/api && go run ./cmd/migrate`.
+- **Migrations**: the API runs them at startup, so restarting the API after a
+  model change applies them. To apply them without starting the server, run
+  `cd apps/api && go run ./cmd/migrate`.
 
 If the apps were stopped, start them again with `pnpm dev`, or individually with
 `pnpm dev:api` / `pnpm dev:web` (or `go run ./cmd/server`).
@@ -861,8 +863,9 @@ rebuild:
 
 - **App code** changes are handled by the host hot reload described in Option 3
   or 4: `pnpm dev`, or `pnpm dev:api` / `pnpm dev:web`.
-- **Migrations are not automatic here.** After changing a model or adding a
-  migration, run `cd apps/api && go run ./cmd/migrate`.
+- **Migrations**: the API runs them at startup, so restarting the API after a
+  model change applies them. To apply them without starting the server, run
+  `cd apps/api && go run ./cmd/migrate`.
 - **Stopped database**: `start` if the container still exists, `up -d` if it was
   removed with `down`. The named volume keeps the data and the image is not
   rebuilt.
@@ -886,10 +889,10 @@ Option 4 once the database is running.
 |---|---|---|
 | 1. API container (Compose) | `pnpm docker:up` | `docker compose start api`; if removed by `down`, `docker compose up -d --no-build` |
 | 2. API container (`docker run`) | rebuild the image, `docker rm`, then `docker run` again | `docker start campvote-api` while the container exists |
-| 3. Local dev, database in Docker | host hot reload; `go run ./cmd/migrate` after schema changes | `pnpm dev`, and `docker start campvote-postgres` |
-| 4. Local dev, database on Windows | host hot reload; `go run ./cmd/migrate` after schema changes | `pnpm dev`, and start the PostgreSQL Windows service |
+| 3. Local dev, database in Docker | host hot reload; migrations run when the API restarts | `pnpm dev`, and `docker start campvote-postgres` |
+| 4. Local dev, database on Windows | host hot reload; migrations run when the API restarts | `pnpm dev`, and start the PostgreSQL Windows service |
 | 5. Full stack in Docker | `pnpm docker:stack` | `docker compose -f docker-compose.wsl.yaml start`; if removed by `down`, add `up -d --no-build` |
-| 6. Database in Docker Desktop | host hot reload; `go run ./cmd/migrate` after schema changes | `docker compose -f docker-compose.windows.yaml start`, or `up -d` if removed |
+| 6. Database in Docker Desktop | host hot reload; migrations run when the API restarts | `docker compose -f docker-compose.windows.yaml start`, or `up -d` if removed |
 
 Only the local-development setups hot-reload code. Options 1, 2 and 5 compile
 the code into their images, so they need a rebuild. `stop` keeps containers,
