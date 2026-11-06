@@ -14,8 +14,13 @@ if (existsSync(rootEnv)) {
 // Deployment-only: the API base to proxy /api and /files to (for example
 // http://194.36.88.77:8080). A browser on this origin then talks to one host,
 // so CORS does not apply and the API's SameSite=Lax cookies stay first-party.
-// Unset locally, where the browser calls the API directly.
-const apiProxyTarget = process.env.API_PROXY_TARGET?.replace(/\/$/, "");
+// A Vercel build defaults to this project's API so a missing variable cannot
+// ship an /api route that 404s; API_PROXY_TARGET still overrides it. Unset
+// locally and in Docker, where the browser calls the API directly.
+const apiProxyTarget = (
+  process.env.API_PROXY_TARGET ||
+  (process.env.VERCEL ? "http://194.36.88.77:8080" : "")
+).replace(/\/$/, "");
 
 // An empty NEXT_PUBLIC_API_URL means same-origin, which needs the proxy. Without
 // either, every request lands on web routes that do not exist and 404s.
