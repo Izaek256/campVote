@@ -7,6 +7,8 @@
  * cheap registry operation rather than a handshake.
  */
 
+import { API } from "./api";
+
 export type RealtimeEvent = {
   type: string;
   channel?: string;
@@ -20,8 +22,11 @@ export type RealtimeEvent = {
 export type Handler = (payload: any, event: RealtimeEvent) => void;
 export type Status = "connecting" | "open" | "closed";
 
-const WS_URL =
-  (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").replace(/^http/, "ws") + "/api/ws";
+/** The socket origin: the configured API base, or this origin when proxied. */
+function wsURL(): string {
+  const base = API || (typeof window === "undefined" ? "" : window.location.origin);
+  return base.replace(/^http/, "ws") + "/api/ws";
+}
 
 /**
  * The browser cannot supply a token: login stores the JWT in the HttpOnly
@@ -245,7 +250,7 @@ let stream: EventSource | null = null;
  * separately, so one of them cannot be pointed somewhere the other is not.
  */
 function sseURL(): string {
-  return WS_URL.replace(/^ws/, "http").replace(/\/api\/ws$/, "/api/events");
+  return wsURL().replace(/^ws/, "http").replace(/\/api\/ws$/, "/api/events");
 }
 
 /**
@@ -320,7 +325,7 @@ export async function connect(): Promise<void> {
 
   setStatus("connecting");
 
-  const ws = new WebSocket(WS_URL + authQuery());
+  const ws = new WebSocket(wsURL() + authQuery());
   socket = ws;
 
   let opened = false;

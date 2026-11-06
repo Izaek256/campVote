@@ -25,7 +25,10 @@ import type {
   VoteStatus,
 } from "./types";
 
-export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").replace(/\/$/, "");
+// Empty means "this origin". A deployment that proxies /api (next.config.ts)
+// must use that, since every preview has a different hostname. Local work sets
+// an absolute URL in .env because the web app and API run on different ports.
+export const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 /**
  * The URL a browser should load a stored file from.
@@ -46,7 +49,8 @@ export function fileUrl(url?: string | null): string {
     return `${API}${value}`;
   }
   try {
-    const parsed = new URL(value, API);
+    // API may be empty (same origin), which is not a valid base for URL().
+    const parsed = new URL(value, "http://same-origin.invalid");
     if (parsed.pathname.startsWith("/files/")) {
       return `${API}${parsed.pathname}${parsed.search}`;
     }

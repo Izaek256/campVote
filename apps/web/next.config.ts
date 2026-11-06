@@ -11,20 +11,25 @@ if (existsSync(rootEnv)) {
   process.loadEnvFile(rootEnv);
 }
 
-// A production build with no URL bakes the localhost fallback into the bundle.
-// That is only right for local work, so say it out loud rather than shipping it.
-if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_URL) {
-  console.warn(
-    "NEXT_PUBLIC_API_URL is not set: this build will call http://localhost:8080. " +
-      "Set it in the deploy environment (for Vercel: Project → Settings → Environment Variables) and rebuild."
-  );
-}
-
 // Deployment-only: the API base to proxy /api and /files to (for example
 // http://194.36.88.77:8080). A browser on this origin then talks to one host,
 // so CORS does not apply and the API's SameSite=Lax cookies stay first-party.
 // Unset locally, where the browser calls the API directly.
 const apiProxyTarget = process.env.API_PROXY_TARGET?.replace(/\/$/, "");
+
+// An empty NEXT_PUBLIC_API_URL means same-origin, which needs the proxy. Without
+// either, every request lands on web routes that do not exist and 404s.
+if (
+  process.env.NODE_ENV === "production" &&
+  !process.env.NEXT_PUBLIC_API_URL &&
+  !apiProxyTarget
+) {
+  console.warn(
+    "Neither NEXT_PUBLIC_API_URL nor API_PROXY_TARGET is set: this build will call " +
+      "this origin's /api, where no API is mounted. Set API_PROXY_TARGET in the deploy " +
+      "environment (for Vercel: Project → Settings → Environment Variables) and rebuild."
+  );
+}
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

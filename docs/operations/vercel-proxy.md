@@ -27,12 +27,17 @@ In the Vercel project, under **Settings → Environment Variables** (Production)
 
 | Variable | Value | Why |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | `https://camp-vote-jade.vercel.app` | The web app's own origin. Baked into the bundle at build time. |
 | `API_PROXY_TARGET` | `http://194.36.88.77:8080` | The API the rewrite forwards to, server-side. No slash at the end. |
+| `NEXT_PUBLIC_API_URL` | *(unset)* | Empty means "this origin", so requests carry no hostname. Delete it if it was set to the production origin. |
 
-Then **redeploy**: both values are read at build time, so changing them alone
-does not update the running deployment. A production build that has no
-`NEXT_PUBLIC_API_URL` prints a warning and falls back to `http://localhost:8080`.
+Set `API_PROXY_TARGET` for **Production and Preview**. Preview hostnames cannot
+be known when a build starts, so an absolute `NEXT_PUBLIC_API_URL` is always
+wrong for previews; the relative default is what makes them work unchanged.
+
+Then **redeploy**: the rewrite is read at build time, so setting the variable
+alone does not update the running deployment. A production build with neither
+variable prints a warning, because its `/api` calls would 404 against the web
+app itself.
 
 On the API, add the web origin to `CORS_ORIGINS` (comma separated, then restart)
 or to the stored `cors.origins` setting. The proxy forwards the browser's
@@ -52,10 +57,6 @@ base by `apps/web/lib/api.ts` either way.
   rest of the app works.
 - **Upload size.** Proxied requests pass through Vercel's request limits, which
   are smaller than calling the API directly. Keep upload limits modest.
-- **Preview deployments.** Each preview has its own `*.vercel.app` hostname.
-  Pointing `NEXT_PUBLIC_API_URL` at the production origin from a preview makes
-  the calls cross-origin again, so previews need their own value or are not
-  used for API-backed testing.
 - **API load.** The API sees Vercel's egress address, not the visitor's, so
   per-IP rate limiting on the API is less meaningful than in a direct setup.
 
