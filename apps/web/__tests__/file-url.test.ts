@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { API, fileUrl } from "@/lib/api";
 
 describe("fileUrl", () => {
@@ -24,6 +24,20 @@ describe("fileUrl", () => {
 
   it("resolves a site-relative path against the API", () => {
     expect(fileUrl("/files/uploads/photo.jpg")).toBe(`${API}/files/uploads/photo.jpg`);
+  });
+
+  it("keeps stored links on this origin when no API URL is configured", async () => {
+    // Deployments behind the /api proxy leave NEXT_PUBLIC_API_URL unset, so
+    // file links must resolve against the current origin, not localhost.
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    vi.resetModules();
+    const { fileUrl: sameOrigin } = await import("@/lib/api");
+    expect(sameOrigin("http://194.36.88.77:8080/files/uploads/a.jpg")).toBe(
+      "/files/uploads/a.jpg"
+    );
+    expect(sameOrigin("/files/uploads/photo.jpg")).toBe("/files/uploads/photo.jpg");
+    vi.unstubAllEnvs();
+    vi.resetModules();
   });
 
   it("leaves a bucket URL (no /files path) untouched", () => {

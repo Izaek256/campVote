@@ -30,6 +30,7 @@
 
 - [`operations/docker-compose.md`](operations/docker-compose.md) — Why compose containerises only the API (database, cache, mail and web external, configured through `.env`), what that costs, and the verified setup commands.
 - [`operations/docker-full-stack.md`](operations/docker-full-stack.md) — WSL2/Linux full stack (PostgreSQL + API + web) and the Windows Docker Desktop PostgreSQL setup, with commands, networking and verification.
+- [`operations/vercel-proxy.md`](operations/vercel-proxy.md) — Hosting the web app on Vercel with the API elsewhere: mixed-content and cross-site cookie reasons for proxying `/api` and `/files`, the environment variables, and the limits of the arrangement.
 
 ## 5. UI
 
