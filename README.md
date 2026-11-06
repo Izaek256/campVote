@@ -938,6 +938,7 @@ Key variables in `.env`:
 | `APP_NAME` | No | Display name used in titles, email and the admin header; defaults to `CampVote` |
 | `APP_URL` | Yes | Where the API is reachable in a browser; file URLs are built from it, so on localhost it should name the API's own port, `http://localhost:8080` |
 | `NEXT_PUBLIC_API_URL` | No | Where the browser reaches the API; the web app loads it from `.env` and bakes it into the JS bundle at build time, defaulting to `http://localhost:8080` |
+| `API_PROXY_TARGET` | No | Deployment-only: API base the web app proxies `/api` and `/files` to, so a separately hosted browser sees one origin. See [`docs/operations/vercel-proxy.md`](docs/operations/vercel-proxy.md) |
 | `CORS_ORIGINS` | Yes for the browser | Comma-separated origins allowed to call the API, e.g. `http://localhost:3000` |
 | `DATABASE_URL` | Yes | PostgreSQL connection string — the only thing the API uses to find the database, containerised or not |
 | `JWT_SECRET` | Yes | Signing secret for tokens and session cookies, 32+ characters |
