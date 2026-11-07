@@ -173,11 +173,18 @@ func authRouteLimits(dev bool) map[string]sentinel.Limit {
 	v := "/api/" + APIVersion + "/auth"
 	if dev {
 		relaxed := sentinel.Limit{Requests: 100, Window: time.Minute}
-		return map[string]sentinel.Limit{v + "/login": relaxed, v + "/register": relaxed}
+		return map[string]sentinel.Limit{
+			v + "/login":    relaxed,
+			v + "/register": relaxed,
+			v + "/google":   relaxed,
+		}
 	}
 	return map[string]sentinel.Limit{
-		v + "/login":           {Requests: 30, Window: 5 * time.Minute},
-		v + "/register":        {Requests: 10, Window: 15 * time.Minute},
+		v + "/login":    {Requests: 30, Window: 5 * time.Minute},
+		v + "/register": {Requests: 10, Window: 15 * time.Minute},
+		// A verified ID token is not guessable, so this is flood control like
+		// the sign-in limit above, not a brute-force defence.
+		v + "/google":          {Requests: 30, Window: 5 * time.Minute},
 		v + "/forgot-password": {Requests: 10, Window: 15 * time.Minute},
 		v + "/reset-password":  {Requests: 10, Window: 15 * time.Minute},
 		// A six-digit code is guessable in principle, so this limit is the
@@ -637,6 +644,7 @@ func mountAuthRoutes(v1 *gin.RouterGroup, authHandler *handlers.AuthHandler, sso
 		auth.POST("/signup/initiate", authHandler.SignupInitiate)
 		auth.POST("/signup/complete", authHandler.SignupComplete)
 		auth.POST("/login", authHandler.Login)
+		auth.POST("/google", authHandler.GoogleSignIn)
 		auth.POST("/refresh", authHandler.Refresh)
 		auth.POST("/forgot-password", authHandler.ForgotPassword)
 		auth.POST("/reset-password", authHandler.ResetPassword)
@@ -778,6 +786,9 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		Config:      cfg,
 		Mailer:      svc.Mailer,
 		Jobs:        svc.Jobs,
+	}
+	if cfg.GoogleOAuthClientID != "" {
+		authHandler.GoogleVerifier = services.NewGoogleVerifier(cfg.GoogleOAuthClientID)
 	}
 	apiKeyHandler := &handlers.APIKeyHandler{DB: db}
 

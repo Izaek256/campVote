@@ -202,10 +202,14 @@ docker compose run --rm -e BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
 ### Accounts
 
 No demo accounts or demo elections are seeded. Create the first administrator
-with `cmd/bootstrap`, then register voters at `/register`:
+with `cmd/bootstrap`, then sign in with Google:
 
-- **Staff admin**: the email and password you set in `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`
-- **Student voter**: register a campus email such as `2024bse088@std.mast.ac.ug`
+- **Staff admin**: sign in with the Google account matching `BOOTSTRAP_ADMIN_EMAIL`; the account must first be created with `cmd/bootstrap`
+- **Student voter**: "Continue with Google" using a campus Google account such as `2024bse088@std.must.ac.ug`
+
+Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID` (API) and
+`NEXT_PUBLIC_GOOGLE_CLIENT_ID` (web), the same OAuth Web client ID. See
+[`docs/implementation/GOOGLE_SIGNIN.md`](docs/implementation/GOOGLE_SIGNIN.md).
 
 Demo seeding is opt-in only (both `APP_ENV=development` **and** `SEED_DEMO_DATA=true`).
 Never use demo data in production.
@@ -515,8 +519,10 @@ docker volume rm campvote_postgres_data
 
 No demo accounts are seeded. Continue with the manual setup in this section:
 
-- **Staff admin**: the email and password you set with `cmd/bootstrap`
-- **Student voter**: register a campus email such as `2024bse088@std.mast.ac.ug`
+- **Staff admin**: sign in with the Google account matching the email used with `cmd/bootstrap`
+- **Student voter**: sign in at `/register` with Google using a campus Google account such as `2024bse088@std.must.ac.ug`
+
+Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; see [`docs/implementation/GOOGLE_SIGNIN.md`](docs/implementation/GOOGLE_SIGNIN.md).
 
 ---
 
@@ -639,8 +645,10 @@ Use Option 6 if you would rather run the database in Docker Desktop.
 
 No demo accounts are seeded.
 
-- **Staff admin**: the email and password you set with `cmd/bootstrap`
-- **Student voter**: register a campus email such as `2024bse088@std.mast.ac.ug`
+- **Staff admin**: sign in with the Google account matching the email used with `cmd/bootstrap`
+- **Student voter**: sign in at `/register` with Google using a campus Google account such as `2024bse088@std.must.ac.ug`
+
+Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; see [`docs/implementation/GOOGLE_SIGNIN.md`](docs/implementation/GOOGLE_SIGNIN.md).
 
 ---
 
@@ -940,6 +948,9 @@ Key variables in `.env`:
 | `NEXT_PUBLIC_API_URL` | No | Where the browser reaches the API; the web app loads it from `.env` and bakes it into the JS bundle at build time. Empty means "this origin", which is what a deployment behind `API_PROXY_TARGET` wants; locally it is `http://localhost:8080` |
 | `API_PROXY_TARGET` | No | Deployment-only: API base the web app proxies `/api` and `/files` to, so a separately hosted browser sees one origin. See [`docs/operations/vercel-proxy.md`](docs/operations/vercel-proxy.md) |
 | `CORS_ORIGINS` | Yes for the browser | Comma-separated origins allowed to call the API, e.g. `http://localhost:3000` |
+| `GOOGLE_OAUTH_CLIENT_ID` | For Google sign-in | OAuth 2.0 Web client ID the API verifies ID tokens against. Empty disables `POST /api/v1/auth/google` with `503` |
+| `GOOGLE_OAUTH_HOSTED_DOMAIN` | No | Workspace `hd` claim every Google token must carry, e.g. `must.ac.ug`; empty means the student-domain check alone applies |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | For Google sign-in | The same client ID for the web app; inlined at build time, so changing it needs a rebuild |
 | `DATABASE_URL` | Yes | PostgreSQL connection string — the only thing the API uses to find the database, containerised or not |
 | `JWT_SECRET` | Yes | Signing secret for tokens and session cookies, 32+ characters |
 | `POSTGRES_DB` / `POSTGRES_USER` | No | Database and user for `docker-compose.windows.yaml`; default `campvote_dev` |

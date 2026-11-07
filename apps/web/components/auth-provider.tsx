@@ -8,6 +8,7 @@ interface AuthState {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: (idToken: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -43,6 +44,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(payload.user);
   }, []);
 
+  const signInWithGoogle = useCallback(async (idToken: string) => {
+    const payload = await auth.googleSignIn(idToken);
+    setUser(payload.user);
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
       await auth.logout();
@@ -52,8 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, signIn, signOut }),
-    [user, loading, signIn, signOut]
+    () => ({ user, loading, signIn, signInWithGoogle, signOut }),
+    [user, loading, signIn, signInWithGoogle, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

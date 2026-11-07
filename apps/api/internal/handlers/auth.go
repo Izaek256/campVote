@@ -36,6 +36,10 @@ type AuthHandler struct {
 	// When it is there, every email this handler sends goes onto the queue
 	// instead of a goroutine, so it is retried and survives a restart.
 	Jobs *jobs.Client
+	// GoogleVerifier checks Google Identity Services ID tokens. Nil (or a
+	// missing GOOGLE_OAUTH_CLIENT_ID) disables /auth/google with a 503 rather
+	// than falling back to another sign-in method.
+	GoogleVerifier services.GoogleVerifier
 }
 
 // AuthResponse documents the body returned by register, login and refresh.
