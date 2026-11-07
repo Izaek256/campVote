@@ -21,8 +21,9 @@ but the pages no longer call them. See
 
 Google flow:
 
-1. The page renders a first-party CampVote button that opens Google's One Tap /
-   popup (`NEXT_PUBLIC_GOOGLE_CLIENT_ID`).
+1. The page renders Google's own **Sign in with Google** button
+   (`google.accounts.id.renderButton()`, via `NEXT_PUBLIC_GOOGLE_CLIENT_ID`). It
+   uses the button flow with `use_fedcm_for_button: true`, not One Tap.
 2. Google returns a signed ID token to the browser.
 3. `POST /api/v1/auth/google` verifies it and creates or links the account. A
    student address may create a new account; a staff address only links into an
@@ -40,7 +41,7 @@ Legacy two-step flow (still mounted):
 | File | Change |
 |---|---|
 | `apps/web/app/register/page.tsx` | Google-only registration page |
-| `apps/web/components/google-signin.tsx` | New — first-party button that opens Google's One Tap / popup |
+| `apps/web/components/google-signin.tsx` | Google's own Sign in with Google button (`renderButton()`, FedCM button flow) |
 | `apps/web/lib/api.ts` | Added `auth.googleSignIn`; existing signup/verify helpers retained |
 | `apps/web/app/login/page.tsx` | Google-only sign-in page; email/password form removed |
 
@@ -66,7 +67,7 @@ import / freeze).
 
 ```
 /register  (or /login)
-  ↓  user clicks the CampVote Google button → Google One Tap / popup
+  ↓  user clicks Google's own "Sign in with Google" button → Google popup
   ↓  Google returns a signed ID token to the page
   ↓  POST /auth/google  →  API verifies signature/issuer/audience/expiry,
   ↓                        email_verified, student or staff domain, hosted domain

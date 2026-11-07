@@ -5,52 +5,66 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 interface GoogleInitConfig {
   client_id: string;
   ux_mode?: string;
+  use_fedcm_for_button?: boolean;
   callback: (response: { credential?: string }) => void;
 }
 
-interface GoogleMomentNotification {
-  isNotDisplayed?: () => boolean;
-  isSkippedMoment?: () => boolean;
-  getNotDisplayedReason?: () => string;
-  getSkippedReason?: () => string;
+interface GoogleButtonConfig {
+  text?: string;
+  theme?: string;
+  width?: number;
 }
 
 type GoogleId = NonNullable<NonNullable<Window["google"]>["accounts"]>["id"];
 
 let initConfig: GoogleInitConfig | null = null;
+let buttonConfig: GoogleButtonConfig | null = null;
+let buttonParent: HTMLElement | null = null;
+let renderButtonMock: ReturnType<typeof vi.fn>;
+// The deprecated One Tap entry point. The component's types no longer declare
+// it, so the mock is only here to prove the component never calls it.
 let promptMock: ReturnType<typeof vi.fn>;
-let momentListener: ((notification: GoogleMomentNotification) => void) | null = null;
 
-function installGoogle(moment?: GoogleMomentNotification): void {
+function installGoogle(): void {
   initConfig = null;
-  momentListener = null;
-  promptMock = vi.fn((listener?: (notification: GoogleMomentNotification) => void) => {
-    momentListener = listener ?? null;
-    if (moment && listener) listener(moment);
+  buttonConfig = null;
+  buttonParent = null;
+  promptMock = vi.fn();
+  renderButtonMock = vi.fn((parent: HTMLElement, options: GoogleButtonConfig) => {
+    buttonParent = parent;
+    buttonConfig = options;
   });
   window.google = {
     accounts: {
       id: {
         initialize: vi.fn((config: GoogleInitConfig) => {
           initConfig = config;
-        }) as unknown as NonNullable<GoogleId>["initialize"],
-        prompt: promptMock as unknown as NonNullable<GoogleId>["prompt"],
-      },
+        }),
+        renderButton: renderButtonMock,
+        prompt: promptMock,
+      } as unknown as GoogleId,
     },
   };
 }
 
-async function renderGoogleButton(clientId: string, onCredential: (token: string) => Promise<void>) {
+async function renderGoogleButton(
+  clientId: string,
+  onCredential: (token: string) => Promise<void>,
+  text?: "signin_with" | "signup_with" | "continue_with" | "signin"
+) {
   vi.resetModules();
   vi.doMock("@/lib/config", () => ({ GOOGLE_CLIENT_ID: clientId }));
-  const { GoogleSignInButton } = await import("@/components/google-signin");
-  return render(<GoogleSignInButton onCredential={onCredential} />);
-}
-
-// The repository does not install jest-dom matchers, so assert the DOM
-// property directly instead of using toBeEnabled().
-function buttonDisabled(): boolean {
-  return (screen.getByRole("button") as HTMLButtonElement).disabled;
+  // Imported together, after resetModules, so the button and the provider share
+  // one instance of the toast context module.
+  const [{ GoogleSignInButton }, { ToastProvider }] = await Promise.all([
+    import("@/components/google-signin"),
+    import("@/components/toast"),
+  ]);
+  return render(
+    <ToastProvider>
+      <GoogleSignInButton text={text} onCredential={onCredential} />
+    </ToastProvider>
+  );
 }
 
 afterEach(() => {
@@ -59,20 +73,24 @@ afterEach(() => {
   vi.resetModules();
   delete window.google;
   initConfig = null;
-  momentListener = null;
+  buttonConfig = null;
+  buttonParent = null;
 });
 
 describe("GoogleSignInButton", () => {
-  it("initialises Google with the configured client and shows our own button", async () => {
+  it("initialises Google and renders Google's own button", async () => {
     installGoogle();
     await renderGoogleButton("test-client.apps.googleusercontent.com", vi.fn());
 
-    await waitFor(() => expect(initConfig).not.toBeNull());
+    await waitFor(() => expect(renderButtonMock).toHaveBeenCalledTimes(1));
     expect(initConfig?.client_id).toBe("test-client.apps.googleusercontent.com");
     expect(initConfig?.ux_mode).toBe("popup");
-
-    await waitFor(() => expect(buttonDisabled()).toBe(false));
-    expect(screen.getByRole("button").textContent).toMatch(/Continue with Google/);
+    expect(initConfig?.use_fedcm_for_button).toBe(true);
+    expect(buttonConfig?.text).toBe("continue_with");
+    expect(buttonParent).not.toBeNull();
+    expect(document.body.contains(buttonParent)).toBe(true);
+    // Google draws the button; CampVote renders no button of its own.
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("explains a missing client ID instead of falling back", async () => {
@@ -80,37 +98,24 @@ describe("GoogleSignInButton", () => {
     await renderGoogleButton("", vi.fn());
 
     expect(screen.getByRole("alert").textContent).toMatch(/Google sign-in is unavailable/i);
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(renderButtonMock).not.toHaveBeenCalled();
     expect(promptMock).not.toHaveBeenCalled();
   });
 
-  it("calls Google One Tap when the button is clicked", async () => {
+  it("passes the requested label through to Google's button", async () => {
     installGoogle();
-    await renderGoogleButton("client", vi.fn());
-    await waitFor(() => expect(buttonDisabled()).toBe(false));
+    await renderGoogleButton("client", vi.fn(), "signup_with");
 
-    await act(async () => {
-      screen.getByRole("button").click();
-    });
-
-    expect(promptMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(renderButtonMock).toHaveBeenCalledTimes(1));
+    expect(buttonConfig?.text).toBe("signup_with");
   });
 
-  it("explains a suppressed One Tap instead of failing silently", async () => {
-    installGoogle({
-      isNotDisplayed: () => true,
-      getNotDisplayedReason: () => "unregistered_origin",
-    });
+  it("never calls the deprecated One Tap prompt", async () => {
+    installGoogle();
     await renderGoogleButton("client", vi.fn());
-    await waitFor(() => expect(buttonDisabled()).toBe(false));
 
-    await act(async () => {
-      screen.getByRole("button").click();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByRole("alert").textContent).toMatch(/not registered with the Google client/i);
-    });
+    await waitFor(() => expect(renderButtonMock).toHaveBeenCalledTimes(1));
+    expect(promptMock).not.toHaveBeenCalled();
   });
 
   it("sends a credential to the backend and shows a loading state", async () => {
@@ -157,7 +162,7 @@ describe("GoogleSignInButton", () => {
     await act(async () => resolveBackend());
   });
 
-  it("shows a backend refusal as an accessible alert", async () => {
+  it("shows the student-domain refusal as a visible toast", async () => {
     installGoogle();
     const { ApiError } = await import("@/lib/api");
     const onCredential = vi.fn().mockRejectedValue(
@@ -173,9 +178,11 @@ describe("GoogleSignInButton", () => {
       initConfig?.callback({ credential: "token" });
     });
 
-    await waitFor(() => {
-      expect(screen.getByRole("alert").textContent).toMatch(/accounts can sign in with Google/i);
-    });
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/@std\.must\.ac\.ug/);
+    // The message sits in the notification region, not inline under the button.
+    expect(alert.closest(".toasts")).not.toBeNull();
+    expect(document.querySelector(".err")).toBeNull();
   });
 
   it("shows a network failure without leaking internals", async () => {
@@ -194,7 +201,7 @@ describe("GoogleSignInButton", () => {
     expect(screen.getByRole("alert").textContent).not.toMatch(/socket hang up/i);
   });
 
-  it("handles a One Tap response that carries no credential", async () => {
+  it("handles a Google response that carries no credential", async () => {
     installGoogle();
     const onCredential = vi.fn();
     await renderGoogleButton("client", onCredential);

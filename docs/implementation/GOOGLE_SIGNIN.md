@@ -22,17 +22,29 @@ decision (see `docs/eligibility.md`).
 
 1. Loads `https://accounts.google.com/gsi/client` once per page, after hydration.
 2. Calls `google.accounts.id.initialize` with `NEXT_PUBLIC_GOOGLE_CLIENT_ID`,
-   `ux_mode: "popup"`, `auto_select: false`.
-3. Renders a **first-party** `<button>` styled with the CampVote UI kit
-   (`.btn block lg`) and the official four-colour Google "G" mark. Clicking it
-   calls `google.accounts.id.prompt()`, which shows Google's One Tap / popup.
-4. A `MomentNotification` listener turns a suppressed prompt into an actionable
-   alert (`unregistered_origin`, `invalid_client`, etc.) instead of failing
-   silently.
-5. On success, passes **only the raw `credential`** to the caller. The component
+   `ux_mode: "popup"`, `use_fedcm_for_button: true` and a `callback`.
+3. Renders Google's own **Sign in with Google button** with
+   `google.accounts.id.renderButton()`. Clicking it starts the button flow,
+   which does not depend on One Tap or third-party cookies. Google's button
+   cannot be restyled, so its theme follows the page (`data-theme` /
+   `prefers-color-scheme`) and is re-rendered on a theme switch.
+4. On success, passes **only the raw `credential`** to the caller. The component
    never decodes it, never stores it, and never treats its claims as trusted.
-6. The caller (`AuthProvider.signInWithGoogle`) sends `{ id_token }` to
+5. The caller (`AuthProvider.signInWithGoogle`) sends `{ id_token }` to
    `POST /api/v1/auth/google`.
+
+A refusal from the API — including "Only @std.must.ac.ug student or
+@must.ac.ug staff accounts can sign in with Google." — is surfaced as an error
+**toast** (the app's `ToastProvider`), not as inline text under the button, so
+it is not missed. The missing-client-ID banner is the one persistent message
+that stays inline.
+
+The component does **not** use `google.accounts.id.prompt()` or the One Tap
+prompt-status methods (`isNotDisplayed`, `getNotDisplayedReason`,
+`getSkippedReason`): those are deprecated under FedCM and were the cause of a
+production failure where a click produced a "allow third-party cookies" message
+and never opened Google. See
+[`../debugging/google-signin-one-tap-third-party-cookies.md`](../debugging/google-signin-one-tap-third-party-cookies.md).
 
 If `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is empty the component renders a visible
 "Google sign-in is unavailable" banner and never loads the script.
@@ -158,9 +170,9 @@ client **secret** in the web app or in the browser.
 | Symptom | Likely cause |
 |---|---|
 | Banner "Google sign-in is unavailable" | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` empty or the web app was not rebuilt. |
-| Clicking the button shows "this site is not registered with the Google client" | The page origin is missing from Authorized JavaScript origins (`unregistered_origin`). |
-| Clicking the button shows "the Google client ID is not accepted" | API and web are using different client IDs, or the client is not a Web client (`invalid_client`). |
+| Google's button does not appear on the page | Client ID unset/incorrect, `accounts.google.com/gsi/client` blocked, or the web app was not rebuilt after changing the client ID. |
 | Popup: `origin_mismatch` | The page origin is missing from Authorized JavaScript origins. |
+| A stale "allow third-party cookies" message | Cached build from before the One Tap fix; rebuild/redeploy the web app and hard-refresh. |
 | API `503 GOOGLE_NOT_CONFIGURED` | `GOOGLE_OAUTH_CLIENT_ID` empty or API not restarted. |
 | API `401` with `audience` in the log | API and web are using different client IDs. |
 | API `403` "not part of the university's Google Workspace" | `GOOGLE_OAUTH_HOSTED_DOMAIN` is set and the token's `hd` differs (personal Gmail, or a secondary domain). |
@@ -211,10 +223,11 @@ Coverage:
   creation and audit events. Service tests cover claim mapping and
   configuration errors. Migration tests cover deduplication and the partial
   unique index on SQLite.
-- Frontend: Vitest + Testing Library cover rendering our own button, missing
-  configuration, clicking to open One Tap, an actionable message when One Tap is
-  suppressed, success, API rejection, a prompt response without a credential,
-  network failure, duplicate submission and the loading state.
+- Frontend: Vitest + Testing Library cover rendering Google's own button, missing
+  configuration, the button label passed through to Google, never calling the
+  deprecated One Tap `prompt`, success, API rejection shown as a toast, a
+  response without a credential, network failure, duplicate submission and the
+  loading state.
 
 **Not verified:** a real Google popup and a real Google-issued token. That needs
 a configured client ID and a browser session against Google, which this
@@ -234,11 +247,10 @@ environment does not have.
 - Staff/admin accounts are never created by this endpoint; a staff address can
   only link into an account an administrator already created, so the endpoint
   cannot escalate anyone to `ADMIN`.
-- The sign-in button is first-party and opens Google's One Tap / popup, so the
-  served origin must be listed under Authorized JavaScript origins. If One Tap is
-  suppressed (for example the origin is not registered, or the browser blocks
-  third-party storage), the page shows the reason instead of a silently dead
-  button.
+- The page renders Google's own Sign in with Google button, so the served origin
+  must be listed under Authorized JavaScript origins. The button flow does not
+  depend on One Tap or third-party cookies; a missing origin or client ID shows
+  Google's own error rather than a silently dead button.
 - The OTP endpoints remain mounted for backward compatibility, but `/login` and
   `/register` are now Google-only and do not use them.
 - No live end-to-end test against Google. No production environment variables
