@@ -278,6 +278,19 @@ type Config struct {
 	GithubClientSecret string
 	OAuthFrontendURL   string // Where to redirect after OAuth callback
 
+	// Google Identity Services. GoogleOAuthClientID is the OAuth 2.0 Web
+	// Application client whose ID tokens the API accepts at /auth/google. It
+	// is deliberately separate from GoogleClientID, which belongs to the older
+	// redirect-based Goth provider: both may name the same client, but only
+	// this one is required for student sign-in.
+	GoogleOAuthClientID string
+	// GoogleOAuthHostedDomain is the Workspace hosted domain ("hd") every
+	// student ID token must carry. Empty means the email-domain check below is
+	// the only gate. Set it when the university's Workspace primary domain is
+	// known; student addresses may live on a secondary domain such as
+	// std.must.ac.ug while hd is must.ac.ug.
+	GoogleOAuthHostedDomain string
+
 	// Serve the API reference at /docs in production (API_DOCS_PUBLIC).
 	APIDocsPublic bool
 }
@@ -404,6 +417,9 @@ func Load() (*Config, error) {
 		GithubClientID:     getEnv("GITHUB_CLIENT_ID", ""),
 		GithubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
 		OAuthFrontendURL:   getEnv("OAUTH_FRONTEND_URL", "http://localhost:3001"),
+
+		GoogleOAuthClientID:     getEnv("GOOGLE_OAUTH_CLIENT_ID", ""),
+		GoogleOAuthHostedDomain: NormalizeDomain(getEnv("GOOGLE_OAUTH_HOSTED_DOMAIN", "")),
 	}
 
 	// The local driver keeps files on this server's disk: a second replica cannot
@@ -484,6 +500,10 @@ func Load() (*Config, error) {
 	cfg.JWTRefreshExpiry = refreshExpiry
 
 	cfg.warnCrossSiteAuth()
+
+	if cfg.GoogleOAuthClientID == "" {
+		log.Printf("WARNING: GOOGLE_OAUTH_CLIENT_ID is not set; Google sign-in is disabled and POST /api/v1/auth/google will answer 503")
+	}
 
 	return cfg, nil
 }

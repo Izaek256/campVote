@@ -22,7 +22,8 @@ func csrfRouter() *gin.Engine {
 	ok := func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) }
 	r.GET("/api/users", ok)
 	r.POST("/api/users", ok)
-	r.POST("/api/auth/login", ok) // bootstrap route: exempt
+	r.POST("/api/auth/login", ok)  // bootstrap route: exempt
+	r.POST("/api/auth/google", ok) // bootstrap route: exempt
 	return r
 }
 
@@ -72,6 +73,13 @@ func TestAutoCSRF_BearerMutationIsExempt(t *testing.T) {
 
 func TestAutoCSRF_BootstrapLoginIsExempt(t *testing.T) {
 	w := csrfRequest(http.MethodPost, "/api/auth/login", func(req *http.Request) {
+		req.AddCookie(&http.Cookie{Name: "grit_access", Value: "token"})
+	})
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestAutoCSRF_BootstrapGoogleSignInIsExempt(t *testing.T) {
+	w := csrfRequest(http.MethodPost, "/api/auth/google", func(req *http.Request) {
 		req.AddCookie(&http.Cookie{Name: "grit_access", Value: "token"})
 	})
 	assert.Equal(t, http.StatusOK, w.Code)

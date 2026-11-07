@@ -168,6 +168,17 @@ export const auth = {
       method: "POST",
       body: { email, password },
     }),
+  /**
+   * Exchange a Google Identity Services ID token for a CampVote session.
+   *
+   * The token is sent over the existing API transport and verified by the
+   * backend. The browser never decodes it or treats its claims as trusted.
+   */
+  googleSignIn: (idToken: string) =>
+    api<AuthPayload>("/auth/google", {
+      method: "POST",
+      body: { id_token: idToken },
+    }),
   logout: () => api<unknown>("/auth/logout", { method: "POST" }),
   /** Direct registration: create account and get tokens immediately. */
   register: (body: { first_name: string; last_name: string; email: string; password: string }) =>

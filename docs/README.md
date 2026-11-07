@@ -17,6 +17,7 @@
 ## 3. Implementation Records
 
 - [`auth.md`](auth.md) — ISSUE-02 authentication, session, lockout, CSRF and first-admin bootstrap status with test evidence.
+- [`implementation/GOOGLE_SIGNIN.md`](implementation/GOOGLE_SIGNIN.md) — Google Identity Services student sign-in: token verification, account linking, configuration, Google Cloud setup, rollback and troubleshooting.
 - [`rbac.md`](rbac.md) — ISSUE-03 server-side RBAC: SRS role matrix, route policies, per-election scoping, results visibility, certification and test evidence.
 - [`eligibility.md`](eligibility.md) — ISSUE-04 per-election eligibility: roster evidence, verified-email identity, CSV import, freeze/revocation, audit and open policy questions.
 - [`election-lifecycle.md`](election-lifecycle.md) — ISSUE-05 election states, transition matrix, schedule boundaries, server clock, configuration validation/freeze, audited exceptions and test evidence.

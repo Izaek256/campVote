@@ -2,42 +2,27 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@/components/auth-provider";
+import { GoogleSignInButton } from "@/components/google-signin";
 import { Icon } from "@/components/icon";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useToast } from "@/components/toast";
-import { ApiError } from "@/lib/api";
-import { CAMPUS_NAME, STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "@/lib/config";
+import { CAMPUS_NAME } from "@/lib/config";
 
+/**
+ * Sign-in with Google only.
+ *
+ * Google Identity Services returns an ID token to this page; the backend
+ * verifies it and signs the account in. There is no password form: a Google
+ * account is the single way in, for voters, staff and administrators alike.
+ */
 export default function LoginPage() {
-  const { user, loading, signIn } = useAuth();
+  const { user, loading, signInWithGoogle } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const toast = useToast();
 
   useEffect(() => {
     if (!loading && user) router.replace("/elections");
   }, [loading, user, router]);
-
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setError("");
-    setBusy(true);
-    try {
-      await signIn(email.trim(), password);
-      router.replace("/elections");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "We could not sign you in. Try again.");
-      toast.error(err instanceof ApiError ? err.message : "We could not sign you in. Try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <main className="auth-wrap">
@@ -55,46 +40,19 @@ export default function LoginPage() {
         </Link>
         <h1>Campus elections</h1>
         <p className="lead">
-          Sign in with your {CAMPUS_NAME} account to see the elections you are eligible for.
+          Sign in with your {CAMPUS_NAME} Google account to see the elections you are eligible for.
         </p>
 
-        <form className="form-stack" onSubmit={handleSubmit} noValidate>
-          <div className="field">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              className={`in${error ? " bad" : ""}`}
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder={`you@${STUDENT_EMAIL_DOMAIN}`}
-              required
-            />
-            <span className="hint">
-              Use your verified @{STUDENT_EMAIL_DOMAIN} or @{STAFF_EMAIL_DOMAIN} address.
-            </span>
-          </div>
-          <div className="field">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              className={`in${error ? " bad" : ""}`}
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
-          </div>
-          <button className="btn primary block lg" type="submit" disabled={busy}>
-            {busy ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
+        <GoogleSignInButton
+          onCredential={async (idToken) => {
+            await signInWithGoogle(idToken);
+            router.replace("/elections");
+          }}
+        />
 
         <p
           style={{
-            marginTop: 16,
+            marginTop: 20,
             fontSize: 14,
             textAlign: "center",
             color: "var(--ink-3)",
@@ -103,18 +61,6 @@ export default function LoginPage() {
           Don&apos;t have an account?{" "}
           <Link href="/register" style={{ color: "var(--primary)" }}>
             Create one
-          </Link>
-        </p>
-        <p
-          style={{
-            marginTop: 8,
-            fontSize: 14,
-            textAlign: "center",
-            color: "var(--ink-3)",
-          }}
-        >
-          <Link href="/forgot-password" style={{ color: "var(--ink-3)" }}>
-            Forgot password?
           </Link>
         </p>
 
@@ -126,14 +72,6 @@ export default function LoginPage() {
             your vote.
           </div>
         </div>
-
-        {process.env.NODE_ENV !== "production" ? (
-          <p className="hint" style={{ marginTop: 16 }}>
-            No demo accounts are seeded. Create the first administrator with{" "}
-            <span className="mono">go run ./cmd/bootstrap</span>, then register voters at{" "}
-            <Link href="/register">/register</Link>.
-          </p>
-        ) : null}
       </div>
     </main>
   );

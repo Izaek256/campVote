@@ -17,7 +17,7 @@ func init() {
 		"/api/v1/auth/saml/:slug", "/api/v1/auth/saml/:slug/metadata")
 	public("GET", "/api/v1/public/forms/:token")
 	public("POST", "/api/v1/auth/register", "/api/v1/auth/signup/initiate", "/api/v1/auth/signup/complete",
-		"/api/v1/auth/login", "/api/v1/auth/refresh",
+		"/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/refresh",
 		"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
 		"/api/v1/auth/verify-email", "/api/v1/auth/magic-link",
 		"/api/v1/auth/magic-link/consume",
