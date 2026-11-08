@@ -411,6 +411,56 @@ Test clean deployment, TLS, least-privilege accounts, backup restoration, monito
 
 ---
 
+## ADR-013 — CI Runs Each Quality Gate Exactly Once
+
+**Status:** Accepted
+
+### Context
+The first CI workflow duplicated work and hid signal. It ran `golangci-lint`
+twice (once as an action step, once as a shell step) with `verify: false`, ran
+Biome both at the repository root and again inside the frontend job, triggered on
+every transient branch as well as the PR, had no `gofmt` gate, no pnpm cache, and
+no `concurrency`, `permissions` or `timeout-minutes` guardrails. A green run
+therefore meant less than it appeared to.
+
+### Decision
+One workflow, one author per concern:
+
+- **Biome once**, repository-wide, in a dedicated `format` job. The frontend job
+  does not repeat it.
+- **golangci-lint once**, via `golangci/golangci-lint-action@v9` (the action
+  installs and runs it; `verify` left at its default `true` so the config is
+  schema-checked).
+- A **`gofmt` gate** in the backend job, so unformatted Go fails rather than
+  being normalised silently at merge time.
+- Triggers limited to `push` on `develop`/`main` and `pull_request` into those
+  branches, matching the branch policy.
+- `concurrency` with `cancel-in-progress`, `permissions: contents: read`, and
+  per-job `timeout-minutes`.
+- No `continue-on-error` on any quality step.
+
+### Rationale
+- Duplicate checks cost runner time and can mask how a finding was produced.
+- A duplicated lint step that disagrees with itself is worse than one honest check.
+- Cheap guardrails (cancel, timeouts, least privilege) remove whole classes of
+  flake and wasted runs.
+
+### Consequences
+- A red job map is unambiguous: each failure belongs to one tool.
+- Some jobs are larger (lint and test share the backend job), trading a little
+  isolation for a warmer cache at this repository's scale.
+- Repository branch protection must list the three job names as required checks;
+  the workflow cannot enforce that itself.
+- Verifying the stabilisation still requires a green run on `develop`.
+
+### Verification
+Run the workflow on a PR into `develop`; confirm the three jobs appear, that
+`golangci-lint` executes once, that Biome executes once, and that a deliberately
+unformatted Go file or a Biome violation fails the corresponding job. Record the
+resulting run URL.
+
+---
+
 ## Decision Review Triggers
 Revisit these decisions if:
 - MMU mandates a specific identity provider or hosting environment.
