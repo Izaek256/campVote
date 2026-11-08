@@ -40,7 +40,7 @@ func TestPrivacySchemaRegression(t *testing.T) {
 	}
 
 	forbiddenParticipationColumns := map[string]bool{
-		"ballot_id":       true,
+		"ballot_id":         true,
 		"ballot_version_id": true,
 	}
 

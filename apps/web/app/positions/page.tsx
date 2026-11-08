@@ -10,7 +10,7 @@ import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { useToast } from "@/components/toast";
 import { FilePicker } from "@/components/file-picker";
-import { ApiError, positions, fileUrl, upload } from "@/lib/api";
+import { ApiError, positions } from "@/lib/api";
 import type { EligiblePosition } from "@/lib/types";
 
 function eligibilitySummary(position: EligiblePosition): string {

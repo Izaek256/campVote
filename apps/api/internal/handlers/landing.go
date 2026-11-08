@@ -451,7 +451,7 @@ func writeSettings(tx *gorm.DB, doc landing.Document, userID string) error {
 		s = models.LandingSettings{
 			ID:                 models.LandingSettingsID,
 			HeroHeadline:       doc.Hero.Headline,
-			HeroSubtext:         doc.Hero.Subtext,
+			HeroSubtext:        doc.Hero.Subtext,
 			HeroPrimaryLabel:   doc.Hero.PrimaryLabel,
 			HeroSecondaryLabel: doc.Hero.SecondaryLabel,
 			BannerEnabled:      doc.Banner.Enabled,
@@ -477,18 +477,18 @@ func writeSettings(tx *gorm.DB, doc landing.Document, userID string) error {
 		Updates(map[string]interface{}{
 			"hero_headline":        doc.Hero.Headline,
 			"hero_subtext":         doc.Hero.Subtext,
-			"hero_primary_label":    doc.Hero.PrimaryLabel,
+			"hero_primary_label":   doc.Hero.PrimaryLabel,
 			"hero_secondary_label": doc.Hero.SecondaryLabel,
 			"banner_enabled":       doc.Banner.Enabled,
-			"banner_text":           doc.Banner.Text,
-			"banner_link":           doc.Banner.Link,
-			"banner_starts_at":      doc.Banner.StartsAt,
-			"banner_ends_at":        doc.Banner.EndsAt,
-			"ticker_phrases":        strings.Join(doc.Ticker, "\n"),
-			"how_steps":             string(steps),
-			"footer_text":           doc.Footer.Text,
-			"support_email":         doc.Footer.SupportEmail,
-			"updated_by_id":         userID,
+			"banner_text":          doc.Banner.Text,
+			"banner_link":          doc.Banner.Link,
+			"banner_starts_at":     doc.Banner.StartsAt,
+			"banner_ends_at":       doc.Banner.EndsAt,
+			"ticker_phrases":       strings.Join(doc.Ticker, "\n"),
+			"how_steps":            string(steps),
+			"footer_text":          doc.Footer.Text,
+			"support_email":        doc.Footer.SupportEmail,
+			"updated_by_id":        userID,
 		}).Error
 }
 

@@ -330,11 +330,11 @@ func (h *ResultsHandler) Read(c *gin.Context) {
 		return
 	}
 	respond.OK(c, gin.H{
-		"election_id":       election.ID,
-		"election_status":   election.Status,
-		"available":         true,
-		"label":             snapshot.Status,
-		"snapshot":          view,
+		"election_id":        election.ID,
+		"election_status":    election.Status,
+		"available":          true,
+		"label":              snapshot.Status,
+		"snapshot":           view,
 		"turnout_by_faculty": faculties,
 	})
 }

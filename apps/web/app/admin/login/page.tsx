@@ -175,7 +175,8 @@ export default function AdminLoginPage() {
             <>
               <h1 id="admin-login-title">Administrator sign-in</h1>
               <p className="lead">
-                Sign in with the administrator account created by your election system administrator.
+                Sign in with the administrator account created by your election system
+                administrator.
               </p>
               <form className="form-stack" onSubmit={submitPassword}>
                 <div className="field">
@@ -205,7 +206,11 @@ export default function AdminLoginPage() {
                   />
                 </div>
                 {error ? <SignInError error={error} /> : null}
-                <button className="btn primary block" type="submit" disabled={submitting || loading}>
+                <button
+                  className="btn primary block"
+                  type="submit"
+                  disabled={submitting || loading}
+                >
                   {submitting ? "Signing in…" : "Sign in"}
                 </button>
               </form>

@@ -4,8 +4,8 @@ import (
 	"log"
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/models"
+	"gorm.io/gorm"
 )
 
 // SeedBlogs creates sample blog posts for development. Edit the slice below to

@@ -32,9 +32,7 @@ describe("fileUrl", () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "");
     vi.resetModules();
     const { fileUrl: sameOrigin } = await import("@/lib/api");
-    expect(sameOrigin("http://194.36.88.77:8080/files/uploads/a.jpg")).toBe(
-      "/files/uploads/a.jpg"
-    );
+    expect(sameOrigin("http://194.36.88.77:8080/files/uploads/a.jpg")).toBe("/files/uploads/a.jpg");
     expect(sameOrigin("/files/uploads/photo.jpg")).toBe("/files/uploads/photo.jpg");
     vi.unstubAllEnvs();
     vi.resetModules();

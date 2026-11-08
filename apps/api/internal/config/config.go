@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -937,7 +938,9 @@ func minioAnswers(endpoint string) bool {
 	if !strings.Contains(host, ":") {
 		host += ":80"
 	}
-	conn, err := net.DialTimeout("tcp", host, 300*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", host)
 	if err != nil {
 		return false
 	}

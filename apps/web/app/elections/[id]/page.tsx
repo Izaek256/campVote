@@ -197,8 +197,7 @@ function ElectionView({ id }: { id: string }) {
               <h2>Candidates &amp; manifestos</h2>
               {candidatePositions && candidatePositions.length > 0 ? (
                 <span className="lbl">
-                  {candidatePositions.reduce((total, p) => total + p.candidates.length, 0)}{" "}
-                  approved
+                  {candidatePositions.reduce((total, p) => total + p.candidates.length, 0)} approved
                 </span>
               ) : null}
             </div>

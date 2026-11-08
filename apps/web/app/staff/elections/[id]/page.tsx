@@ -19,7 +19,14 @@ import {
   formatPercent,
   statusLabel,
 } from "@/lib/format";
-import type { Candidate, Election, ElectionRole, EligibilityReport, Position, Results } from "@/lib/types";
+import type {
+  Candidate,
+  Election,
+  ElectionRole,
+  EligibilityReport,
+  Position,
+  Results,
+} from "@/lib/types";
 
 function toEatInput(iso: string): string {
   const date = new Date(iso);

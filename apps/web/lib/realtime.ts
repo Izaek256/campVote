@@ -250,7 +250,9 @@ let stream: EventSource | null = null;
  * separately, so one of them cannot be pointed somewhere the other is not.
  */
 function sseURL(): string {
-  return wsURL().replace(/^ws/, "http").replace(/\/api\/ws$/, "/api/events");
+  return wsURL()
+    .replace(/^ws/, "http")
+    .replace(/\/api\/ws$/, "/api/events");
 }
 
 /**

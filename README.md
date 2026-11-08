@@ -980,7 +980,21 @@ pnpm format         # format with biome
 
 ## Testing and delivery
 
-The generated scaffold determines exact commands. Before merging, run the applicable formatters, linters, type checks, unit tests, database migration/integration tests, frontend build, and critical end-to-end tests. Add CI workflows only after confirming real workspace paths and commands; do not add a green-but-empty pipeline or pretend checks ran when they did not.
+CI runs on pull requests into `develop`/`main` and on pushes to those branches
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Three jobs must pass
+before merge:
+
+- **Backend (Go)** — `gofmt`, `golangci-lint`, `go vet`, `go test -race` against
+  a disposable `postgres:16-alpine` service.
+- **Frontend (Web)** — `tsc --noEmit`, Vitest, `next build`.
+- **Format & Lint (Biome)** — repository-wide Biome check.
+
+Run the same checks locally before opening a PR: `pnpm format:check`,
+`pnpm type-check`, `pnpm test`, `pnpm build`, and in `apps/api` `gofmt -l .`,
+`golangci-lint run`, `go vet ./...`, `go test ./...`. See
+[`docs/testing/ci-pipeline.md`](docs/testing/ci-pipeline.md) for the full tool
+matrix, local reproduction commands, diagnosis table and known limitations, and
+[`docs/testing.md`](docs/testing.md) for test isolation.
 
 ## Security and privacy baseline
 

@@ -3,8 +3,8 @@ package models
 import (
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/ids"
+	"gorm.io/gorm"
 )
 
 // AccessReview is one recertification campaign: a point-in-time snapshot of all

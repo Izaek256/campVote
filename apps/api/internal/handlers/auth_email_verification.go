@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"campvote/apps/api/internal/mail"
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/respond"
 	"campvote/apps/api/internal/services"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )

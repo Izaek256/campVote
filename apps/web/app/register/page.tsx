@@ -56,8 +56,8 @@ export default function RegisterPage() {
           />
 
           <p className="hint" style={{ marginTop: 16 }}>
-            Use your <b>@{STUDENT_EMAIL_DOMAIN}</b> student address. Staff and official accounts
-            are created by an election administrator.
+            Use your <b>@{STUDENT_EMAIL_DOMAIN}</b> student address. Staff and official accounts are
+            created by an election administrator.
           </p>
 
           <p
