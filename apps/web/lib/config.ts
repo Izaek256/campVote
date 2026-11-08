@@ -9,8 +9,27 @@ export const CAMPUS_NAME = process.env.NEXT_PUBLIC_CAMPUS_NAME?.trim() || "Campu
 export const ELECTION_AUTHORITY =
   process.env.NEXT_PUBLIC_ELECTION_AUTHORITY?.trim() || "Campus Electoral Commission";
 export const STUDENT_EMAIL_DOMAIN =
-  process.env.NEXT_PUBLIC_STUDENT_EMAIL_DOMAIN?.trim() || "std.mast.ac.ug";
+  process.env.NEXT_PUBLIC_STUDENT_EMAIL_DOMAIN?.trim() || "std.must.ac.ug";
 export const STAFF_EMAIL_DOMAIN =
-  process.env.NEXT_PUBLIC_STAFF_EMAIL_DOMAIN?.trim() || "mast.ac.ug";
+  process.env.NEXT_PUBLIC_STAFF_EMAIL_DOMAIN?.trim() || "must.ac.ug";
 export const STUDENT_EMAIL_EXAMPLE =
   process.env.NEXT_PUBLIC_STUDENT_EMAIL_EXAMPLE?.trim() || `2024BSE088@${STUDENT_EMAIL_DOMAIN}`;
+
+/**
+ * The OAuth 2.0 Web Application client used by Google Identity Services.
+ *
+ * It is public by design: the browser must know it to request a credential.
+ * The matching backend value is GOOGLE_OAUTH_CLIENT_ID, and the two must name
+ * the same client. Empty means the button explains that sign-in is unavailable
+ * instead of silently falling back to another method.
+ */
+export const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() || "";
+
+/**
+ * Absolute origin used for canonical and social-preview URLs. Vercel exposes
+ * the deployment host without a scheme, so it needs one added. The localhost
+ * fallback keeps local builds working; set NEXT_PUBLIC_SITE_URL in deployment.
+ */
+export const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");

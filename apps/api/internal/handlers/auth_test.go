@@ -88,6 +88,11 @@ func testCfg() *config.Config {
 		JWTSecret:        "test-secret-key-for-testing-only",
 		JWTAccessExpiry:  15 * time.Minute,
 		JWTRefreshExpiry: 7 * 24 * time.Hour,
+		// The auth handlers now enforce the campus-domain allow-list. Tests use
+		// example.com addresses, so configure that as the campus domain rather
+		// than weakening the production check for tests.
+		StudentEmailDomain: "example.com",
+		AdminEmailDomain:   "example.com",
 	}
 }
 
@@ -163,13 +168,155 @@ func TestAuthHandler_SendVerificationEmail_EmailsTheCode(t *testing.T) {
 	w := postJSON(t, r, "/api/auth/send-verification", map[string]string{})
 	assert.Equal(t, http.StatusOK, w.Code)
 
+	// The code is delivered by email, not echoed in the response body. The
+	// default (MAIL_ECHO_CODES unset) never exposes it, and even with the
+	// flag on a successful send must not leak it (see the test below).
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	code := body["verify_code"]
-	require.Len(t, code, 6, "development must expose the six-digit code")
+	assert.NotContains(t, body, "verify_code")
 
-	msg := fake.AssertSentWithin(t, 5*time.Second, "jane@example.com", "Confirm your email")
-	assert.Contains(t, msg.HTML, code)
+	fake.AssertSentWithin(t, 5*time.Second, "jane@example.com", "Your CampVote sign-in code")
+}
+
+// With MAIL_ECHO_CODES=true and a working mailer, the code must still NOT be
+// echoed: delivery succeeded, so the code reached the inbox and exposing it
+// in the API response would let anyone verify any address. This is the key
+// security test for the echo gate.
+func TestAuthHandler_SendVerificationEmail_DoesNotEchoCodeWhenMailerSucceeds(t *testing.T) {
+	cfg := testCfg()
+	cfg.AppEnv = "development"
+	cfg.Mail.EchoCodes = true
+	db := newTestDB(t)
+	require.NoError(t, db.AutoMigrate(&models.EmailVerificationToken{}))
+	user := seedMailUser(t, db)
+	fake := mailtest.New()
+	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg, Mailer: fake.Mailer()}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/auth/send-verification", func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		h.SendVerificationEmail(c)
+	})
+
+	w := postJSON(t, r, "/api/auth/send-verification", map[string]string{})
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.NotContains(t, body, "verify_code", "code must not be echoed even with MAIL_ECHO_CODES=true when the mailer succeeds")
+
+	fake.AssertSentWithin(t, 5*time.Second, "jane@example.com", "Your CampVote sign-in code")
+}
+
+// A development deployment with no mailer must still let the person finish
+// signing up: with MAIL_ECHO_CODES=true the code is returned in the response
+// when delivery did not happen, exactly as the registration page expects.
+func TestAuthHandler_SendVerificationEmail_WithoutMailerEchoesCodeInDevelopment(t *testing.T) {
+	cfg := testCfg()
+	cfg.AppEnv = "development"
+	cfg.Mail.EchoCodes = true
+	db := newTestDB(t)
+	user := seedMailUser(t, db)
+	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/auth/send-verification", func(c *gin.Context) {
+		c.Set("user_id", user.ID)
+		h.SendVerificationEmail(c)
+	})
+
+	w := postJSON(t, r, "/api/auth/send-verification", map[string]string{})
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Len(t, body["verify_code"], 6, "development must expose the code when no mailer is configured and MAIL_ECHO_CODES is true")
+}
+
+func TestAuthHandler_SignupInitiate_EmailsTheCode(t *testing.T) {
+	cfg := testCfg()
+	cfg.AppEnv = "development"
+	db := newTestDB(t)
+	fake := mailtest.New()
+	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg, Mailer: fake.Mailer()}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/auth/signup/initiate", h.SignupInitiate)
+
+	w := postJSON(t, r, "/api/auth/signup/initiate", map[string]string{"email": "new.student@example.com"})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// Mailer succeeds: the code is delivered by email, not echoed in the
+	// response, even in development.
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.NotContains(t, body, "verification_code", "code must not be echoed when the mailer succeeds")
+
+	fake.AssertSentWithin(t, 5*time.Second, "new.student@example.com", "Your CampVote sign-in code")
+}
+
+// With MAIL_ECHO_CODES=true and a working mailer, the signup code must NOT be
+// echoed: delivery succeeded, so exposing it would let anyone verify any
+// address.
+func TestAuthHandler_SignupInitiate_DoesNotEchoCodeWhenMailerSucceeds(t *testing.T) {
+	cfg := testCfg()
+	cfg.AppEnv = "development"
+	cfg.Mail.EchoCodes = true
+	db := newTestDB(t)
+	fake := mailtest.New()
+	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg, Mailer: fake.Mailer()}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/auth/signup/initiate", h.SignupInitiate)
+
+	w := postJSON(t, r, "/api/auth/signup/initiate", map[string]string{"email": "new.student@example.com"})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.NotContains(t, body, "verification_code", "code must not be echoed even with MAIL_ECHO_CODES=true when the mailer succeeds")
+
+	fake.AssertSentWithin(t, 5*time.Second, "new.student@example.com", "Your CampVote sign-in code")
+}
+
+// With MAIL_ECHO_CODES=true and no mailer, the signup code is returned in the
+// response so the dev flow can be completed without a mail server.
+func TestAuthHandler_SignupInitiate_EchoesCodeWhenNoMailerInDevelopment(t *testing.T) {
+	cfg := testCfg()
+	cfg.AppEnv = "development"
+	cfg.Mail.EchoCodes = true
+	db := newTestDB(t)
+	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/auth/signup/initiate", h.SignupInitiate)
+
+	w := postJSON(t, r, "/api/auth/signup/initiate", map[string]string{"email": "new.student@example.com"})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Len(t, body["verification_code"], 6, "development must echo the signup code when no mailer and MAIL_ECHO_CODES is true")
+}
+
+func TestAuthHandler_SignupInitiate_HidesCodeInProduction(t *testing.T) {
+	cfg := testCfg()
+	cfg.AppEnv = "production"
+	db := newTestDB(t)
+	fake := mailtest.New()
+	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg, Mailer: fake.Mailer()}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/auth/signup/initiate", h.SignupInitiate)
+
+	w := postJSON(t, r, "/api/auth/signup/initiate", map[string]string{"email": "new.student@example.com"})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.NotContains(t, body, "verification_code", "production must never expose the code")
+
+	fake.AssertSentWithin(t, 5*time.Second, "new.student@example.com", "Your CampVote sign-in code")
 }
 
 func TestAuthHandler_Register_Success(t *testing.T) {
@@ -251,13 +398,17 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
 	r := newAuthRouter(h)
 
-	// Register first
-	postJSON(t, r, "/api/auth/register", map[string]string{
-		"first_name": "Bob",
-		"last_name":  "Jones",
-		"email":      "bob@example.com",
-		"password":   "mypassword99",
-	})
+	now := time.Now()
+	admin := models.User{
+		FirstName:       "Bob",
+		LastName:        "Jones",
+		Email:           "bob@example.com",
+		Password:        "mypassword99",
+		Role:            models.RoleAdmin,
+		Active:          true,
+		EmailVerifiedAt: &now,
+	}
+	require.NoError(t, db.Create(&admin).Error)
 
 	// Then login
 	w := postJSON(t, r, "/api/auth/login", map[string]string{
@@ -285,12 +436,15 @@ func TestAuthHandler_Login_WrongPassword(t *testing.T) {
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
 	r := newAuthRouter(h)
 
-	postJSON(t, r, "/api/auth/register", map[string]string{
-		"first_name": "Carol",
-		"last_name":  "White",
-		"email":      "carol@example.com",
-		"password":   "correct-password",
-	})
+	admin := models.User{
+		FirstName: "Carol",
+		LastName:  "White",
+		Email:     "carol@example.com",
+		Password:  "correct-password",
+		Role:      models.RoleAdmin,
+		Active:    true,
+	}
+	require.NoError(t, db.Create(&admin).Error)
 
 	w := postJSON(t, r, "/api/auth/login", map[string]string{
 		"email":    "carol@example.com",

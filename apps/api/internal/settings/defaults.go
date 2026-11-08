@@ -12,7 +12,7 @@ func RegisterDefaults() {
 		Label:    "Application name",
 		Help:     "Shown in the browser title, emails and the admin header.",
 		Group:    "General",
-		Default:  "campVote",
+		Default:  "CampVote",
 		Validate: NotEmpty(),
 		Order:    1,
 	})

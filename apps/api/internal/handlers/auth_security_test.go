@@ -52,6 +52,9 @@ func securityRouter(h *AuthHandler, db *gorm.DB) *gin.Engine {
 	authed := r.Group("/api", middleware.Auth(db, h.AuthService))
 	authed.POST("/auth/logout", h.Logout)
 	authed.GET("/me", h.Me)
+	authed.GET("/admin-only", middleware.RequireRole(models.RoleAdmin), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
 
 	return r
 }
@@ -128,6 +131,22 @@ func seedVerifiedUser(t *testing.T, db *gorm.DB, email, password string) models.
 	return user
 }
 
+func seedVerifiedAdmin(t *testing.T, db *gorm.DB, email, password string) models.User {
+	t.Helper()
+	now := time.Now()
+	user := models.User{
+		FirstName:       "Admin",
+		LastName:        "User",
+		Email:           email,
+		Password:        password,
+		Role:            models.RoleAdmin,
+		Active:          true,
+		EmailVerifiedAt: &now,
+	}
+	require.NoError(t, db.Create(&user).Error)
+	return user
+}
+
 func activityCount(t *testing.T, db *gorm.DB, action string) int64 {
 	t.Helper()
 	var n int64
@@ -197,7 +216,7 @@ func TestLogin_GenericErrorsForUnknownEmailAndWrongPassword(t *testing.T) {
 	cfg := testCfg()
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
 	r := securityRouter(h, db)
-	seedVerifiedUser(t, db, "jane@example.com", "harbour-lamp-97")
+	seedVerifiedAdmin(t, db, "jane@example.com", "harbour-lamp-97")
 
 	wrong := secRequest(t, r, http.MethodPost, "/api/auth/login", map[string]string{
 		"email": "jane@example.com", "password": "not-the-password",
@@ -213,6 +232,61 @@ func TestLogin_GenericErrorsForUnknownEmailAndWrongPassword(t *testing.T) {
 		"the two failures must be indistinguishable")
 }
 
+func TestLogin_RequiresAdminRoleAndAdminEmailDomain(t *testing.T) {
+	db := newTestDB(t)
+	cfg := testCfg()
+	cfg.StudentEmailDomain = "std.must.ac.ug"
+	cfg.AdminEmailDomain = "must.ac.ug"
+	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
+	r := securityRouter(h, db)
+	seedVerifiedAdmin(t, db, "admin@must.ac.ug", "harbour-lamp-97")
+	seedVerifiedUser(t, db, "student@std.must.ac.ug", "harbour-lamp-97")
+	seedVerifiedUser(t, db, "staff-user@must.ac.ug", "harbour-lamp-97")
+
+	admin := secRequest(t, r, http.MethodPost, "/api/auth/login", map[string]string{
+		"email": "admin@must.ac.ug", "password": "harbour-lamp-97",
+	}, nil)
+	require.Equal(t, http.StatusOK, admin.Code, admin.Body.String())
+
+	student := secRequest(t, r, http.MethodPost, "/api/auth/login", map[string]string{
+		"email": "student@std.must.ac.ug", "password": "harbour-lamp-97",
+	}, nil)
+	wrongDomain := secRequest(t, r, http.MethodPost, "/api/auth/login", map[string]string{
+		"email": "admin@evil-must.ac.ug", "password": "harbour-lamp-97",
+	}, nil)
+	nonAdminRole := secRequest(t, r, http.MethodPost, "/api/auth/login", map[string]string{
+		"email": "staff-user@must.ac.ug", "password": "harbour-lamp-97",
+	}, nil)
+
+	for _, refused := range []*httptest.ResponseRecorder{student, wrongDomain, nonAdminRole} {
+		assert.Equal(t, http.StatusUnauthorized, refused.Code)
+		assert.Equal(t, string(respond.CodeInvalidCredentials), errorCode(t, refused))
+		assert.Empty(t, refused.Result().Cookies(), "a refused sign-in must not issue a session")
+	}
+}
+
+func TestAdminAPI_UsesCurrentDatabaseRoleForEveryRequest(t *testing.T) {
+	db := newTestDB(t)
+	cfg := testCfg()
+	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
+	r := securityRouter(h, db)
+	admin := seedVerifiedAdmin(t, db, "admin@example.com", "harbour-lamp-97")
+	tokens := loginTokens(t, r, admin.Email, "harbour-lamp-97")
+
+	requestAsAdmin := func() *httptest.ResponseRecorder {
+		return secRequest(t, r, http.MethodGet, "/api/admin-only", nil, func(req *http.Request) {
+			req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+		})
+	}
+	require.Equal(t, http.StatusNoContent, requestAsAdmin().Code)
+
+	require.NoError(t, db.Model(&models.User{}).Where("id = ?", admin.ID).
+		Update("role", models.RoleStudentVoter).Error)
+	refused := requestAsAdmin()
+	require.Equal(t, http.StatusForbidden, refused.Code, refused.Body.String())
+	assert.Equal(t, string(respond.CodeForbidden), errorCode(t, refused))
+}
+
 // Repeated wrong passwords lock the account; the correct password is refused
 // until the window has passed.
 func TestLogin_LocksAfterRepeatedFailuresAndRecoversAfterWindow(t *testing.T) {
@@ -222,7 +296,7 @@ func TestLogin_LocksAfterRepeatedFailuresAndRecoversAfterWindow(t *testing.T) {
 	cfg.LoginLockoutWindow = 15 * time.Minute
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
 	r := securityRouter(h, db)
-	user := seedVerifiedUser(t, db, "jane@example.com", "harbour-lamp-97")
+	user := seedVerifiedAdmin(t, db, "jane@example.com", "harbour-lamp-97")
 	// LockAccount also clears pending two-factor tokens, so this table has to
 	// exist for the lock (and its audit row) to complete.
 	require.NoError(t, db.AutoMigrate(&models.TOTPPendingToken{}))
@@ -270,7 +344,7 @@ func TestLogin_RequiresVerifiedEmailAndVerifyCodeIsSingleUse(t *testing.T) {
 	cfg.RequireEmailVerification = true
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
 	r := securityRouter(h, db)
-	seedVerifiedUser(t, db, "unverified@example.com", "harbour-lamp-97")
+	seedVerifiedAdmin(t, db, "unverified@example.com", "harbour-lamp-97")
 	require.NoError(t, db.Model(&models.User{}).Where("email = ?", "unverified@example.com").
 		Update("email_verified_at", nil).Error)
 
@@ -336,7 +410,7 @@ func TestPasswordReset_RevokesSessionsAndCannotBeReplayed(t *testing.T) {
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg, Mailer: fake.Mailer()}
 	r := securityRouter(h, db)
 
-	user := seedVerifiedUser(t, db, "jane@example.com", "old-harbour-97")
+	user := seedVerifiedAdmin(t, db, "jane@example.com", "old-harbour-97")
 	oldTokens := loginTokens(t, r, "jane@example.com", "old-harbour-97")
 
 	w := secRequest(t, r, http.MethodPost, "/api/auth/forgot-password", map[string]string{
@@ -387,7 +461,7 @@ func TestLogout_RevokesCookieSession(t *testing.T) {
 	cfg := testCfg()
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
 	r := securityRouter(h, db)
-	seedVerifiedUser(t, db, "jane@example.com", "harbour-lamp-97")
+	seedVerifiedAdmin(t, db, "jane@example.com", "harbour-lamp-97")
 
 	login := secRequest(t, r, http.MethodPost, "/api/auth/login", map[string]string{
 		"email": "jane@example.com", "password": "harbour-lamp-97",
@@ -417,7 +491,7 @@ func TestLogout_RevokesBearerSession(t *testing.T) {
 	cfg := testCfg()
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
 	r := securityRouter(h, db)
-	seedVerifiedUser(t, db, "jane@example.com", "harbour-lamp-97")
+	seedVerifiedAdmin(t, db, "jane@example.com", "harbour-lamp-97")
 	tokens := loginTokens(t, r, "jane@example.com", "harbour-lamp-97")
 
 	logout := secRequest(t, r, http.MethodPost, "/api/auth/logout", nil, func(req *http.Request) {
@@ -440,7 +514,8 @@ func TestDeactivation_RevokesSessionsAndBlocksNextRequest(t *testing.T) {
 	authSvc := newTestAuthSvc(cfg, db)
 	h := &AuthHandler{DB: db, AuthService: authSvc, Config: cfg}
 	r := securityRouter(h, db)
-	user := seedVerifiedUser(t, db, "jane@example.com", "harbour-lamp-97")
+	user := seedVerifiedAdmin(t, db, "jane@example.com", "harbour-lamp-97")
+	seedVerifiedAdmin(t, db, "backup-admin@example.com", "second-harbour-97")
 	tokens := loginTokens(t, r, "jane@example.com", "harbour-lamp-97")
 
 	users := &UserHandler{DB: db, AuthService: authSvc}

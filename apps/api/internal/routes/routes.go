@@ -2,8 +2,10 @@ package routes
 
 import (
 	"context"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -171,11 +173,18 @@ func authRouteLimits(dev bool) map[string]sentinel.Limit {
 	v := "/api/" + APIVersion + "/auth"
 	if dev {
 		relaxed := sentinel.Limit{Requests: 100, Window: time.Minute}
-		return map[string]sentinel.Limit{v + "/login": relaxed, v + "/register": relaxed}
+		return map[string]sentinel.Limit{
+			v + "/login":    relaxed,
+			v + "/register": relaxed,
+			v + "/google":   relaxed,
+		}
 	}
 	return map[string]sentinel.Limit{
-		v + "/login":           {Requests: 30, Window: 5 * time.Minute},
-		v + "/register":        {Requests: 10, Window: 15 * time.Minute},
+		v + "/login":    {Requests: 30, Window: 5 * time.Minute},
+		v + "/register": {Requests: 10, Window: 15 * time.Minute},
+		// A verified ID token is not guessable, so this is flood control like
+		// the sign-in limit above, not a brute-force defence.
+		v + "/google":          {Requests: 30, Window: 5 * time.Minute},
 		v + "/forgot-password": {Requests: 10, Window: 15 * time.Minute},
 		v + "/reset-password":  {Requests: 10, Window: 15 * time.Minute},
 		// A six-digit code is guessable in principle, so this limit is the
@@ -635,6 +644,7 @@ func mountAuthRoutes(v1 *gin.RouterGroup, authHandler *handlers.AuthHandler, sso
 		auth.POST("/signup/initiate", authHandler.SignupInitiate)
 		auth.POST("/signup/complete", authHandler.SignupComplete)
 		auth.POST("/login", authHandler.Login)
+		auth.POST("/google", authHandler.GoogleSignIn)
 		auth.POST("/refresh", authHandler.Refresh)
 		auth.POST("/forgot-password", authHandler.ForgotPassword)
 		auth.POST("/reset-password", authHandler.ResetPassword)
@@ -691,6 +701,15 @@ func mountAuthRoutes(v1 *gin.RouterGroup, authHandler *handlers.AuthHandler, sso
 func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
+	}
+
+	// Gin narrates every route it mounts — "[GIN-debug] GET /api/v1/..." for
+	// over a hundred lines before the server is even listening, which is most
+	// of a boot log and buries the lines worth reading. Quiet by default: the
+	// caller prints a one-line count instead, and LOG_ROUTES=true restores the
+	// dump when the wiring itself is what is being debugged.
+	if os.Getenv("LOG_ROUTES") != "true" {
+		gin.DefaultWriter = io.Discard
 	}
 
 	r := gin.New()
@@ -768,6 +787,9 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		Mailer:      svc.Mailer,
 		Jobs:        svc.Jobs,
 	}
+	if cfg.GoogleOAuthClientID != "" {
+		authHandler.GoogleVerifier = services.NewGoogleVerifier(cfg.GoogleOAuthClientID)
+	}
 	apiKeyHandler := &handlers.APIKeyHandler{DB: db}
 
 	userHandler := &handlers.UserHandler{
@@ -788,6 +810,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	}
 	cronHandler := &handlers.CronHandler{}
 	blogHandler := handlers.NewBlogHandler(db)
+	landingHandler := handlers.NewLandingHandler(db)
 	totpHandler := &handlers.TOTPHandler{
 		DB:          db,
 		AuthService: authService,
@@ -1177,6 +1200,19 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		blogs.GET("/:slug", blogHandler.GetBySlug)
 	}
 
+	// Public landing-page routes (no auth required).
+	//
+	// These are deliberately open rather than keyed: the landing page is the
+	// first thing an anonymous visitor sees, and a key would mean shipping it
+	// in the page for no real gain. Sentinel rate-limits them by IP like every
+	// other path, the handlers set Cache-Control, and both serve only
+	// whitelisted, non-identifying fields: the published copy, and a handful of
+	// aggregate facts about upcoming elections.
+	{
+		v1.GET("/public/landing", landingHandler.Public)
+		v1.GET("/public/elections/upcoming", landingHandler.UpcomingElections)
+	}
+
 	// Public API surface, for clients with no logged-in user: a storefront, a
 	// mobile app, a public directory.
 	//
@@ -1384,6 +1420,13 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.POST("/elections/:id/candidates/apply", candidateHandler.Apply)
 		protected.POST("/candidates/my/:candidate_id/withdraw", candidateHandler.WithdrawMine)
 		protected.POST("/candidates/my/:candidate_id/ballot-photo", candidateHandler.SetBallotPhoto)
+		protected.POST("/candidates/my/:candidate_id/manifesto", candidateHandler.SetManifesto)
+
+		// The approved candidates of an election, with manifestos, for an
+		// eligible voter — readable before voting opens. Gated by the same
+		// eligibility rule as the election list; identity documents are never
+		// returned.
+		protected.GET("/elections/:id/candidates-for-voters", candidateHandler.CandidatesForVoters)
 
 		// Standalone position applications. A student sees only the positions
 		// their email domain, year and course make them eligible for, and may
@@ -1433,6 +1476,10 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.DELETE("/users/:id", middleware.RequireRole("ADMIN", "perm:users.delete"), userHandler.Delete)
 		staff.PUT("/users/:id/roles", middleware.RequireRole("ADMIN", "perm:users.edit"), roleHandler.AssignUserRoles)
 		staff.POST("/users/:id/unlock", middleware.RequireRole("ADMIN", "perm:users.edit"), userHandler.Unlock)
+
+		// Administrator invitation: creates an admin without a password and emails
+		// a set-password link. The invited user must have an admin email domain.
+		staff.POST("/admins/invite", middleware.RequireRole("ADMIN", "perm:users.create"), authHandler.InviteAdmin)
 
 		// GDPR right-to-erasure: anonymize a user and hard-delete their PII, with
 		// the erasure recorded in a tamper-evident deletion journal.
@@ -1638,6 +1685,15 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		// is being changed and a route can only know one.
 		admin.PUT("/settings", settingsHandler.Update)
 		admin.DELETE("/settings/:key", settingsHandler.Reset)
+
+		// Landing-page content. The group's ADMIN requirement is the gate; the
+		// handlers re-check nothing extra because only administrators ever
+		// reach them. Editing works on a draft and "publish" takes it live, so
+		// a half-finished edit is never what the public page serves.
+		admin.GET("/admin/landing", landingHandler.AdminGet)
+		admin.PUT("/admin/landing", landingHandler.AdminSave)
+		admin.POST("/admin/landing/publish", landingHandler.AdminPublish)
+		admin.POST("/admin/landing/revert", landingHandler.AdminRevert)
 
 		// grit:routes:admin
 	}

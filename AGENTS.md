@@ -1,4 +1,4 @@
-# AI Agent Development Rules — campVote
+# AI Agent Development Rules — CampVote
 
 These rules apply to every AI coding agent working on this repository. Read them before planning, implementing, debugging, reviewing, or refactoring.
 

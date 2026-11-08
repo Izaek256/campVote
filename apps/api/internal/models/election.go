@@ -53,6 +53,9 @@ type Election struct {
 	StartsAt time.Time `gorm:"not null;index" json:"starts_at"`
 	EndsAt   time.Time `gorm:"not null;index" json:"ends_at"`
 
+	// Composite index for querying open elections by time
+	// This optimizes queries like: WHERE status='OPEN' AND starts_at <= NOW() AND ends_at > NOW()
+
 	// Policies and access rules
 	ResultPolicy string `gorm:"size:50;not null;default:'AFTER_CLOSE'" json:"result_policy"`
 
@@ -72,6 +75,13 @@ type Election struct {
 	// New code uses AllowedDomain + AllowedYears + AllowedCourses.
 	AllowedDomains string `gorm:"size:255" json:"allowed_domains,omitempty"`
 	RequireRoster  bool   `gorm:"default:false" json:"require_roster"`
+
+	// PublicListing opts an election into the public landing page's "upcoming
+	// elections" list. Drafts are private to their creator, so publishing an
+	// upcoming poll to the open web is an explicit, per-election decision and
+	// this column defaults to false. Only whitelisted, non-identifying fields
+	// are ever served from it (see the public handlers).
+	PublicListing bool `gorm:"default:false;index" json:"public_listing"`
 
 	// EligibilityFrozenAt is set when voting opens. The roster is the evidence
 	// of who may vote; after this point new entries are refused and only

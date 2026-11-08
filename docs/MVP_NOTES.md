@@ -17,7 +17,9 @@ This file records assumptions, decisions, and known gaps as work progresses thro
 7. **Automatic tally**: On close transition, `tally.Compute` is called and a snapshot persisted. Tally failure is logged but does not fail the transition; retried on next `Read`.
 8. **`SIGNUP_ALLOWED_DOMAINS`**: Default is `std.mast.ac.ug`. Staff/admin accounts are created via bootstrap or role assignment.
 9. **Election branding**: Replaced all MUST/MMU strings with neutral `Campus Electoral Commission` / `std.mast.ac.ug`.
-10. **Redis**: Provided via compose. Without Redis, the lazy `lifecycle.Ensure` path still opens/closes elections on request.
+10. **Redis**: Optional, and not started by compose. `docker-compose.yaml` contains one service — the API — so `REDIS_URL` comes from `.env` as written. Set it empty to switch cache, jobs and cron off deliberately; left out, the API falls back to `redis://localhost:6380`. Without Redis, the lazy `lifecycle.Ensure` path still opens/closes elections on request.
+11. **Mail in Docker**: from `.env`. No Mailpit service, so no :8025 UI exists; `MAIL_MAILER=log` prints each message to `docker compose logs api` and saves an HTML copy under `MAIL_LOG_PATH` (`storage/mail`, on the `/app/storage` volume). Unset, development tries SMTP on `localhost:1025` and then falls back to the log.
+12. **Web app and database not containerised**: run `pnpm dev:web` on the host against `http://localhost:8080`, and point `.env`'s `DATABASE_URL` at a PostgreSQL you already run — the API container shares the host's network, so `localhost` in that URL means the machine. `apps/web/Dockerfile` remains for deployments that want an image. See `docs/operations/docker-compose.md`.
 
 ---
 

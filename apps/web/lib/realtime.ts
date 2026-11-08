@@ -7,7 +7,13 @@
  * cheap registry operation rather than a handshake.
  */
 
-export type RealtimeEvent = { type: string; channel?: string; payload: unknown };
+import { API } from "./api";
+
+export type RealtimeEvent = {
+  type: string;
+  channel?: string;
+  payload: unknown;
+};
 // The payload is whatever JSON the server sent, so a handler annotates it:
 // (payload: Invoice) => ... It stays any rather than unknown because
 // unknown would reject every annotated handler and every documented
@@ -16,8 +22,11 @@ export type RealtimeEvent = { type: string; channel?: string; payload: unknown }
 export type Handler = (payload: any, event: RealtimeEvent) => void;
 export type Status = "connecting" | "open" | "closed";
 
-const WS_URL =
-  (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").replace(/^http/, "ws") + "/api/ws";
+/** The socket origin: the configured API base, or this origin when proxied. */
+function wsURL(): string {
+  const base = API || (typeof window === "undefined" ? "" : window.location.origin);
+  return base.replace(/^http/, "ws") + "/api/ws";
+}
 
 /**
  * The browser cannot supply a token: login stores the JWT in the HttpOnly
@@ -78,10 +87,18 @@ export function whisper(channel: string, event: string, data?: unknown): boolean
 }
 
 /** A client event as the other subscribers receive it. data is whatever the sender sent, so treat it as user input. */
-export type ClientEvent<Data = unknown> = { event: string; user_id: string; data?: Data };
+export type ClientEvent<Data = unknown> = {
+  event: string;
+  user_id: string;
+  data?: Data;
+};
 
 /** One user in a presence channel. info is what the channel's authorizer passed to SetInfo. */
-export type PresenceMember<Info = unknown> = { user_id: string; info?: Info; joined_at: string };
+export type PresenceMember<Info = unknown> = {
+  user_id: string;
+  info?: Info;
+  joined_at: string;
+};
 
 /**
  * The members of each presence channel something is subscribed to, from the
@@ -233,7 +250,7 @@ let stream: EventSource | null = null;
  * separately, so one of them cannot be pointed somewhere the other is not.
  */
 function sseURL(): string {
-  return WS_URL.replace(/^ws/, "http").replace(/\/api\/ws$/, "/api/events");
+  return wsURL().replace(/^ws/, "http").replace(/\/api\/ws$/, "/api/events");
 }
 
 /**
@@ -308,7 +325,7 @@ export async function connect(): Promise<void> {
 
   setStatus("connecting");
 
-  const ws = new WebSocket(WS_URL + authQuery());
+  const ws = new WebSocket(wsURL() + authQuery());
   socket = ws;
 
   let opened = false;

@@ -26,6 +26,7 @@ import (
 	"campvote/apps/api/internal/database"
 	"campvote/apps/api/internal/events"
 	"campvote/apps/api/internal/jobs"
+	"campvote/apps/api/internal/logging"
 	"campvote/apps/api/internal/mail"
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/routes"
@@ -35,6 +36,10 @@ import (
 )
 
 func main() {
+	// One format for the whole process, installed before anything can print,
+	// so the boot reads as a block instead of a mix of styles.
+	logging.Setup()
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -77,16 +82,31 @@ func main() {
 		log.Fatalf("Read replicas: %v", err)
 	}
 
-	// DB_PROVIDER=memory keeps everything in RAM, so the only process that can
-	// usefully migrate it is this one: a separate migrate command would build the
-	// schema in a
-	// process that then exits, and this one would start on an empty database and
-	// answer "no such table" to every request. Nothing is at risk either way,
-	// because an in-memory database starts empty by definition.
-	if strings.HasPrefix(cfg.DatabaseURL, "sqlite:file::memory:") {
-		log.Println("DB_PROVIDER=memory: migrating in process, because the schema cannot outlive it")
-		if err := models.Migrate(db); err != nil {
-			log.Fatalf("Failed to migrate the in-memory database: %v", err)
+	// Run database migrations on startup
+	// This ensures the schema is up-to-date with the model definitions
+	log.Println("Running database migrations...")
+	if err := models.Migrate(db); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+	}
+	log.Println("Database migrations completed successfully")
+
+	// Bootstrap the first administrator if none exists and env vars are set.
+	// This is a one-time operation: once an admin is in the database, this does
+	// nothing. The environment variables should be removed after bootstrapping.
+	bootstrapEmail := os.Getenv("BOOTSTRAP_ADMIN_EMAIL")
+	bootstrapPassword := os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
+	if bootstrapEmail != "" && bootstrapPassword != "" {
+		admin, err := database.CreateFirstAdmin(context.Background(), db, bootstrapEmail, bootstrapPassword,
+			os.Getenv("BOOTSTRAP_ADMIN_FIRST_NAME"), os.Getenv("BOOTSTRAP_ADMIN_LAST_NAME"))
+		if err != nil {
+			if errors.Is(err, database.ErrAdministratorExists) {
+				log.Println("Bootstrap: an administrator already exists; skipping")
+			} else {
+				log.Printf("Bootstrap: failed to create first administrator: %v", err)
+			}
+		} else {
+			log.Printf("Bootstrap: created first administrator %s (%s %s)", admin.Email, admin.FirstName, admin.LastName)
+			log.Println("Bootstrap: remove BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD from your environment now")
 		}
 	}
 
@@ -152,7 +172,11 @@ func main() {
 		log.Fatalf("Email: %v", mailErr)
 	}
 	if mailer != nil {
-		log.Printf("Email: sending with %s", mailer.Driver())
+		driver := mailer.Driver()
+		log.Printf("Email: sending with %s", driver)
+		if strings.Contains(driver, "log") {
+			log.Println("Warning: the active mail driver writes to logs, not inboxes. Verification and reset codes will not reach users. Set MAIL_MAILER=smtp (or another provider) to deliver email.")
+		}
 	} else {
 		log.Println("Warning: no mail driver configured (emails disabled). Set MAIL_MAILER, or RESEND_API_KEY for Resend.")
 	}
@@ -241,6 +265,7 @@ func main() {
 
 	// Setup router
 	router := routes.Setup(db, cfg, svc)
+	logging.Info("Registered %d routes", len(router.Routes()))
 
 	// Start the SecObs notification poller (turns Sentinel/Pulse findings
 	// into in-app notifications). Runs once a minute on its own goroutine;
@@ -329,22 +354,30 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	// Boot header, printed once and before the listener accepts anything, so
+	// the environment and the URLs sit together instead of being spread down
+	// the startup lines. Only what is actually mounted is listed.
+	base := fmt.Sprintf("http://localhost:%s", cfg.Port)
+	rows := [][2]string{
+		{"env", cfg.AppEnv},
+		{"port", cfg.Port},
+	}
+	if cfg.GORMStudioEnabled {
+		rows = append(rows, [2]string{"studio", base + "/studio"})
+	}
+	if cfg.AppEnv != "production" || cfg.APIDocsPublic {
+		rows = append(rows, [2]string{"docs", base + "/docs"})
+	}
+	if cfg.PulseEnabled {
+		rows = append(rows, [2]string{"pulse", base + "/pulse/ui/"})
+	}
+	if cfg.SentinelEnabled {
+		rows = append(rows, [2]string{"sentinel", base + "/sentinel/ui"})
+	}
+	logging.Banner("CampVote API", rows)
+
 	// Start server in goroutine
 	go func() {
-		log.Printf("Server starting on port %s", cfg.Port)
-		if cfg.GORMStudioEnabled {
-			log.Printf("GORM Studio available at http://localhost:%s/studio", cfg.Port)
-		}
-		if cfg.AppEnv != "production" || cfg.APIDocsPublic {
-			log.Printf("API Documentation at http://localhost:%s/docs", cfg.Port)
-		}
-
-		if cfg.PulseEnabled {
-			log.Printf("Pulse dashboard at http://localhost:%s/pulse/ui/", cfg.Port)
-		}
-		if cfg.SentinelEnabled {
-			log.Printf("Sentinel dashboard at http://localhost:%s/sentinel/ui", cfg.Port)
-		}
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Server failed: %v", err)
 		}

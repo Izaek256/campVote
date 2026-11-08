@@ -1,0 +1,110 @@
+# Full-stack local development stack for WSL2 and Linux Docker.
+#
+# PostgreSQL, the Go API and the Next.js web app all run as containers on a
+# private bridge network. This file is separate from docker-compose.yaml, which
+# remains the API-only, host-network setup for a database that lives outside
+# Docker.
+#
+#   cp .env.example .env          # once; JWT_SECRET, mail and seeding come from it
+#   pnpm docker:stack             # build images, then start all three services
+#
+# Or, on a Docker install whose default bridge has working DNS/egress:
+#   docker compose -f docker-compose.wsl.yaml up -d --build
+#
+# The database credentials below are fixed local-development values. The API
+# service overrides DATABASE_URL so it talks to the `db` container, never to the
+# host database named in .env. This stack is for local work only; do not deploy
+# it as-is.
+#
+# Open http://localhost:3000. The API is at http://localhost:8080.
+
+name: campvote-wsl
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: campvote_dev
+      POSTGRES_USER: campvote_dev
+      POSTGRES_PASSWORD: campvote_dev_password
+    volumes:
+      - campvote_wsl_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campvote_dev -d campvote_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - campvote
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: campvote-api:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      APP_ENV: development
+      # Browsers on Windows/WSL reach the published ports, so public URLs use
+      # localhost. The database host is the compose service name, not localhost.
+      APP_URL: http://localhost:8080
+      API_URL: http://localhost:8080
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      DATABASE_URL: postgres://campvote_dev:campvote_dev_password@db:5432/campvote_dev?sslmode=disable&client_encoding=UTF8
+      REDIS_URL: ""
+      STORAGE_DRIVER: local
+    volumes:
+      - campvote_wsl_storage:/app/storage
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - campvote
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Baked into the browser bundle, so it must be the address a browser can
+        # reach, not the internal `api` hostname.
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    image: campvote-web:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1, not localhost: on Alpine, localhost resolves to ::1 first and
+      # the Next.js server is IPv4-only, so a localhost probe is refused.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - campvote
+
+volumes:
+  campvote_wsl_postgres:
+  campvote_wsl_storage:
+
+networks:
+  campvote:
+    driver: bridge

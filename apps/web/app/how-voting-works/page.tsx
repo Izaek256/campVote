@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Icon } from "@/components/icon";
 import { STAFF_EMAIL_DOMAIN, STUDENT_EMAIL_DOMAIN } from "@/lib/config";
 
-export const metadata = { title: "How voting works — campVote" };
+export const metadata = { title: "How voting works — CampVote" };
 
 export default function HowVotingWorksPage() {
   return (
@@ -16,7 +16,7 @@ export default function HowVotingWorksPage() {
         <div>
           <span className="lbl">Guide</span>
           <h1>How voting works</h1>
-          <p>A short, honest guide to the campVote academic prototype.</p>
+          <p>A short, honest guide to the CampVote academic prototype.</p>
         </div>
       </div>
 

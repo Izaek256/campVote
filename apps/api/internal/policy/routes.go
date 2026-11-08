@@ -17,7 +17,7 @@ func init() {
 		"/api/v1/auth/saml/:slug", "/api/v1/auth/saml/:slug/metadata")
 	public("GET", "/api/v1/public/forms/:token")
 	public("POST", "/api/v1/auth/register", "/api/v1/auth/signup/initiate", "/api/v1/auth/signup/complete",
-		"/api/v1/auth/login", "/api/v1/auth/refresh",
+		"/api/v1/auth/login", "/api/v1/auth/google", "/api/v1/auth/refresh",
 		"/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
 		"/api/v1/auth/verify-email", "/api/v1/auth/magic-link",
 		"/api/v1/auth/magic-link/consume",
@@ -25,6 +25,9 @@ func init() {
 		"/api/v1/auth/totp/verify", "/api/v1/auth/totp/backup-codes/verify",
 		"/api/v1/auth/sso/discover", "/api/v1/auth/saml/:slug/acs")
 	public("POST", "/api/v1/public/forms/:token/submit")
+	// The landing page and its upcoming-elections list. Anonymous by design;
+	// both serve only published copy and whitelisted aggregate fields.
+	public("GET", "/api/v1/public/landing", "/api/v1/public/elections/upcoming")
 	// Provider signature verification is the boundary, not a session.
 	public("POST", "/webhooks/:provider")
 	// The WebSocket and SSE handshakes authenticate from the cookie or token in
@@ -74,6 +77,10 @@ func init() {
 	adminOr("users.create", "POST", "/api/v1/users")
 	adminOr("users.edit", "PUT", "/api/v1/users/:id", "/api/v1/users/:id/roles")
 	adminOr("users.edit", "POST", "/api/v1/users/:id/unlock")
+	// Administrator invitation. The route is registered without a policy in
+	// the staff group, which the default-deny guard refuses; declaring it here
+	// mirrors the inline guard ADMIN or perm:users.create.
+	adminOr("users.create", "POST", "/api/v1/admins/invite")
 	adminOr("users.delete", "DELETE", "/api/v1/users/:id")
 	adminOr("users.delete", "POST", "/api/v1/users/:id/gdpr-erase")
 	adminOr("audit.view", "GET", "/api/v1/gdpr/journal", "/api/v1/admin/activity",
@@ -121,8 +128,9 @@ func init() {
 	adminOnly("DELETE", "/api/v1/admin/deleted-accounts/:id")
 
 	// ── Campus election access ────────────────────────────────────────────
-	// The list is any signed-in caller's index of elections; the handler hides
-	// other people's drafts.
+	// The list is any signed-in caller's index of elections; the handler
+	// narrows it per caller — a draft to the students it will admit, a closed
+	// election to every student so the outcome is transparent.
 	authenticated("GET", "/api/v1/elections")
 	permitted("elections.create", "POST", "/api/v1/elections")
 	permitted("elections.view", "GET", "/api/v1/elections/:id")
@@ -153,15 +161,19 @@ func init() {
 	// check passes for this election.
 	authenticated("GET", "/api/v1/elections/:id/eligibility", "/api/v1/elections/:id/ballot",
 		"/api/v1/elections/:id/lifecycle", "/api/v1/elections/:id/my-vote-status",
-		"/api/v1/elections/:id/candidate-application")
+		"/api/v1/elections/:id/candidate-application",
+		"/api/v1/elections/:id/candidates-for-voters")
 	authenticated("POST", "/api/v1/elections/:id/ballot/start", "/api/v1/elections/:id/ballot/submit")
 
 	// Candidate self-service (ISSUE-21). Any signed-in caller may ask; the
-	// handler checks roster eligibility and the application window.
+	// handler checks roster eligibility and the application window. The ballot
+	// photo and manifesto are further limited to the candidate's own approved
+	// record, and only before voting opens.
 	authenticated("GET", "/api/v1/candidates/my")
 	authenticated("POST", "/api/v1/elections/:id/candidates/apply",
 		"/api/v1/candidates/my/:candidate_id/withdraw",
-		"/api/v1/candidates/my/:candidate_id/ballot-photo")
+		"/api/v1/candidates/my/:candidate_id/ballot-photo",
+		"/api/v1/candidates/my/:candidate_id/manifesto")
 
 	// Officer candidate review and ballot definition (ISSUE-06). These were
 	// registered without a policy, so the guard denied every one of them.
@@ -219,4 +231,9 @@ func init() {
 		"/api/v1/admin/form-shares", "/api/v1/admin/form-shares/resources",
 		"/api/v1/admin/form-shares/resources/:resource/fields",
 		"/api/v1/admin/form-submissions")
+	// Landing-page CMS. ADMIN only: the copy is public-facing, and the screen
+	// can preview unreleased content, so it stays out of the staff group.
+	adminOnly("GET", "/api/v1/admin/landing")
+	adminOnly("PUT", "/api/v1/admin/landing")
+	adminOnly("POST", "/api/v1/admin/landing/publish", "/api/v1/admin/landing/revert")
 }

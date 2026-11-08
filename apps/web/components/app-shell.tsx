@@ -22,14 +22,17 @@ interface NavSection {
 
 // Every election is built in this order. On desktop these steps live in the
 // sidebar so they are reachable from anywhere inside the election; on mobile
-// they are the same list inside the navigation drawer.
-const ELECTION_STEPS: { key: string; label: string; icon: IconName; hash?: string }[] = [
+// they are the same list inside the navigation drawer. Each entry maps to a
+// page, so a step is never listed twice.
+const ELECTION_STEPS: {
+  key: string;
+  label: string;
+  icon: IconName;
+  hash?: string;
+}[] = [
   { key: "", label: "Details", icon: "file" },
-  { key: "", label: "Eligibility", icon: "shield", hash: "#eligibility" },
   { key: "positions", label: "Positions", icon: "ballot" },
   { key: "candidates", label: "Candidates", icon: "users" },
-  { key: "ballot", label: "Ballot", icon: "check" },
-  { key: "", label: "Schedule", icon: "cal", hash: "#schedule" },
   { key: "monitor", label: "Monitor", icon: "eye" },
   { key: "results", label: "Results", icon: "chart" },
   { key: "turnout", label: "Turnout", icon: "users" },
@@ -41,15 +44,12 @@ const ADMIN_SECTIONS: NavSection[] = [
     items: [
       { href: "/staff", label: "Dashboard", icon: "chart", exact: true },
       { href: "/elections", label: "All elections", icon: "ballot" },
-      { href: "/staff/positions", label: "Positions", icon: "file" },
+      { href: "/staff/landing", label: "Landing page", icon: "file" },
     ],
   },
   {
     heading: "My activity",
-    items: [
-      { href: "/candidate", label: "My candidacy", icon: "user" },
-      { href: "/account", label: "Account", icon: "shield" },
-    ],
+    items: [{ href: "/account", label: "Account", icon: "shield" }],
   },
 ];
 
@@ -135,8 +135,8 @@ export function AppShell({
       <aside className={`admin-side${open ? " open" : ""}`}>
         <div style={{ display: "flex", alignItems: "center" }}>
           <Link className="b" href={admin ? "/staff" : "/elections"} onClick={close}>
-            <Icon name="moon" />
-            campVote
+            <Icon name="ballot" />
+            CampVote
           </Link>
           <button type="button" className="close" aria-label="Close navigation" onClick={close}>
             <Icon name="x" />
@@ -144,16 +144,10 @@ export function AppShell({
         </div>
 
         {admin ? (
-          <>
-            <Link className="quick" href="/staff?new=1" onClick={close}>
-              <Icon name="plus" size="s" />
-              New election
-            </Link>
-            <Link className="quick" href="/staff/positions?new=1" onClick={close}>
-              <Icon name="plus" size="s" />
-              New position
-            </Link>
-          </>
+          <Link className="quick" href="/staff?new=1" onClick={close}>
+            <Icon name="plus" size="s" />
+            New election
+          </Link>
         ) : null}
 
         {admin && activeElectionId ? (
@@ -226,7 +220,7 @@ export function AppShell({
           >
             <Icon name="menu" />
           </button>
-          <b>{title ?? (admin ? "Admin" : "campVote")}</b>
+          <b>{title ?? (admin ? "Admin" : "CampVote")}</b>
           <span className="row" style={{ marginLeft: "auto" }}>
             <ThemeToggle />
             <span className="chip draft">{admin ? "Admin" : "Student voter"}</span>

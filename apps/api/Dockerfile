@@ -45,6 +45,17 @@ COPY --from=builder /out/seed      ./seed
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
+# The directory this image writes to, created before the drop to the unprivileged
+# user so it belongs to it. Both paths the config defaults resolve to under
+# /app live here: STORAGE_LOCAL_ROOT (storage/app) and MAIL_LOG_PATH
+# (storage/mail, where the log driver saves an HTML copy of every message).
+# docker-compose.yaml mounts a named volume over /app/storage, so its ownership
+# comes from these directories when Docker initialises the volume. Without this
+# the server starts fine and the first upload or email fails on permissions — a
+# runtime 500 rather than anything visible at boot.
+RUN mkdir -p /app/storage/app /app/storage/mail && \
+    chown -R app:app /app/storage
+
 USER app
 
 EXPOSE 8080

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"net/mail"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"campvote/apps/api/internal/eligibility"
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/respond"
+	"campvote/apps/api/internal/tally"
 )
 
 // CandidateHandler manages candidate nomination and approval workflow (ISSUE-06).
@@ -404,6 +406,147 @@ func (h *CandidateHandler) SetBallotPhoto(c *gin.Context) {
 	h.audit(c, candidate.ElectionID, models.AuditActionCandidateUpdated,
 		"Ballot photo updated: "+candidate.FullName)
 	respond.OK(c, candidate, "Ballot photo saved")
+}
+
+// SetManifesto lets an approved candidate publish, update or remove the
+// manifesto voters read before they vote. It accepts the manifesto text and/or
+// a link to a document; sending "clear" removes both. Like the ballot photo it
+// is refused once voting has opened, so a published campaign cannot change
+// underneath voters.
+func (h *CandidateHandler) SetManifesto(c *gin.Context) {
+	userID := c.GetString("user_id")
+	var input struct {
+		Manifesto    string `json:"manifesto"`
+		ManifestoURL string `json:"manifesto_url"`
+		Clear        bool   `json:"clear"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		respond.BadRequest(c, "Add your manifesto text or a link to a document")
+		return
+	}
+	manifesto := strings.TrimSpace(input.Manifesto)
+	manifestoURL := strings.TrimSpace(input.ManifestoURL)
+	if !input.Clear && manifesto == "" && manifestoURL == "" {
+		respond.BadRequest(c, "Add your manifesto text or a link to a document")
+		return
+	}
+	if len(manifesto) > 20000 {
+		respond.BadRequest(c, "Your manifesto is too long")
+		return
+	}
+	if !input.Clear && !storedFileURL(manifestoURL) {
+		respond.BadRequest(c, "Uploaded files must be links to this site or an https address")
+		return
+	}
+
+	var candidate models.Candidate
+	if err := h.DB.Where("id = ? AND nominated_by = ?", c.Param("candidate_id"), userID).
+		First(&candidate).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			respond.NotFound(c, "Application not found")
+			return
+		}
+		respond.Internal(c, err)
+		return
+	}
+	if candidate.ApprovalStatus != models.CandidateStatusApproved {
+		respond.Conflict(c, "Only an approved candidate may publish a manifesto")
+		return
+	}
+
+	var election models.Election
+	if err := h.DB.Where("id = ?", candidate.ElectionID).First(&election).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	if !h.now().Before(election.StartsAt) {
+		respond.Conflict(c, "The manifesto can no longer be changed because voting has opened")
+		return
+	}
+
+	// A removal clears both the text and the document link in one write.
+	if input.Clear {
+		manifesto = ""
+		manifestoURL = ""
+	}
+
+	if err := h.DB.Model(&candidate).
+		Updates(map[string]interface{}{"manifesto": manifesto, "manifesto_url": manifestoURL}).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	candidate.Manifesto = manifesto
+	candidate.ManifestoURL = manifestoURL
+	message := "Manifesto saved"
+	detail := "Manifesto updated: "
+	if input.Clear {
+		message = "Manifesto removed"
+		detail = "Manifesto removed: "
+	}
+	h.audit(c, candidate.ElectionID, models.AuditActionCandidateUpdated, detail+candidate.FullName)
+	respond.OK(c, candidate, message)
+}
+
+// CandidatesForVoters lists an election's approved candidates, with their
+// manifestos, to a voter who qualifies for the election. It answers before
+// voting opens so manifestos can be read in advance, and it exposes only the
+// public campaign fields — never the applicant's identity documents.
+func (h *CandidateHandler) CandidatesForVoters(c *gin.Context) {
+	electionID := c.Param("id")
+	var election models.Election
+	if err := h.DB.Where("id = ?", electionID).First(&election).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			respond.NotFound(c, "Election not found")
+			return
+		}
+		respond.Internal(c, err)
+		return
+	}
+	user := requestUser(c)
+	if user == nil {
+		respond.Fail(c, respond.CodeUnauthorized, "Not signed in")
+		return
+	}
+
+	allowed := false
+	if identity, parsed := eligibility.ParseEmail(user.Email); parsed {
+		allowed = eligibility.RuleAllows(&election, identity)
+	}
+	if !allowed {
+		var roleCount int64
+		h.DB.Model(&models.ElectionRole{}).
+			Where("election_id = ? AND user_id = ?", election.ID, user.ID).Count(&roleCount)
+		allowed = roleCount > 0
+	}
+	// Once an election has closed its candidate list is public record, so any
+	// signed-in student may read it even where they could not have voted. This
+	// is what makes a closed result understandable to the whole campus.
+	if !allowed {
+		allowed = election.Status == models.ElectionStatusClosed
+	}
+	if !allowed {
+		respond.Forbidden(c, "This election is not open to you")
+		return
+	}
+
+	content, err := BallotContentFor(h.DB, election.ID)
+	if err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	// A position with no approved candidates has nothing to read; leave it out.
+	positions := make([]models.BallotPositionContent, 0, len(content.Positions))
+	for _, position := range content.Positions {
+		if len(position.Candidates) > 0 {
+			positions = append(positions, position)
+		}
+	}
+	respond.OK(c, gin.H{
+		"election_id": election.ID,
+		"title":       election.Title,
+		"status":      election.Status,
+		"positions":   positions,
+	})
 }
 
 // applicationWindow decides whether candidates may still apply. Voting opening
@@ -887,13 +1030,13 @@ func (h *CandidateHandler) GetMyCandidacies(c *gin.Context) {
 		electionIDs = append(electionIDs, candidate.ElectionID)
 		positionIDs = append(positionIDs, candidate.PositionID)
 	}
-	electionNames := map[string]string{}
+	electionByID := map[string]models.Election{}
 	positionNames := map[string]string{}
 	if len(electionIDs) > 0 {
 		var elections []models.Election
 		h.DB.Where("id IN ?", electionIDs).Find(&elections)
 		for _, election := range elections {
-			electionNames[election.ID] = election.Title
+			electionByID[election.ID] = election
 		}
 		var positions []models.Position
 		h.DB.Where("id IN ?", positionIDs).Find(&positions)
@@ -902,13 +1045,79 @@ func (h *CandidateHandler) GetMyCandidacies(c *gin.Context) {
 		}
 	}
 
+	// A closed election is finished for the candidate: voting has ended so the
+	// manifesto is locked and the count is in. Their own line from the stored
+	// snapshot is a figure about them, never about any voter, so it is safe to
+	// return. An open election is still live, so nothing is reported yet.
+	candidacyResults := map[string]tally.ResultRow{}
+	for _, candidate := range candidates {
+		if electionByID[candidate.ElectionID].Status != models.ElectionStatusClosed {
+			continue
+		}
+		if row, found := h.candidacyResultRow(candidate.ElectionID, candidate); found {
+			candidacyResults[candidate.ID] = row
+		}
+	}
+
 	out := make([]gin.H, 0, len(candidates))
 	for _, candidate := range candidates {
-		out = append(out, gin.H{
-			"candidate":      candidate,
-			"election_title": electionNames[candidate.ElectionID],
-			"position_title": positionNames[candidate.PositionID],
-		})
+		election := electionByID[candidate.ElectionID]
+		entry := gin.H{
+			"candidate":          candidate,
+			"election_title":     election.Title,
+			"election_status":    election.Status,
+			"election_starts_at": election.StartsAt,
+			"election_ends_at":   election.EndsAt,
+			"position_title":     positionNames[candidate.PositionID],
+		}
+		if row, ok := candidacyResults[candidate.ID]; ok {
+			entry["result"] = gin.H{
+				"position_title":  positionNames[candidate.PositionID],
+				"votes":           row.Votes,
+				"share_percent":   row.SharePercent,
+				"is_winner":       row.IsWinner,
+				"is_tie":          row.IsTie,
+				"snapshot_status": h.candidacySnapshotStatus(candidate.ElectionID),
+			}
+		}
+		out = append(out, entry)
 	}
 	respond.OK(c, gin.H{"candidates": out})
+}
+
+// candidacyResultRow finds the candidate's own line in the latest non-superseded
+// snapshot of a closed election. It reads the stored tally; it never recounts,
+// so what the candidate sees matches what everyone else was shown.
+func (h *CandidateHandler) candidacyResultRow(electionID string, candidate models.Candidate) (tally.ResultRow, bool) {
+	var snapshot models.ResultSnapshot
+	if err := h.DB.Where("election_id = ? AND superseded_by_id IS NULL", electionID).
+		Order("version DESC").First(&snapshot).Error; err != nil {
+		return tally.ResultRow{}, false
+	}
+	var result tally.Result
+	if err := json.Unmarshal([]byte(snapshot.ContentJSON), &result); err != nil {
+		return tally.ResultRow{}, false
+	}
+	for _, position := range result.Positions {
+		if position.PositionID != candidate.PositionID {
+			continue
+		}
+		for _, row := range position.Rows {
+			if row.CandidateID == candidate.ID {
+				return row, true
+			}
+		}
+	}
+	return tally.ResultRow{}, false
+}
+
+// candidacySnapshotStatus names the state of the published count so the pane can
+// label it: a certified figure is final, a provisional one is still provisional.
+func (h *CandidateHandler) candidacySnapshotStatus(electionID string) string {
+	var snapshot models.ResultSnapshot
+	if err := h.DB.Where("election_id = ? AND superseded_by_id IS NULL", electionID).
+		Order("version DESC").First(&snapshot).Error; err != nil {
+		return ""
+	}
+	return snapshot.Status
 }

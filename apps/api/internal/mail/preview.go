@@ -93,7 +93,9 @@ func builtIn(name, description, subject string, sample func() map[string]interfa
 		Description: description,
 		Render: func() (*Message, error) {
 			data := sample()
-			data["AppName"] = appNameOr("")
+			if data["AppName"] == nil {
+				data["AppName"] = appNameOr("CampVote")
+			}
 			data["Year"] = time.Now().Year()
 			var m Mailer
 			html, err := m.renderTemplate(name, data)
@@ -116,12 +118,16 @@ func init() {
 	builtIn("password-reset", "Sent when a user asks to reset their password", "Reset your password", func() map[string]interface{} {
 		return map[string]interface{}{"ResetURL": "https://example.com/reset-password?token=sample"}
 	})
-	builtIn("email-verification", "Sent to confirm a user's email address", "Confirm your email address", func() map[string]interface{} {
+	builtIn("email-verification", "Sent to confirm a user's email address", "Your CampVote sign-in code", func() map[string]interface{} {
 		return map[string]interface{}{
-			"Title":   "Confirm your email address",
-			"Message": "Enter this code on the verification page to confirm this address.",
-			"Code":    "418902",
-			"Minutes": 10,
+			"AppName":        "CampVote",
+			"FirstName":      "Esther",
+			"Title":          "Your verification code",
+			"Message":        "Enter this code in CampVote to finish signing in.",
+			"Code":           "482913",
+			"Minutes":        10,
+			"RecipientEmail": "esther.k@std.must.ac.ug",
+			"SupportEmail":   "support@campvote.example",
 		}
 	})
 	builtIn("notification", "A general notification with an optional button", "New activity", func() map[string]interface{} {

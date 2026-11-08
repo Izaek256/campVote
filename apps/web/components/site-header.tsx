@@ -25,7 +25,7 @@ export function SiteHeader() {
       <div className="pubnav">
         <Link className="brand" href="/">
           <span className="mark">
-            <Icon name="moon" size="l" />
+            <Icon name="ballot" size="l" />
           </span>
           <span>
             camp<b>Vote</b>

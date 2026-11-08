@@ -17,9 +17,10 @@ function StatusView({ id }: { id: string }) {
   const toast = useToast();
   const [election, setElection] = useState<Election | null>(null);
   const [status, setStatus] = useState<VoteStatus | null>(null);
-  const [loadError, setLoadError] = useState<{ message: string; unauthorized: boolean } | null>(
-    null
-  );
+  const [loadError, setLoadError] = useState<{
+    message: string;
+    unauthorized: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let active = true;

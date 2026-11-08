@@ -201,6 +201,31 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
+	// An administrator cannot remove the last way into administration, and
+	// cannot lock themselves out. Both are checked before the write so the
+	// response names the reason rather than leaving an empty admin console.
+	if user.Role == models.RoleAdmin {
+		losingAdmin := (req.Active != nil && !*req.Active) ||
+			(req.Role != "" && req.Role != models.RoleAdmin)
+		if losingAdmin {
+			if c.GetString("user_id") == user.ID {
+				respond.Fail(c, respond.CodeForbidden, "You cannot deactivate or demote your own administrator account.")
+				return
+			}
+			var otherAdmins int64
+			if err := h.DB.Model(&models.User{}).
+				Where("role = ? AND active = ? AND id <> ?", models.RoleAdmin, true, user.ID).
+				Count(&otherAdmins).Error; err != nil {
+				respond.Internal(c, err)
+				return
+			}
+			if otherAdmins == 0 {
+				respond.Fail(c, respond.CodeConflict, "This is the last active administrator. Invite or reactivate another administrator first.")
+				return
+			}
+		}
+	}
+
 	updates := map[string]interface{}{}
 	if req.FirstName != "" {
 		updates["first_name"] = req.FirstName
