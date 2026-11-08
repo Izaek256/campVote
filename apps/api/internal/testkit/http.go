@@ -2,6 +2,7 @@ package testkit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -77,7 +78,7 @@ func (c *Client) DoRaw(method, path, contentType string, body []byte) *Response 
 	if body != nil {
 		reader = bytes.NewReader(body)
 	}
-	req := httptest.NewRequest(method, path, reader)
+	req := httptest.NewRequest(method, path, reader).WithContext(context.Background())
 	for key, values := range c.header {
 		for _, value := range values {
 			req.Header.Add(key, value)
@@ -105,7 +106,7 @@ func (c *Client) Do(method, path string, body any) *Response {
 		reader = bytes.NewReader(encoded)
 	}
 
-	req := httptest.NewRequest(method, path, reader)
+	req := httptest.NewRequest(method, path, reader).WithContext(context.Background())
 	for key, values := range c.header {
 		for _, value := range values {
 			req.Header.Add(key, value)
