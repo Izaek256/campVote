@@ -810,6 +810,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	}
 	cronHandler := &handlers.CronHandler{}
 	blogHandler := handlers.NewBlogHandler(db)
+	landingHandler := handlers.NewLandingHandler(db)
 	totpHandler := &handlers.TOTPHandler{
 		DB:          db,
 		AuthService: authService,
@@ -1197,6 +1198,19 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	{
 		blogs.GET("", blogHandler.ListPublished)
 		blogs.GET("/:slug", blogHandler.GetBySlug)
+	}
+
+	// Public landing-page routes (no auth required).
+	//
+	// These are deliberately open rather than keyed: the landing page is the
+	// first thing an anonymous visitor sees, and a key would mean shipping it
+	// in the page for no real gain. Sentinel rate-limits them by IP like every
+	// other path, the handlers set Cache-Control, and both serve only
+	// whitelisted, non-identifying fields: the published copy, and a handful of
+	// aggregate facts about upcoming elections.
+	{
+		v1.GET("/public/landing", landingHandler.Public)
+		v1.GET("/public/elections/upcoming", landingHandler.UpcomingElections)
 	}
 
 	// Public API surface, for clients with no logged-in user: a storefront, a
@@ -1671,6 +1685,15 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		// is being changed and a route can only know one.
 		admin.PUT("/settings", settingsHandler.Update)
 		admin.DELETE("/settings/:key", settingsHandler.Reset)
+
+		// Landing-page content. The group's ADMIN requirement is the gate; the
+		// handlers re-check nothing extra because only administrators ever
+		// reach them. Editing works on a draft and "publish" takes it live, so
+		// a half-finished edit is never what the public page serves.
+		admin.GET("/admin/landing", landingHandler.AdminGet)
+		admin.PUT("/admin/landing", landingHandler.AdminSave)
+		admin.POST("/admin/landing/publish", landingHandler.AdminPublish)
+		admin.POST("/admin/landing/revert", landingHandler.AdminRevert)
 
 		// grit:routes:admin
 	}

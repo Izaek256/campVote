@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"campvote/apps/api/internal/ids"
+
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -189,6 +190,10 @@ func Models() []interface{} {
 		&ResultSnapshot{},
 		&ResultRecount{},
 		&ElectionAuditLog{},
+		// Public landing-page content (draft rows + published snapshot).
+		&LandingSettings{},
+		&LandingFeature{},
+		&LandingFAQ{},
 		// grit:models
 	}
 }

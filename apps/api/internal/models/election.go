@@ -76,6 +76,13 @@ type Election struct {
 	AllowedDomains string `gorm:"size:255" json:"allowed_domains,omitempty"`
 	RequireRoster  bool   `gorm:"default:false" json:"require_roster"`
 
+	// PublicListing opts an election into the public landing page's "upcoming
+	// elections" list. Drafts are private to their creator, so publishing an
+	// upcoming poll to the open web is an explicit, per-election decision and
+	// this column defaults to false. Only whitelisted, non-identifying fields
+	// are ever served from it (see the public handlers).
+	PublicListing bool `gorm:"default:false;index" json:"public_listing"`
+
 	// EligibilityFrozenAt is set when voting opens. The roster is the evidence
 	// of who may vote; after this point new entries are refused and only
 	// revocations (with audit) are accepted. FrozenCount is the eligible count

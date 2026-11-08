@@ -6,3 +6,4 @@ export * from "./position";
 export * from "./session";
 export * from "./role";
 export * from "./user-role";
+export * from "./landing";

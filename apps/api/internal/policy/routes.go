@@ -25,6 +25,9 @@ func init() {
 		"/api/v1/auth/totp/verify", "/api/v1/auth/totp/backup-codes/verify",
 		"/api/v1/auth/sso/discover", "/api/v1/auth/saml/:slug/acs")
 	public("POST", "/api/v1/public/forms/:token/submit")
+	// The landing page and its upcoming-elections list. Anonymous by design;
+	// both serve only published copy and whitelisted aggregate fields.
+	public("GET", "/api/v1/public/landing", "/api/v1/public/elections/upcoming")
 	// Provider signature verification is the boundary, not a session.
 	public("POST", "/webhooks/:provider")
 	// The WebSocket and SSE handshakes authenticate from the cookie or token in
@@ -228,4 +231,9 @@ func init() {
 		"/api/v1/admin/form-shares", "/api/v1/admin/form-shares/resources",
 		"/api/v1/admin/form-shares/resources/:resource/fields",
 		"/api/v1/admin/form-submissions")
+	// Landing-page CMS. ADMIN only: the copy is public-facing, and the screen
+	// can preview unreleased content, so it stays out of the staff group.
+	adminOnly("GET", "/api/v1/admin/landing")
+	adminOnly("PUT", "/api/v1/admin/landing")
+	adminOnly("POST", "/api/v1/admin/landing/publish", "/api/v1/admin/landing/revert")
 }

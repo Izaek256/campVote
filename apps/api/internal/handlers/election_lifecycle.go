@@ -75,6 +75,10 @@ type createElectionRequest struct {
 	AllowedDomain  string `json:"allowed_domain"`
 	AllowedYears   string `json:"allowed_years"`
 	AllowedCourses string `json:"allowed_courses"`
+	// PublicListing opts the election into the public landing page's upcoming
+	// list. Off by default: a draft is private until an administrator says
+	// otherwise.
+	PublicListing bool `json:"public_listing"`
 }
 
 // Create writes a new DRAFT election. Scheduling is a separate, validated
@@ -107,6 +111,7 @@ func (h *ElectionLifecycleHandler) Create(c *gin.Context) {
 		AllowedDomain:  strings.ToLower(strings.TrimPrefix(strings.TrimSpace(in.AllowedDomain), "@")),
 		AllowedYears:   strings.TrimSpace(in.AllowedYears),
 		AllowedCourses: strings.ToLower(strings.TrimSpace(in.AllowedCourses)),
+		PublicListing:  in.PublicListing,
 		CreatedByID:    c.GetString("user_id"),
 	}
 	if election.Category == "" {
@@ -387,6 +392,7 @@ type updateElectionRequest struct {
 	AllowedDomain  *string `json:"allowed_domain"`
 	AllowedYears   *string `json:"allowed_years"`
 	AllowedCourses *string `json:"allowed_courses"`
+	PublicListing  *bool   `json:"public_listing"`
 	Reason         string  `json:"reason"`
 }
 
@@ -433,6 +439,9 @@ func (h *ElectionLifecycleHandler) Update(c *gin.Context) {
 	}
 	if in.AllowedCourses != nil {
 		updated.AllowedCourses = strings.ToLower(strings.TrimSpace(*in.AllowedCourses))
+	}
+	if in.PublicListing != nil {
+		updated.PublicListing = *in.PublicListing
 	}
 	if in.StartsAt != nil {
 		startsAt, ok := scheduleField(c, "starts_at", *in.StartsAt)
@@ -688,6 +697,9 @@ func changedElectionFields(before, after models.Election) []string {
 	if before.AllowedCourses != after.AllowedCourses {
 		changed = append(changed, "allowed_courses")
 	}
+	if before.PublicListing != after.PublicListing {
+		changed = append(changed, "public_listing")
+	}
 	return changed
 }
 
@@ -703,6 +715,7 @@ func electionUpdateValues(e *models.Election) map[string]interface{} {
 		"allowed_domain":  e.AllowedDomain,
 		"allowed_years":   e.AllowedYears,
 		"allowed_courses": e.AllowedCourses,
+		"public_listing":  e.PublicListing,
 	}
 }
 
