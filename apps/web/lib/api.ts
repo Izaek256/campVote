@@ -1,6 +1,7 @@
+import type { LandingAdminState, LandingDraft } from "@campvote/shared/types/index";
 import type {
-  AuthPayload,
   AuthChallenge,
+  AuthPayload,
   Ballot,
   BallotContent,
   Candidate,
@@ -541,4 +542,17 @@ export const elections = {
       `/elections/${id}/results/certify`,
       { method: "POST", body: { snapshot_id: snapshotId, reason } }
     ),
+};
+
+/**
+ * The landing-page CMS. Editing writes a draft; publish snapshots it for the
+ * public page. Every action returns the fresh editor state except publish,
+ * which returns only the new snapshot, so callers reload after it.
+ */
+export const landing = {
+  get: () => api<LandingAdminState>("/admin/landing"),
+  save: (draft: LandingDraft) =>
+    api<LandingAdminState>("/admin/landing", { method: "PUT", body: draft }),
+  publish: () => api<Partial<LandingAdminState>>("/admin/landing/publish", { method: "POST" }),
+  revert: () => api<LandingAdminState>("/admin/landing/revert", { method: "POST" }),
 };

@@ -47,6 +47,7 @@ function election(overrides: Partial<Election> = {}): Election {
     accepting_votes: false,
     display_timezone: "Africa/Kampala",
     allowed_transitions: null,
+    public_listing: false,
     ...overrides,
   };
 }

@@ -24,3 +24,12 @@ export const STUDENT_EMAIL_EXAMPLE =
  * instead of silently falling back to another method.
  */
 export const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() || "";
+
+/**
+ * Absolute origin used for canonical and social-preview URLs. Vercel exposes
+ * the deployment host without a scheme, so it needs one added. The localhost
+ * fallback keeps local builds working; set NEXT_PUBLIC_SITE_URL in deployment.
+ */
+export const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");

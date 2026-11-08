@@ -55,6 +55,8 @@ export interface Election {
   accepting_votes: boolean;
   display_timezone: string;
   allowed_transitions: ElectionStatus[] | null;
+  /** Listed on the public landing page while it is still a draft. */
+  public_listing: boolean;
   my_vote_status?: VoteStatus;
 }
 

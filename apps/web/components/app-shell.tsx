@@ -44,6 +44,7 @@ const ADMIN_SECTIONS: NavSection[] = [
     items: [
       { href: "/staff", label: "Dashboard", icon: "chart", exact: true },
       { href: "/elections", label: "All elections", icon: "ballot" },
+      { href: "/staff/landing", label: "Landing page", icon: "file" },
     ],
   },
   {

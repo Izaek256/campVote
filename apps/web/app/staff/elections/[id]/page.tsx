@@ -12,8 +12,8 @@ import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
 import { ApiError, candidates, elections, positions } from "@/lib/api";
 import {
-  EAT,
   categoryLabel,
+  EAT,
   formatEAT,
   formatNumber,
   formatPercent,
@@ -89,6 +89,7 @@ function Manage({ id }: { id: string }) {
     title: "",
     starts_at: "",
     ends_at: "",
+    public_listing: false,
     reason: "",
   });
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -117,6 +118,7 @@ function Manage({ id }: { id: string }) {
         title: current.title,
         starts_at: toEatInput(current.starts_at),
         ends_at: toEatInput(current.ends_at),
+        public_listing: current.public_listing,
         reason: "",
       });
       setEligibility({
@@ -206,6 +208,7 @@ function Manage({ id }: { id: string }) {
           title: form.title,
           starts_at: toISO(form.starts_at),
           ends_at: toISO(form.ends_at),
+          public_listing: form.public_listing,
           reason: form.reason,
         }),
       "Configuration saved."
@@ -704,6 +707,24 @@ function Manage({ id }: { id: string }) {
                     ))}
                   </div>
                   <span className="hint">Any custom length is allowed too.</span>
+                </div>
+                <div className="field full">
+                  <label className="chk">
+                    <input
+                      type="checkbox"
+                      checked={form.public_listing}
+                      disabled={frozen}
+                      onChange={(event) =>
+                        setForm({ ...form, public_listing: event.target.checked })
+                      }
+                    />
+                    <span>List this election on the public landing page</span>
+                  </label>
+                  <span className="hint">
+                    {frozen
+                      ? "The configuration is locked after voting opens."
+                      : "Shows the title, category, dates and position count on the public page until voting opens. No voter or ballot data is exposed."}
+                  </span>
                 </div>
               </div>
               <div className="field">

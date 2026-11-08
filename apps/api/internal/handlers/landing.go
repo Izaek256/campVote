@@ -78,16 +78,21 @@ type publicUpcomingElection struct {
 
 // UpcomingElections returns publicly listed elections that have not opened yet.
 //
-// "Upcoming" means a DRAFT election, opted in with public_listing, whose
-// opening time is still in the future. Drafts stay private unless an
-// administrator explicitly lists them, and OPEN / CLOSED / cancelled elections
-// are never returned.
+// This codebase's lifecycle has three states (DRAFT, OPEN, CLOSED), so the
+// SRS's Registration/Scheduled stages are represented by "not yet open": an
+// election is in DRAFT with a future start. It only appears here after an
+// administrator explicitly opts it in with public_listing, which is the
+// "publicly visible" half of the rule; an unlisted draft never leaves the
+// admin area. OPEN and CLOSED elections are never returned, and the public
+// status label is derived ("registration" while applications are open,
+// otherwise "scheduled") so the word DRAFT never reaches a visitor.
 func (h *LandingHandler) UpcomingElections(c *gin.Context) {
 	now := time.Now().UTC()
 
 	var elections []models.Election
 	if err := h.DB.
-		Where("public_listing = ? AND status = ? AND starts_at > ?", true, models.ElectionStatusDraft, now).
+		Where("public_listing = ? AND status = ? AND starts_at > ? AND ends_at > ?",
+			true, models.ElectionStatusDraft, now, now).
 		Order("starts_at asc").
 		Limit(20).
 		Find(&elections).Error; err != nil {
@@ -161,17 +166,37 @@ type landingFAQPayload struct {
 }
 
 type landingDraftPayload struct {
-	Hero     landing.Hero              `json:"hero"`
-	Banner   landing.Banner            `json:"banner"`
-	Ticker   []string                  `json:"ticker"`
-	How      landing.How               `json:"how"`
-	Features []landingFeaturePayload   `json:"features"`
-	FAQs     []landingFAQPayload       `json:"faqs"`
-	Footer   landing.Footer            `json:"footer"`
+	Hero     landing.Hero            `json:"hero"`
+	Banner   landing.Banner          `json:"banner"`
+	Ticker   []string                `json:"ticker"`
+	How      landing.How             `json:"how"`
+	Features []landingFeaturePayload `json:"features"`
+	FAQs     []landingFAQPayload     `json:"faqs"`
+	Footer   landing.Footer          `json:"footer"`
+}
+
+// featureVisible and faqVisible read the optional visibility flags in payload
+// order. A missing flag means visible, so older clients that never sent one
+// keep every item on the page.
+func (p landingDraftPayload) featureVisible() []bool {
+	out := make([]bool, len(p.Features))
+	for i, f := range p.Features {
+		out[i] = f.Visible == nil || *f.Visible
+	}
+	return out
+}
+
+func (p landingDraftPayload) faqVisible() []bool {
+	out := make([]bool, len(p.FAQs))
+	for i, q := range p.FAQs {
+		out[i] = q.Visible == nil || *q.Visible
+	}
+	return out
 }
 
 // document converts the payload to the validated, storable shape. Item ids and
-// visibility are dropped: validation and storage treat every item the same way.
+// visibility are dropped here; visibility is stored alongside the rows so the
+// editor can hide an item without deleting it.
 func (p landingDraftPayload) document() landing.Document {
 	doc := landing.Document{
 		Hero:   p.Hero,
@@ -237,7 +262,7 @@ func (h *LandingHandler) AdminSave(c *gin.Context) {
 		if err := writeSettings(tx, doc, userID); err != nil {
 			return err
 		}
-		return writeItems(tx, doc, userID)
+		return writeItems(tx, doc, userID, payload.featureVisible(), payload.faqVisible())
 	})
 	if err != nil {
 		respond.Fail(c, respond.CodeInternalError, "Failed to save landing content")
@@ -312,10 +337,10 @@ func (h *LandingHandler) AdminPublish(c *gin.Context) {
 	})
 
 	respond.OK(c, gin.H{
-		"published":      doc,
-		"has_published":  true,
-		"published_at":   now,
-		"dirty":          false,
+		"published":     doc,
+		"has_published": true,
+		"published_at":  now,
+		"dirty":         false,
 	}, "Landing page published")
 }
 
@@ -341,7 +366,7 @@ func (h *LandingHandler) AdminRevert(c *gin.Context) {
 		if err := writeSettings(tx, doc, userID); err != nil {
 			return err
 		}
-		return writeItems(tx, doc, userID)
+		return writeItems(tx, doc, userID, nil, nil)
 	})
 	if err != nil {
 		respond.Fail(c, respond.CodeInternalError, "Failed to revert landing content")
@@ -384,7 +409,7 @@ func (h *LandingHandler) loadDraft() (models.LandingSettings, []models.LandingFe
 			if err := writeSettings(tx, doc, ""); err != nil {
 				return err
 			}
-			return writeItems(tx, doc, "")
+			return writeItems(tx, doc, "", nil, nil)
 		}); err != nil {
 			return s, nil, nil, err
 		}
@@ -407,41 +432,72 @@ func (h *LandingHandler) loadDraft() (models.LandingSettings, []models.LandingFe
 }
 
 // writeSettings upserts the settings row scalars from doc.
+//
+// For an existing row it uses a map-based Updates call rather than Save so that
+// zero-value bools (e.g. banner_enabled = false) are always written. GORM's
+// Save skips zero-value fields that carry a default tag, which would leave a
+// previously-enabled banner stuck as true when an administrator unchecks it.
 func writeSettings(tx *gorm.DB, doc landing.Document, userID string) error {
-	var s models.LandingSettings
-	err := tx.First(&s, "id = ?", models.LandingSettingsID).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		s = models.LandingSettings{ID: models.LandingSettingsID}
-	} else if err != nil {
-		return err
-	}
-
-	s.HeroHeadline = doc.Hero.Headline
-	s.HeroSubtext = doc.Hero.Subtext
-	s.HeroPrimaryLabel = doc.Hero.PrimaryLabel
-	s.HeroSecondaryLabel = doc.Hero.SecondaryLabel
-	s.BannerEnabled = doc.Banner.Enabled
-	s.BannerText = doc.Banner.Text
-	s.BannerLink = doc.Banner.Link
-	s.BannerStartsAt = doc.Banner.StartsAt
-	s.BannerEndsAt = doc.Banner.EndsAt
-	s.TickerPhrases = strings.Join(doc.Ticker, "\n")
 	steps, err := json.Marshal(doc.How.Steps)
 	if err != nil {
 		return err
 	}
-	s.HowSteps = string(steps)
-	s.FooterText = doc.Footer.Text
-	s.SupportEmail = doc.Footer.SupportEmail
-	s.UpdatedByID = userID
 
-	return tx.Save(&s).Error
+	var s models.LandingSettings
+	err = tx.First(&s, "id = ?", models.LandingSettingsID).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// New row: Create with the struct. Zero-value bools pick up the DB
+		// default (false), which is correct for a fresh install.
+		s = models.LandingSettings{
+			ID:                 models.LandingSettingsID,
+			HeroHeadline:       doc.Hero.Headline,
+			HeroSubtext:         doc.Hero.Subtext,
+			HeroPrimaryLabel:   doc.Hero.PrimaryLabel,
+			HeroSecondaryLabel: doc.Hero.SecondaryLabel,
+			BannerEnabled:      doc.Banner.Enabled,
+			BannerText:         doc.Banner.Text,
+			BannerLink:         doc.Banner.Link,
+			BannerStartsAt:     doc.Banner.StartsAt,
+			BannerEndsAt:       doc.Banner.EndsAt,
+			TickerPhrases:      strings.Join(doc.Ticker, "\n"),
+			HowSteps:           string(steps),
+			FooterText:         doc.Footer.Text,
+			SupportEmail:       doc.Footer.SupportEmail,
+			UpdatedByID:        userID,
+		}
+		return tx.Create(&s).Error
+	} else if err != nil {
+		return err
+	}
+
+	// Existing row: map-based Updates writes every key, including zero-value
+	// bools, so unchecking the banner (or any other toggle) takes effect.
+	return tx.Model(&models.LandingSettings{}).
+		Where("id = ?", models.LandingSettingsID).
+		Updates(map[string]interface{}{
+			"hero_headline":        doc.Hero.Headline,
+			"hero_subtext":         doc.Hero.Subtext,
+			"hero_primary_label":    doc.Hero.PrimaryLabel,
+			"hero_secondary_label": doc.Hero.SecondaryLabel,
+			"banner_enabled":       doc.Banner.Enabled,
+			"banner_text":           doc.Banner.Text,
+			"banner_link":           doc.Banner.Link,
+			"banner_starts_at":      doc.Banner.StartsAt,
+			"banner_ends_at":        doc.Banner.EndsAt,
+			"ticker_phrases":        strings.Join(doc.Ticker, "\n"),
+			"how_steps":             string(steps),
+			"footer_text":           doc.Footer.Text,
+			"support_email":         doc.Footer.SupportEmail,
+			"updated_by_id":         userID,
+		}).Error
 }
 
 // writeItems replaces every feature and FAQ row with the draft's items, in
 // order. Replace-all is correct here because the draft is saved as a whole
-// document; it also removes rows the editor deleted.
-func writeItems(tx *gorm.DB, doc landing.Document, userID string) error {
+// document; it also applies reordering and removes rows the editor deleted.
+// visible is parallel to the document lists; nil means "all visible", which is
+// what revert and seeding want.
+func writeItems(tx *gorm.DB, doc landing.Document, userID string, featureVisible, faqVisible []bool) error {
 	if err := tx.Where("1 = 1").Delete(&models.LandingFeature{}).Error; err != nil {
 		return err
 	}
@@ -449,24 +505,47 @@ func writeItems(tx *gorm.DB, doc landing.Document, userID string) error {
 		return err
 	}
 	for i, f := range doc.Features {
+		visible := visibleAt(featureVisible, i)
 		row := models.LandingFeature{
 			IconKey: f.Icon, Title: f.Title, Body: f.Text,
-			SortOrder: i, Visible: true, UpdatedByID: userID,
+			SortOrder: i, Visible: visible, UpdatedByID: userID,
 		}
 		if err := tx.Create(&row).Error; err != nil {
 			return err
+		}
+		if !visible {
+			// GORM's `default:true` replaces a false zero value on Create, so
+			// set the stored flag explicitly.
+			if err := tx.Model(&models.LandingFeature{}).Where("id = ?", row.ID).
+				Update("visible", false).Error; err != nil {
+				return err
+			}
 		}
 	}
 	for i, q := range doc.FAQs {
+		visible := visibleAt(faqVisible, i)
 		row := models.LandingFAQ{
 			Question: q.Question, Answer: q.Answer,
-			SortOrder: i, Visible: true, UpdatedByID: userID,
+			SortOrder: i, Visible: visible, UpdatedByID: userID,
 		}
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
+		if !visible {
+			if err := tx.Model(&models.LandingFAQ{}).Where("id = ?", row.ID).
+				Update("visible", false).Error; err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+func visibleAt(flags []bool, i int) bool {
+	if i >= len(flags) {
+		return true
+	}
+	return flags[i]
 }
 
 // documentFromRows rebuilds the document from the draft rows.

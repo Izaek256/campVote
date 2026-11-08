@@ -346,6 +346,50 @@ func TestLandingPublishOmitsHiddenItems(t *testing.T) {
 	}
 }
 
+// TestLandingAdminSavePersistsVisibilityAndOrder proves the editor's two list
+// controls survive a save: hidden items stay in the draft but not on the
+// public page, and the order the editor sends is the order published.
+func TestLandingAdminSavePersistsVisibilityAndOrder(t *testing.T) {
+	db := rbacDB(t)
+	client := testkit.New(t, landingEngine(t, db))
+	admin := testkit.User(t, db, "admin@must.ac.ug", models.RoleAdmin)
+	token := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), admin)
+
+	body := landingBody("Visibility test")
+	body["features"] = []map[string]any{
+		{"icon": "turnout", "title": "Second card", "text": "Hidden from the page.", "visible": false},
+		{"icon": "elections", "title": "First card", "text": "The one that remains.", "visible": true},
+	}
+	client.As(token).Put("/api/v1/admin/landing", body).AssertOK()
+
+	var state struct {
+		Draft struct {
+			Features []struct {
+				Title   string `json:"title"`
+				Visible bool   `json:"visible"`
+			} `json:"features"`
+		} `json:"draft"`
+		Dirty bool `json:"dirty"`
+	}
+	client.As(token).Get("/api/v1/admin/landing").AssertOK().BindData(&state)
+	if len(state.Draft.Features) != 2 {
+		t.Fatalf("draft features = %d, want both rows kept", len(state.Draft.Features))
+	}
+	if state.Draft.Features[0].Title != "Second card" || state.Draft.Features[0].Visible {
+		t.Fatalf("first draft row = %+v, want the hidden card in its saved position", state.Draft.Features[0])
+	}
+	if state.Draft.Features[1].Title != "First card" || !state.Draft.Features[1].Visible {
+		t.Fatalf("second draft row = %+v, want the visible card in its saved position", state.Draft.Features[1])
+	}
+
+	client.As(token).Post("/api/v1/admin/landing/publish", nil).AssertOK()
+	var published landing.Document
+	client.Get("/api/v1/public/landing").AssertOK().BindData(&published)
+	if len(published.Features) != 1 || published.Features[0].Title != "First card" {
+		t.Fatalf("published features = %+v, want only the visible card", published.Features)
+	}
+}
+
 // TestLandingUpcomingIsOpenWithoutCredentials pins the promise that the landing
 // reads need no token: an anonymous request must not be refused.
 func TestLandingUpcomingIsOpenWithoutCredentials(t *testing.T) {

@@ -120,7 +120,9 @@ const (
 func Default() Document {
 	return Document{
 		Hero: Hero{
-			Headline:       "Vote once.\nKeep it secret.\nTrust the result.",
+			// The asterisks are the hero's only formatting: the web renderer
+			// colours that word green and interprets nothing else.
+			Headline:       "Vote once.\nKeep it *secret.*\nTrust the result.",
 			Subtext:        "campVote runs guild and campus elections end to end: eligibility, secret ballots, live turnout, and certified results, on any phone.",
 			PrimaryLabel:   "Sign in with campus Google",
 			SecondaryLabel: "See how voting works",

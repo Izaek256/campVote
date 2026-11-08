@@ -105,7 +105,7 @@ function ResetPasswordForm() {
         <div className="row" style={{ justifyContent: "flex-end", marginBottom: 4 }}>
           <ThemeToggle />
         </div>
-        <Link className="brand row" href="/login" style={{ marginBottom: 24 }}>
+        <Link className="brand row" href="/" style={{ marginBottom: 24 }}>
           <span className="mark">
             <Icon name="ballot" size="l" />
           </span>

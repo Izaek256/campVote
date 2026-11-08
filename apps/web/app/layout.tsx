@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script
           dangerouslySetInnerHTML={{
             __html:
-              'try{var t=localStorage.getItem("theme");if(t&&t!=="system"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}',
+              'try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}',
           }}
         />
       </head>

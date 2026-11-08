@@ -306,6 +306,10 @@ func Migrate(db *gorm.DB) error {
 		return fmt.Errorf("adding Google identity index: %w", err)
 	}
 
+	if err := migrations.AddLandingIndexes(db); err != nil {
+		return fmt.Errorf("adding landing page indexes: %w", err)
+	}
+
 	log.Println(separator)
 	return nil
 }
