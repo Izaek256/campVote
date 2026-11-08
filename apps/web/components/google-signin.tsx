@@ -203,6 +203,7 @@ export function GoogleSignInButton({
       const container = containerRef.current;
       if (!googleId || !container) return;
       container.replaceChildren();
+      const availableWidth = Math.floor(container.getBoundingClientRect().width);
       googleId.renderButton(container, {
         type: "standard",
         theme: googleButtonTheme(),
@@ -210,8 +211,7 @@ export function GoogleSignInButton({
         text,
         shape: "rectangular",
         logo_alignment: "left",
-        // The auth card's inner width (440px max, 28px padding each side).
-        width: 384,
+        width: availableWidth > 0 ? Math.min(384, availableWidth) : 384,
       });
     };
 
@@ -250,14 +250,18 @@ export function GoogleSignInButton({
     // A dark/light switch has to re-render Google's button to re-theme it.
     const observer =
       typeof MutationObserver === "undefined" ? null : new MutationObserver(() => render());
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => render());
     observer?.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["data-theme"],
     });
+    if (containerRef.current) resizeObserver?.observe(containerRef.current);
 
     return () => {
       cancelled = true;
       observer?.disconnect();
+      resizeObserver?.disconnect();
     };
   }, [submit, text, toast]);
 
@@ -276,11 +280,14 @@ export function GoogleSignInButton({
     <div className="form-stack" style={{ gap: 8 }}>
       <div
         ref={containerRef}
+        className="google-signin-button"
         aria-busy={busy}
         style={{
           display: "flex",
           justifyContent: "center",
-          minHeight: 44,
+          minHeight: 48,
+          minWidth: 0,
+          width: "100%",
           opacity: busy ? 0.5 : 1,
           pointerEvents: busy ? "none" : "auto",
         }}

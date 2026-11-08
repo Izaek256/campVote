@@ -202,12 +202,12 @@ docker compose run --rm -e BOOTSTRAP_ADMIN_EMAIL=admin@must.ac.ug \
 ### Accounts
 
 No demo accounts or demo elections are seeded. Create the first administrator
-with `cmd/bootstrap`, then sign in with Google:
+with `cmd/bootstrap`, then use the separate administrator password sign-in:
 
-- **Staff admin**: sign in with the Google account matching `BOOTSTRAP_ADMIN_EMAIL`; the account must first be created with `cmd/bootstrap`
+- **Staff admin**: sign in at `/admin/login` with the `BOOTSTRAP_ADMIN_EMAIL` and password used by `cmd/bootstrap`. Administrator addresses must end in `@must.ac.ug`.
 - **Student voter**: "Continue with Google" using a campus Google account such as `2024bse088@std.must.ac.ug`
 
-Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID` (API) and
+Student Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID` (API) and
 `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (web), the same OAuth Web client ID. See
 [`docs/implementation/GOOGLE_SIGNIN.md`](docs/implementation/GOOGLE_SIGNIN.md).
 
@@ -519,10 +519,10 @@ docker volume rm campvote_postgres_data
 
 No demo accounts are seeded. Continue with the manual setup in this section:
 
-- **Staff admin**: sign in with the Google account matching the email used with `cmd/bootstrap`
+- **Staff admin**: sign in at `/admin/login` with the email and password used with `cmd/bootstrap`; the email must end in `@must.ac.ug`
 - **Student voter**: sign in at `/register` with Google using a campus Google account such as `2024bse088@std.must.ac.ug`
 
-Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; see [`docs/implementation/GOOGLE_SIGNIN.md`](docs/implementation/GOOGLE_SIGNIN.md).
+Student Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; see [`docs/implementation/GOOGLE_SIGNIN.md`](docs/implementation/GOOGLE_SIGNIN.md).
 
 ---
 
@@ -645,10 +645,10 @@ Use Option 6 if you would rather run the database in Docker Desktop.
 
 No demo accounts are seeded.
 
-- **Staff admin**: sign in with the Google account matching the email used with `cmd/bootstrap`
+- **Staff admin**: sign in at `/admin/login` with the email and password used with `cmd/bootstrap`; the email must end in `@must.ac.ug`
 - **Student voter**: sign in at `/register` with Google using a campus Google account such as `2024bse088@std.must.ac.ug`
 
-Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; see [`docs/implementation/GOOGLE_SIGNIN.md`](docs/implementation/GOOGLE_SIGNIN.md).
+Student Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; see [`docs/implementation/GOOGLE_SIGNIN.md`](docs/implementation/GOOGLE_SIGNIN.md).
 
 ---
 
@@ -935,6 +935,8 @@ No administrator is seeded by default. The bootstrap command:
 - Should be run once, then the `BOOTSTRAP_ADMIN_*` variables removed
 
 After bootstrap, create further staff accounts from the staff pages at `/staff`. See [`docs/auth.md`](docs/auth.md) for details on cookie flags, lockout thresholds, and authentication hardening.
+
+Administrators sign in at `/admin/login` with an `@must.ac.ug` email address and password. Student accounts continue to use Google sign-in.
 
 ### Environment variables
 

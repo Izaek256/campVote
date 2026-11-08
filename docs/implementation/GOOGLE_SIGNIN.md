@@ -2,7 +2,7 @@
 
 **Branch:** `feature/google-signin-authentication`
 **Status:** implemented; backend tests written, frontend tests passing; no live Google authentication has been run (see [Verification](#verification)).
-**Scope:** student identity verification with a Google ID token, replacing the email-OTP registration form as the primary student sign-in.
+**Scope:** student identity verification with a Google ID token, replacing the email-OTP registration form as the student sign-in method. Administrator accounts use password sign-in.
 
 ## Why
 
@@ -33,8 +33,7 @@ decision (see `docs/eligibility.md`).
 5. The caller (`AuthProvider.signInWithGoogle`) sends `{ id_token }` to
    `POST /api/v1/auth/google`.
 
-A refusal from the API — including "Only @std.must.ac.ug student or
-@must.ac.ug staff accounts can sign in with Google." — is surfaced as an error
+A refusal from the API — including an administrator trying to use Google — is surfaced as an error
 **toast** (the app's `ToastProvider`), not as inline text under the button, so
 it is not missed. The missing-client-ID banner is the one persistent message
 that stays inline.
@@ -49,11 +48,11 @@ and never opened Google. See
 If `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is empty the component renders a visible
 "Google sign-in is unavailable" banner and never loads the script.
 
-Both `/login` and `/register` are **Google-only**: they show brand copy and the
-single Google button, with no email/password form and no OTP form. Staff and
-administrator accounts are created with `go run ./cmd/bootstrap` (or by an
-administrator) and then sign in with the same button — see the backend rules
-below.
+Both `/login` and `/register` are **student Google-only**: they show brand copy
+and the single Google button, with no email/password form and no OTP form.
+Administrators are created with `go run ./cmd/bootstrap` (or invited by an
+administrator) and sign in with email and password at `/admin/login`. The
+administrator sign-in link is in the student login footer.
 
 ## What the backend does
 
@@ -77,7 +76,7 @@ below.
 | 3 | Google signature / issuer / audience / expiry | `401 INVALID_CREDENTIALS` (detail logged, token never logged) |
 | 4 | `email_verified` | `401 INVALID_CREDENTIALS` |
 | 5 | `email` present | `401 INVALID_CREDENTIALS` |
-| 6 | Email is on `STUDENT_EMAIL_DOMAIN` (self-register) or `ADMIN_EMAIL_DOMAIN` (link-only) | `403 FORBIDDEN` |
+| 6 | Email is on `STUDENT_EMAIL_DOMAIN` | `403 FORBIDDEN` |
 | 7 | If `GOOGLE_OAUTH_HOSTED_DOMAIN` is set, `hd` matches | `403 FORBIDDEN` |
 | 8 | Account lookup / creation / linking | `401`, `403`, `409` or `500` |
 | 9 | Issue the same session, cookies, CSRF and audit events as password login | `500` |
@@ -94,13 +93,12 @@ Account resolution (`resolveGoogleUser`):
    granted.
 4. A unique-index race on create re-resolves once without creating.
 
-**Student vs staff.** A verified address on the student domain may self-register
-(step 3). A verified address on the staff/admin domain can only **link into an
-account that already exists**; if none exists the endpoint returns
-`403 FORBIDDEN` ("No CampVote account exists for that address…"). Because a
-Google token therefore can never mint an account on the staff domain, it can
-never grant the `ADMIN` role either. Staff and administrator accounts are created
-by an administrator (`go run ./cmd/bootstrap` creates the first one).
+**Student vs administrator.** A verified address on the student domain may
+self-register (step 3), but an existing account must also have the
+`STUDENT_VOTER` role. Staff/admin-domain addresses and administrator accounts
+are refused by this endpoint. Administrators are created by
+`go run ./cmd/bootstrap` or invited by an administrator, then authenticate with
+email and password at `/admin/login`.
 
 Linking an existing account (`linkGoogleIdentity`) never changes its role, name,
 student number or password. If the account was **unverified**, the old password
@@ -244,9 +242,9 @@ environment does not have.
   domain are the assumed deployment.
 - Google proves control of a Google account, not enrolment, faculty or
   eligibility. Roster checks remain separate.
-- Staff/admin accounts are never created by this endpoint; a staff address can
-  only link into an account an administrator already created, so the endpoint
-  cannot escalate anyone to `ADMIN`.
+- Staff/admin accounts cannot sign in or be linked through this endpoint. Only
+  student-domain accounts with the `STUDENT_VOTER` role may authenticate with
+  Google.
 - The page renders Google's own Sign in with Google button, so the served origin
   must be listed under Authorized JavaScript origins. The button flow does not
   depend on One Tap or third-party cookies; a missing origin or client ID shows

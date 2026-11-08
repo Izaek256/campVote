@@ -686,9 +686,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Only the two campus domains may sign in. The answer is the same generic
-	// refusal as a wrong password so the form cannot be used to probe domains.
-	if !h.Config.IsStudentEmail(req.Email) && !h.Config.IsAdminEmail(req.Email) {
+	// Password sign-in is reserved for administrators. Students use the
+	// verified Google flow, and an address alone never grants admin access.
+	if !h.Config.IsAdminEmail(req.Email) {
 		spendPasswordCheck(req.Password)
 		invalidCredentials(c)
 		return
@@ -699,6 +699,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		// v3.30.1: unknown email is the most common brute-force fingerprint;
 		// surface it in /system/activity as "warn" severity so operators
 		// can spot credential-stuffing spikes.
+		spendPasswordCheck(req.Password)
+		services.LogLoginFailed(h.DB, c, req.Email)
+		invalidCredentials(c)
+		return
+	}
+
+	// Refuse non-admin accounts before checking their password. Keep the same
+	// generic response and comparison cost as an unknown email.
+	if user.Role != models.RoleAdmin {
 		spendPasswordCheck(req.Password)
 		services.LogLoginFailed(h.DB, c, req.Email)
 		invalidCredentials(c)

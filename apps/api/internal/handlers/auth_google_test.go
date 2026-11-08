@@ -351,7 +351,7 @@ func TestGoogleSignIn_RefusesConflictingLinkAndDisabledAccount(t *testing.T) {
 	})
 }
 
-func TestGoogleSignIn_StaffSignsInOnlyIntoAnExistingAccount(t *testing.T) {
+func TestGoogleSignIn_IsStudentOnly(t *testing.T) {
 	// Distinct domains so the two policies can be told apart: the staff
 	// address must never be self-registered.
 	staffCfg := func() *config.Config {
@@ -371,7 +371,7 @@ func TestGoogleSignIn_StaffSignsInOnlyIntoAnExistingAccount(t *testing.T) {
 		}
 	}
 
-	t.Run("existing administrator is linked, role and password untouched", func(t *testing.T) {
+	t.Run("existing administrator is refused without linking", func(t *testing.T) {
 		db := googleTestDB(t)
 		verified := time.Now().Add(-time.Hour).UTC()
 		existing := models.User{
@@ -384,16 +384,16 @@ func TestGoogleSignIn_StaffSignsInOnlyIntoAnExistingAccount(t *testing.T) {
 
 		h := googleHandler(staffCfg(), db, &fakeGoogleVerifier{identity: staffIdentity()})
 		w := postGoogle(t, h, `{"id_token":"token"}`)
-		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
 
 		var stored models.User
 		require.NoError(t, db.First(&stored, "id = ?", existing.ID).Error)
-		assert.Equal(t, models.RoleAdmin, stored.Role, "a token must never change a role")
-		assert.Equal(t, "google-staff-1", stored.GoogleID)
+		assert.Equal(t, models.RoleAdmin, stored.Role)
+		assert.Empty(t, stored.GoogleID, "a refused Google attempt must not link an administrator account")
 		assert.Equal(t, passwordBeforeLink, stored.Password)
 	})
 
-	t.Run("unknown staff address is refused and never created", func(t *testing.T) {
+	t.Run("staff address is refused and never created", func(t *testing.T) {
 		db := googleTestDB(t)
 		h := googleHandler(staffCfg(), db, &fakeGoogleVerifier{identity: staffIdentity()})
 		w := postGoogle(t, h, `{"id_token":"token"}`)
@@ -402,6 +402,29 @@ func TestGoogleSignIn_StaffSignsInOnlyIntoAnExistingAccount(t *testing.T) {
 		var users int64
 		require.NoError(t, db.Model(&models.User{}).Count(&users).Error)
 		assert.Zero(t, users, "staff and administrator accounts are created by an administrator")
+	})
+
+	t.Run("administrator role on student domain is refused", func(t *testing.T) {
+		db := googleTestDB(t)
+		identity := staffIdentity()
+		identity.Email = "admin@students.example.com"
+		verified := time.Now().Add(-time.Hour).UTC()
+		existing := models.User{
+			FirstName: "Admin", LastName: "User", Email: identity.Email,
+			Password: "bootstrap-password", Role: models.RoleAdmin, Active: true,
+			EmailVerifiedAt: &verified,
+		}
+		require.NoError(t, db.Create(&existing).Error)
+		passwordBeforeLink := existing.Password
+
+		h := googleHandler(staffCfg(), db, &fakeGoogleVerifier{identity: identity})
+		w := postGoogle(t, h, `{"id_token":"token"}`)
+		require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+		var stored models.User
+		require.NoError(t, db.First(&stored, "id = ?", existing.ID).Error)
+		assert.Empty(t, stored.GoogleID)
+		assert.Equal(t, passwordBeforeLink, stored.Password)
 	})
 
 	t.Run("student address still self-registers", func(t *testing.T) {

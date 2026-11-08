@@ -11,6 +11,8 @@ export const metadata: Metadata = {
 
 // The browser chrome and mobile status bar wear the kit's primary green.
 export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
   themeColor: "#12783F",
 };
 

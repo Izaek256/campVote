@@ -34,7 +34,8 @@ var (
 	// errGoogleAccountUnknown means a verified staff address has no account.
 	// Staff and administrator accounts are created by an administrator, so
 	// signing in with Google must never create one.
-	errGoogleAccountUnknown = errors.New("no account exists for this address")
+	errGoogleAccountUnknown   = errors.New("no account exists for this address")
+	errGoogleAccountWrongRole = errors.New("only student accounts can sign in with Google")
 )
 
 // GoogleSignIn verifies a Google Identity Services ID token and signs the
@@ -78,13 +79,10 @@ func (h *AuthHandler) GoogleSignIn(c *gin.Context) {
 	}
 
 	// Google proves control of a Google account, not university enrolment.
-	// Students may self-register on their campus domain; staff and
-	// administrators may sign in only if an administrator already created the
-	// account, so a token can never mint an elevated role.
+	// It is the student sign-in method; administrators use password sign-in.
 	isStudent := h.Config.IsStudentEmail(identity.Email)
-	isStaff := h.Config.IsAdminEmail(identity.Email)
-	if !isStudent && !isStaff {
-		respond.Fail(c, respond.CodeForbidden, "Only @"+h.Config.StudentDomain()+" student or @"+h.Config.AdminDomain()+" staff accounts can sign in with Google.")
+	if !isStudent {
+		respond.Fail(c, respond.CodeForbidden, "Only @"+h.Config.StudentDomain()+" student accounts can sign in with Google.")
 		return
 	}
 	if hosted := h.Config.GoogleOAuthHostedDomain; hosted != "" && !strings.EqualFold(identity.HostedDomain, hosted) {
@@ -92,13 +90,16 @@ func (h *AuthHandler) GoogleSignIn(c *gin.Context) {
 		return
 	}
 
-	user, created, err := h.resolveGoogleUser(c.Request.Context(), identity, c.ClientIP(), isStudent)
+	user, created, err := h.resolveGoogleUser(c.Request.Context(), identity, c.ClientIP(), true)
 	switch {
 	case errors.Is(err, errGoogleAccountDisabled):
 		respond.Fail(c, respond.CodeAccountDisabled, "Your account has been disabled.")
 		return
 	case errors.Is(err, errGoogleAccountUnknown):
 		respond.Fail(c, respond.CodeForbidden, "No CampVote account exists for that address. Staff and administrator accounts are created by an election administrator.")
+		return
+	case errors.Is(err, errGoogleAccountWrongRole):
+		respond.Fail(c, respond.CodeForbidden, "Administrator accounts must sign in with an email address and password.")
 		return
 	case errors.Is(err, errGoogleAccountConflict):
 		respond.Fail(c, respond.CodeConflict, "This Google account cannot be linked to that CampVote account. Ask an administrator for help.")
@@ -109,6 +110,10 @@ func (h *AuthHandler) GoogleSignIn(c *gin.Context) {
 	}
 	if user == nil || !user.Active {
 		respond.Fail(c, respond.CodeAccountDisabled, "Your account has been disabled.")
+		return
+	}
+	if user.Role != models.RoleStudentVoter {
+		respond.Fail(c, respond.CodeForbidden, "Administrator accounts must sign in with an email address and password.")
 		return
 	}
 
@@ -156,6 +161,9 @@ func (h *AuthHandler) resolveGoogleUser(ctx context.Context, identity *services.
 		if !user.Active {
 			return nil, false, errGoogleAccountDisabled
 		}
+		if user.Role != models.RoleStudentVoter {
+			return nil, false, errGoogleAccountWrongRole
+		}
 		return &user, false, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -166,6 +174,9 @@ func (h *AuthHandler) resolveGoogleUser(ctx context.Context, identity *services.
 	if err == nil {
 		if !user.Active {
 			return nil, false, errGoogleAccountDisabled
+		}
+		if user.Role != models.RoleStudentVoter {
+			return nil, false, errGoogleAccountWrongRole
 		}
 		if user.GoogleID != "" && user.GoogleID != identity.Subject {
 			return nil, false, errGoogleAccountConflict

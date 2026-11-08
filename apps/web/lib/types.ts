@@ -16,6 +16,12 @@ export interface AuthPayload {
   tokens: { access_token: string; refresh_token: string; expires_at: number };
 }
 
+export interface AuthChallenge {
+  totp_required: true;
+  pending_token: string;
+  method?: string;
+}
+
 /**
  * The election lifecycle has three stages. DRAFT is private while it is being
  * built; the server opens it automatically at its start time; it closes at its

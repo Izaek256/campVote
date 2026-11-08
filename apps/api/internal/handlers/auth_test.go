@@ -398,13 +398,17 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
 	r := newAuthRouter(h)
 
-	// Register first
-	postJSON(t, r, "/api/auth/register", map[string]string{
-		"first_name": "Bob",
-		"last_name":  "Jones",
-		"email":      "bob@example.com",
-		"password":   "mypassword99",
-	})
+	now := time.Now()
+	admin := models.User{
+		FirstName:       "Bob",
+		LastName:        "Jones",
+		Email:           "bob@example.com",
+		Password:        "mypassword99",
+		Role:            models.RoleAdmin,
+		Active:          true,
+		EmailVerifiedAt: &now,
+	}
+	require.NoError(t, db.Create(&admin).Error)
 
 	// Then login
 	w := postJSON(t, r, "/api/auth/login", map[string]string{
@@ -432,12 +436,15 @@ func TestAuthHandler_Login_WrongPassword(t *testing.T) {
 	h := &AuthHandler{DB: db, AuthService: newTestAuthSvc(cfg, db), Config: cfg}
 	r := newAuthRouter(h)
 
-	postJSON(t, r, "/api/auth/register", map[string]string{
-		"first_name": "Carol",
-		"last_name":  "White",
-		"email":      "carol@example.com",
-		"password":   "correct-password",
-	})
+	admin := models.User{
+		FirstName: "Carol",
+		LastName:  "White",
+		Email:     "carol@example.com",
+		Password:  "correct-password",
+		Role:      models.RoleAdmin,
+		Active:    true,
+	}
+	require.NoError(t, db.Create(&admin).Error)
 
 	w := postJSON(t, r, "/api/auth/login", map[string]string{
 		"email":    "carol@example.com",

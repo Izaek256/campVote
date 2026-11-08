@@ -1,5 +1,6 @@
 import type {
   AuthPayload,
+  AuthChallenge,
   Ballot,
   BallotContent,
   Candidate,
@@ -163,10 +164,20 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 
 export const auth = {
   me: () => api<User>("/auth/me"),
-  login: (email: string, password: string) =>
-    api<AuthPayload>("/auth/login", {
+  adminLogin: (email: string, password: string) =>
+    api<AuthPayload | AuthChallenge>("/auth/login", {
       method: "POST",
       body: { email, password },
+    }),
+  verifyTOTP: (pendingToken: string, code: string) =>
+    api<AuthPayload>("/auth/totp/verify", {
+      method: "POST",
+      body: { pending_token: pendingToken, code },
+    }),
+  verifyBackupCode: (pendingToken: string, code: string) =>
+    api<AuthPayload>("/auth/totp/backup-codes/verify", {
+      method: "POST",
+      body: { pending_token: pendingToken, code },
     }),
   /**
    * Exchange a Google Identity Services ID token for a CampVote session.

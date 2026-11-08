@@ -28,59 +28,61 @@ export default function RegisterPage() {
 
   return (
     <main className="auth-wrap">
-      <div className="auth-card">
-        <div className="row" style={{ justifyContent: "flex-end", marginBottom: 4 }}>
-          <ThemeToggle />
-        </div>
-        <Link className="brand row" href="/login" style={{ marginBottom: 24 }}>
-          <span className="mark">
-            <Icon name="ballot" size="l" />
-          </span>
-          <span style={{ fontWeight: 700, fontSize: 18 }}>
-            camp<b style={{ fontWeight: 400 }}>Vote</b>
-          </span>
-        </Link>
-
-        <h1>Create your account</h1>
-        <p className="lead">
-          Continue with your university Google account to register as a student voter.
-        </p>
-
-        <GoogleSignInButton
-          text="signup_with"
-          onCredential={async (idToken) => {
-            await signInWithGoogle(idToken);
-            router.replace("/elections");
-          }}
-        />
-
-        <p className="hint" style={{ marginTop: 16 }}>
-          Use your <b>@{STUDENT_EMAIL_DOMAIN}</b> student address. Staff and official accounts
-          are created by an election administrator.
-        </p>
-
-        <p
-          style={{
-            marginTop: 20,
-            fontSize: 14,
-            textAlign: "center",
-            color: "var(--ink-3)",
-          }}
-        >
-          Already have an account?{" "}
-          <Link href="/login" style={{ color: "var(--primary)" }}>
-            Sign in
-          </Link>
-        </p>
-
-        <div className="banner" style={{ marginTop: 20 }}>
-          <Icon name="shield" />
-          <div>
-            <b>Your ballot is always secret</b>
-            Google sign-in confirms who you are. Your actual vote choices are never linked to your
-            account.
+      <div className="auth-content">
+        <section className="auth-card" aria-labelledby="register-title">
+          <div className="row" style={{ justifyContent: "flex-end", marginBottom: 4 }}>
+            <ThemeToggle />
           </div>
-        </div>
+          <Link className="brand row" href="/login" style={{ marginBottom: 24 }}>
+            <span className="mark">
+              <Icon name="ballot" size="l" />
+            </span>
+            <span style={{ fontWeight: 700, fontSize: 18 }}>
+              camp<b style={{ fontWeight: 400 }}>Vote</b>
+            </span>
+          </Link>
+
+          <h1 id="register-title">Create your account</h1>
+          <p className="lead">
+            Continue with your university Google account to register as a student voter.
+          </p>
+
+          <GoogleSignInButton
+            text="signup_with"
+            onCredential={async (idToken) => {
+              await signInWithGoogle(idToken);
+              router.replace("/elections");
+            }}
+          />
+
+          <p className="hint" style={{ marginTop: 16 }}>
+            Use your <b>@{STUDENT_EMAIL_DOMAIN}</b> student address. Staff and official accounts
+            are created by an election administrator.
+          </p>
+
+          <p
+            style={{
+              marginTop: 20,
+              fontSize: 14,
+              textAlign: "center",
+              color: "var(--ink-3)",
+            }}
+          >
+            Already have an account?{" "}
+            <Link href="/login" style={{ color: "var(--primary)" }}>
+              Sign in
+            </Link>
+          </p>
+
+          <div className="banner" style={{ marginTop: 20 }}>
+            <Icon name="shield" />
+            <div>
+              <b>Your ballot is always secret</b>
+              Google sign-in confirms who you are. Your actual vote choices are never linked to your
+              account.
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );
