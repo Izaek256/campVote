@@ -44,9 +44,9 @@ func TestParseEmail_Invalid(t *testing.T) {
 		// Staff / non-registration emails
 		"admin@must.ac.ug",
 		"john.doe@gmail.com",
-		"staff@std.mast.ac.ug",        // no leading year
-		"2024@std.mast.ac.ug",          // no course, no number
-		"2024BSE@std.mast.ac.ug",       // no number
+		"staff@std.mast.ac.ug",   // no leading year
+		"2024@std.mast.ac.ug",    // no course, no number
+		"2024BSE@std.mast.ac.ug", // no number
 		"noatsign",
 		"",
 		"@std.mast.ac.ug",

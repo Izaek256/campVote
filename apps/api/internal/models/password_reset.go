@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/ids"
+	"gorm.io/gorm"
 )
 
 // PasswordResetToken is a single-use, expiring grant to change one user's

@@ -152,7 +152,6 @@ func TestAllocationBudgets(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	for _, b := range budgets(t) {
-		b := b
 		t.Run(b.name, func(t *testing.T) {
 			// Warm up first. The first call through a path populates pools and
 			// caches, and counting those as the steady-state cost makes the

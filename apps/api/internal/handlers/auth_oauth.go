@@ -1,13 +1,13 @@
 package handlers
 
 import (
+	"campvote/apps/api/internal/models"
+	"campvote/apps/api/internal/services"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
-	"campvote/apps/api/internal/models"
-	"campvote/apps/api/internal/services"
 	"time"
 
 	"github.com/gin-gonic/gin"

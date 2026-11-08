@@ -160,7 +160,8 @@ func init() {
 	// handler checks roster eligibility and the application window.
 	authenticated("GET", "/api/v1/candidates/my")
 	authenticated("POST", "/api/v1/elections/:id/candidates/apply",
-		"/api/v1/candidates/my/:candidate_id/withdraw")
+		"/api/v1/candidates/my/:candidate_id/withdraw",
+		"/api/v1/candidates/my/:candidate_id/ballot-photo")
 
 	// Officer candidate review and ballot definition (ISSUE-06). These were
 	// registered without a policy, so the guard denied every one of them.

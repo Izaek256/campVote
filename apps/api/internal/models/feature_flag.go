@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"campvote/apps/api/internal/ids"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
-	"campvote/apps/api/internal/ids"
 )
 
 // FeatureFlag is one rollout switch. Two flavors:

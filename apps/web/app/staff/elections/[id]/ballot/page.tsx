@@ -41,7 +41,8 @@ function Builder({ id }: { id: string }) {
       const latest = list.versions?.[0];
       setSelected((previous) => previous ?? latest ?? null);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Ballot versions could not be loaded.";
+      const message =
+        err instanceof ApiError ? err.message : "Ballot versions could not be loaded.";
       setLoadError(message);
       toast.error(message);
     }

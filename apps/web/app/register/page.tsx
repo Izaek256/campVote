@@ -17,9 +17,7 @@ import { passwordFailures } from "@/lib/password-rules";
 // neutral.
 function isAllowedDomain(email: string): boolean {
   const lower = email.toLowerCase().trim();
-  return (
-    lower.endsWith(`@${STUDENT_EMAIL_DOMAIN}`) || lower.endsWith(`@${STAFF_EMAIL_DOMAIN}`)
-  );
+  return lower.endsWith(`@${STUDENT_EMAIL_DOMAIN}`) || lower.endsWith(`@${STAFF_EMAIL_DOMAIN}`);
 }
 
 /**

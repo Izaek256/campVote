@@ -1,13 +1,13 @@
 package handlers
 
 import (
-	"context"
-	"log"
-	"net/http"
 	"campvote/apps/api/internal/mail"
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/respond"
 	"campvote/apps/api/internal/services"
+	"context"
+	"log"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"

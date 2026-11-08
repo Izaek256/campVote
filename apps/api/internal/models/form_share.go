@@ -3,9 +3,9 @@ package models
 import (
 	"time"
 
+	"campvote/apps/api/internal/ids"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
-	"campvote/apps/api/internal/ids"
 )
 
 // FormShare is a public link to a resource's create form. Operators

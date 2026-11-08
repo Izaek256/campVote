@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"campvote/apps/api/internal/ids"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"campvote/apps/api/internal/ids"
 
 	"campvote/apps/api/internal/appendonly"
 	"campvote/apps/api/internal/crypto"

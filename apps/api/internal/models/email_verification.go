@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/ids"
+	"gorm.io/gorm"
 )
 
 // EmailVerificationToken is a single-use, expiring proof that someone can read

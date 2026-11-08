@@ -4,7 +4,7 @@
 
 - [`../SRS.md`](../SRS.md) — System Requirements Specification (functional, security, privacy).
 - [`../STACK.md`](../STACK.md) — Technology stack specification (Grit Triple, Go, Next.js, PostgreSQL).
-- [`../ADR.md`](../ADR.md) — Architecture Decision Records (ADR-001 through ADR-014).
+- [`../ADR.md`](../ADR.md) — Architecture Decision Records (ADR-001 through ADR-013).
 - [`../AGENTS.md`](../AGENTS.md) — Non-negotiable AI agent development rules.
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — Git workflow, branch policy, commit conventions.
 
@@ -43,3 +43,8 @@
 
 - [`debugging/BUG_REPORT_TEMPLATE.md`](debugging/BUG_REPORT_TEMPLATE.md) — Systematic defect investigation template.
 - [`reviews/REVIEW_TEMPLATE.md`](reviews/REVIEW_TEMPLATE.md) — Structured code review checklist.
+
+## 7. Testing & CI
+
+- [`testing.md`](testing.md) — Test isolation, running, factories, clock, and known limitations.
+- [`testing/ci-pipeline.md`](testing/ci-pipeline.md) — CI jobs, tool versions, local reproduction, diagnosis table, required checks.

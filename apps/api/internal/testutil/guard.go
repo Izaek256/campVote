@@ -8,9 +8,9 @@ import (
 )
 
 var allowedHosts = map[string]bool{
-	"localhost":   true,
-	"127.0.0.1":   true,
-	"postgres":    true,
+	"localhost": true,
+	"127.0.0.1": true,
+	"postgres":  true,
 }
 
 // RequireTestDB aborts unless TEST_DATABASE_URL points at a disposable test DB.
@@ -33,4 +33,3 @@ func RequireTestDB() error {
 	}
 	return nil
 }
-

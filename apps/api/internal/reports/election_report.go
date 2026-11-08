@@ -226,8 +226,8 @@ func ResultsVerification(db *gorm.DB, electionID string) ([]byte, error) {
 			details: fmt.Sprintf("Ballots: %d, Participations: %d", ballotCount, eligReport.Participated),
 		},
 		{
-			check:   "Eligibility was frozen before voting ended",
-			passed:  eligReport.FrozenAt != nil && eligReport.FrozenAt.Before(election.EndsAt),
+			check:  "Eligibility was frozen before voting ended",
+			passed: eligReport.FrozenAt != nil && eligReport.FrozenAt.Before(election.EndsAt),
 			details: fmt.Sprintf("Frozen: %s, Ended: %s",
 				formatTime(eligReport.FrozenAt),
 				election.EndsAt.Format("2006-01-02 15:04")),

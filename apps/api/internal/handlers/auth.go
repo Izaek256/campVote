@@ -333,7 +333,6 @@ func (h *AuthHandler) SignupInitiate(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-
 // SignupComplete completes the signup process using the verification code.
 // POST /api/v1/auth/signup/complete
 func (h *AuthHandler) SignupComplete(c *gin.Context) {
@@ -395,14 +394,14 @@ func (h *AuthHandler) SignupComplete(c *gin.Context) {
 	}
 
 	user := models.User{
-		FirstName:  req.FirstName,
-		LastName:   req.LastName,
-		Email:      req.Email,
-		Password:   req.Password,
-		Role:       models.RoleStudentVoter,
-		Active:     true,
-		IPAddress:  c.ClientIP(),
-		MACAddress: req.MACAddress,
+		FirstName:       req.FirstName,
+		LastName:        req.LastName,
+		Email:           req.Email,
+		Password:        req.Password,
+		Role:            models.RoleStudentVoter,
+		Active:          true,
+		IPAddress:       c.ClientIP(),
+		MACAddress:      req.MACAddress,
 		EmailVerifiedAt: func() *time.Time { t := time.Now().UTC(); return &t }(),
 	}
 
@@ -523,7 +522,6 @@ func getenvDefault(key, fallback string) string {
 	return fallback
 }
 
-
 // invalidCredentials is the one answer a sign-in gets until its password has
 // been checked and found right. An unknown address, a wrong password, a locked
 // account and an account with no password all get it, with the same status,
@@ -538,7 +536,7 @@ var (
 	timingHash     []byte
 	// Simple in-memory storage for signup verification codes (MVP)
 	// TODO: Replace with Redis or database storage for production
-	signupCodes     = make(map[string]signupCodeEntry)
+	signupCodes      = make(map[string]signupCodeEntry)
 	signupCodesMutex sync.RWMutex
 )
 

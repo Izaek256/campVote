@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"time"
 
-	"gorm.io/gorm"
 	"campvote/apps/api/internal/ids"
+	"gorm.io/gorm"
 )
 
 // Session is a server-side record of one issued refresh token — i.e. one
