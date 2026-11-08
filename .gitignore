@@ -37,4 +37,8 @@ Thumbs.db
 .vscode/
 .idea/
 .kilo/
+.kiro
+
+# Local tooling state
+.vercel/
 

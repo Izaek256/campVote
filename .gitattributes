@@ -1,0 +1,23 @@
+# Normalize line endings so a Windows checkout matches what Linux CI sees.
+# Without this, Git checks text files out as CRLF on Windows, which inflates
+# Biome's formatting diff count (every line reads as changed) and hides the
+# genuine formatting issues. The Biome config mandates lineEnding: "lf".
+* text=auto eol=lf
+
+# Binary files must never be line-ending normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+*.pdf binary
+*.zst binary
+*.tar binary
+*.gz binary
+*.lock binary

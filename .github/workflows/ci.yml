@@ -1,107 +1,178 @@
 name: CI
 
+# Validates the Go API and the Next.js web app.
+#
+# Triggers follow the repository branch policy in CONTRIBUTING.md:
+#   - push to develop/main   -> post-merge validation of the integration branches
+#   - pull_request           -> the merge gate for every PR into those branches
+# Feature/fix/docs/test branches are covered by the pull-request trigger, so
+# there is no separate push trigger for them (that would run every commit twice).
 on:
   push:
     branches:
       - develop
       - main
-      - 'feature/**'
-      - 'feat/**'
-      - 'fix/**'
-      - 'docs/**'
-      - 'test/**'
   pull_request:
     branches:
       - develop
       - main
+  workflow_dispatch:
+
+# A newer commit on the same ref supersedes the run in flight.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: no job writes to the repository, so a pull request from a
+# fork never receives a writable token.
+permissions:
+  contents: read
 
 jobs:
+  # ── Go API ─────────────────────────────────────────────────────────────────
   backend:
     name: Backend (Go)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Disposable PostgreSQL for the integration tests (internal/testkit and
+    # internal/testutil). These credentials are CI-only throwaways; they are not
+    # secrets and never point at the production database.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: campvote
+          POSTGRES_PASSWORD: campvote
+          POSTGRES_DB: campvote_test_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U campvote -d campvote_test_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      GRIT_TEST_DATABASE_URL: postgres://campvote:campvote@localhost:5432/campvote_test_ci?sslmode=disable
+      TEST_DATABASE_URL: postgres://campvote:campvote@localhost:5432/campvote_test_ci?sslmode=disable
+      CAMPVOTE_TEST_DB: "1"
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
+          # '1.26' resolves to the newest 1.26.x patch, which is what the go.mod
+          # header asks for ("Go 1.26.10, and not an earlier patch") for the
+          # standard-library CVEs fixed in 1.26.10. The `go` directive itself
+          # still says 1.26.4, so `go-version-file` would pin CI to a vulnerable
+          # patch — do not switch to it until that directive is raised. See
+          # docs/testing.md ("Known limitations").
           go-version: '1.26'
           cache: true
+          cache-dependency-path: apps/api/go.sum
 
-      - name: Install dependencies
+      - name: Check formatting (gofmt)
+        working-directory: apps/api
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Download dependencies
         working-directory: apps/api
         run: go mod download
 
-      - name: Install golangci-lint
+      # The action installs golangci-lint AND runs it. Do not add a second
+      # `golangci-lint run` step: that duplicates the same check.
+      - name: Lint (golangci-lint)
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13
           working-directory: apps/api
-          verify: false
 
-      - name: Run linter
+      - name: Vet
         working-directory: apps/api
-        run: golangci-lint run --timeout 5m
+        run: go vet ./...
 
-      - name: Run tests
+      - name: Test (race + coverage)
         working-directory: apps/api
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: go test -race -coverprofile=coverage.out ./...
 
+      # Coverage is reported, not enforced: a failed upload must not fail a
+      # green test run.
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
           files: apps/api/coverage.out
           flags: backend
+          fail_ci_if_error: false
 
-  frontend-web:
+  # ── Next.js web app ────────────────────────────────────────────────────────
+  frontend:
     name: Frontend (Web)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
+      # pnpm is installed before Node so that setup-node can resolve the pnpm
+      # store for caching. No `version` input: the exact version is taken from
+      # the `packageManager` field in package.json.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type check web
+      - name: Type check
         working-directory: apps/web
         run: pnpm type-check
 
-      - name: Lint web
-        working-directory: apps/web
-        run: pnpm lint
-
-      - name: Test web
+      - name: Test
         working-directory: apps/web
         run: pnpm test
 
-      - name: Build web
+      - name: Build
         working-directory: apps/web
         run: pnpm build
 
+  # ── Repository formatting and lint (Biome) ─────────────────────────────────
+  # Biome is one tool with one root config (biome.jsonc) and one scope: the whole
+  # repository. It runs exactly once, here. The frontend job deliberately does
+  # not run it again — a second, narrower Biome pass over apps/web would check
+  # the same files with the same rules for no additional signal.
   format:
-    name: Format check
+    name: Format & Lint (Biome)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting
+      - name: Biome check
         run: pnpm format:check
