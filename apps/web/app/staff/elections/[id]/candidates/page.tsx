@@ -261,7 +261,7 @@ function Review({ id }: { id: string }) {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={candidate.passport_photo_url}
-                        alt="Passport photo"
+                        alt="Passport"
                         width={112}
                         height={112}
                         style={{ objectFit: "cover", border: "1px solid var(--line)" }}
