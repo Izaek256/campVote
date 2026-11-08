@@ -113,7 +113,11 @@ describe("AdminLoginPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Verify and sign in" }));
 
     await waitFor(() => {
-      expect(mocks.verifyAdminSecondFactor).toHaveBeenCalledWith("pending-token", "backup-code", true);
+      expect(mocks.verifyAdminSecondFactor).toHaveBeenCalledWith(
+        "pending-token",
+        "backup-code",
+        true
+      );
       expect(mocks.replace).toHaveBeenCalledWith("/staff");
     });
   });

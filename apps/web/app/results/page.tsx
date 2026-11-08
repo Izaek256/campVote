@@ -58,7 +58,10 @@ function ResultsView() {
 
   // A student waits on the elections they voted in that have not closed yet.
   const pending = useMemo(
-    () => (items ?? []).filter((election) => election.my_vote_status?.voted && !isClosed(election.status)),
+    () =>
+      (items ?? []).filter(
+        (election) => election.my_vote_status?.voted && !isClosed(election.status)
+      ),
     [items]
   );
   // Results are public record: every closed election appears here so the whole

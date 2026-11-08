@@ -29,7 +29,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Apply the saved theme before paint so every page starts in the
             chosen mode instead of flashing the default. */}
         <script
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: the theme must be set before first paint; this is a static literal with no user or server input.
           dangerouslySetInnerHTML={{
             __html:
               'try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}',

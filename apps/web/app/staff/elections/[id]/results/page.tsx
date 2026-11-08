@@ -156,9 +156,7 @@ function Workspace({ id }: { id: string }) {
       if (kind === "results") await documents.resultsPdf(id);
       else await documents.infoPdf(id);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : "The document could not be downloaded."
-      );
+      toast.error(err instanceof ApiError ? err.message : "The document could not be downloaded.");
     } finally {
       setDownloading("");
     }

@@ -18,17 +18,12 @@ if (existsSync(rootEnv)) {
 // ship an /api route that 404s; API_PROXY_TARGET still overrides it. Unset
 // locally and in Docker, where the browser calls the API directly.
 const apiProxyTarget = (
-  process.env.API_PROXY_TARGET ||
-  (process.env.VERCEL ? "http://194.36.88.77:8080" : "")
+  process.env.API_PROXY_TARGET || (process.env.VERCEL ? "http://194.36.88.77:8080" : "")
 ).replace(/\/$/, "");
 
 // An empty NEXT_PUBLIC_API_URL means same-origin, which needs the proxy. Without
 // either, every request lands on web routes that do not exist and 404s.
-if (
-  process.env.NODE_ENV === "production" &&
-  !process.env.NEXT_PUBLIC_API_URL &&
-  !apiProxyTarget
-) {
+if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_URL && !apiProxyTarget) {
   console.warn(
     "Neither NEXT_PUBLIC_API_URL nor API_PROXY_TARGET is set: this build will call " +
       "this origin's /api, where no API is mounted. Set API_PROXY_TARGET in the deploy " +

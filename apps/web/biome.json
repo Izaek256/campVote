@@ -1,11 +1,11 @@
 {
-	"root": false,
-	"extends": "//",
-	"linter": {
-		"rules": {
-			"security": {
-				"noDangerouslySetInnerHtml": "off"
-			}
-		}
-	}
+  "root": false,
+  "extends": "//",
+  "linter": {
+    "rules": {
+      "security": {
+        "noDangerouslySetInnerHtml": "off"
+      }
+    }
+  }
 }

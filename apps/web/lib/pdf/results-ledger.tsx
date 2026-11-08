@@ -13,13 +13,7 @@
  */
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { categoryLabel } from "../format";
-import type {
-  Election,
-  FacultyTurnout,
-  PositionResult,
-  ResultRow,
-  ResultSnapshot,
-} from "../types";
+import type { Election, FacultyTurnout, PositionResult, ResultRow, ResultSnapshot } from "../types";
 import {
   clockOnly,
   dayStamp,
@@ -365,7 +359,9 @@ export function ResultsLedgerDocument({ election, snapshot, faculties = [] }: Pr
                       <Text style={[styles.tableCell, styles.colNumber]}>
                         {thousands(row.ballots)}
                       </Text>
-                      <Text style={[styles.tableCell, styles.colNumber]}>{percent(row.percent)}</Text>
+                      <Text style={[styles.tableCell, styles.colNumber]}>
+                        {percent(row.percent)}
+                      </Text>
                     </>
                   )}
                 </View>

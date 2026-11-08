@@ -165,12 +165,14 @@ describe("GoogleSignInButton", () => {
   it("shows the student-domain refusal as a visible toast", async () => {
     installGoogle();
     const { ApiError } = await import("@/lib/api");
-    const onCredential = vi.fn().mockRejectedValue(
-      new ApiError(
-        "Only @std.must.ac.ug student or @must.ac.ug staff accounts can sign in with Google.",
-        403
-      )
-    );
+    const onCredential = vi
+      .fn()
+      .mockRejectedValue(
+        new ApiError(
+          "Only @std.must.ac.ug student or @must.ac.ug staff accounts can sign in with Google.",
+          403
+        )
+      );
     await renderGoogleButton("client", onCredential);
     await waitFor(() => expect(initConfig).not.toBeNull());
 
