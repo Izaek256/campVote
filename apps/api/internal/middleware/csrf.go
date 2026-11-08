@@ -133,6 +133,7 @@ func AutoCSRF() gin.HandlerFunc {
 	bootstrap := map[string]bool{
 		"login":                    true,
 		"register":                 true,
+		"google":                   true,
 		"refresh":                  true,
 		"forgot-password":          true,
 		"reset-password":           true,

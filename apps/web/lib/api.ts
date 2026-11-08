@@ -1,4 +1,6 @@
+import type { LandingAdminState, LandingDraft } from "@campvote/shared/types/index";
 import type {
+  AuthChallenge,
   AuthPayload,
   Ballot,
   BallotContent,
@@ -25,7 +27,40 @@ import type {
   VoteStatus,
 } from "./types";
 
-export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").replace(/\/$/, "");
+// Empty means "this origin". A deployment that proxies /api (next.config.ts)
+// must use that, since every preview has a different hostname. Local work sets
+// an absolute URL in .env because the web app and API run on different ports.
+export const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+
+/**
+ * The URL a browser should load a stored file from.
+ *
+ * Files kept on the API's own disk (STORAGE_DRIVER=local) are served by the API
+ * under /files, and the API writes that link using its public origin (APP_URL).
+ * In this project APP_URL is the web app's origin, so a stored link can point at
+ * a port with no /files route and every candidate photo and document 404s.
+ * Rewriting the origin to the API base — the one the browser already talks to —
+ * makes them open, including for records written before APP_URL was corrected.
+ * A bucket URL (MinIO/S3/R2/B2) does not contain /files and is left untouched.
+ */
+export function fileUrl(url?: string | null): string {
+  const value = (url ?? "").trim();
+  if (!value) return "";
+  // A site-relative path: resolve it against the API, which serves /files.
+  if (value.startsWith("/") && !value.startsWith("//")) {
+    return `${API}${value}`;
+  }
+  try {
+    // API may be empty (same origin), which is not a valid base for URL().
+    const parsed = new URL(value, "http://same-origin.invalid");
+    if (parsed.pathname.startsWith("/files/")) {
+      return `${API}${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    // Not a URL we can parse; hand it back as it came.
+  }
+  return value;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -38,7 +73,11 @@ export class ApiError extends Error {
   constructor(
     message: string,
     status: number,
-    options: { fields?: Record<string, string>; code?: string; requestId?: string } = {}
+    options: {
+      fields?: Record<string, string>;
+      code?: string;
+      requestId?: string;
+    } = {}
   ) {
     super(displayMessage(message, status, options));
     this.name = "ApiError";
@@ -63,7 +102,11 @@ export class ApiError extends Error {
 function displayMessage(
   message: string,
   status: number,
-  options: { fields?: Record<string, string>; code?: string; requestId?: string }
+  options: {
+    fields?: Record<string, string>;
+    code?: string;
+    requestId?: string;
+  }
 ): string {
   const parts: string[] = [message];
   if (options.fields && Object.keys(options.fields).length > 0) {
@@ -122,8 +165,32 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
 
 export const auth = {
   me: () => api<User>("/auth/me"),
-  login: (email: string, password: string) =>
-    api<AuthPayload>("/auth/login", { method: "POST", body: { email, password } }),
+  adminLogin: (email: string, password: string) =>
+    api<AuthPayload | AuthChallenge>("/auth/login", {
+      method: "POST",
+      body: { email, password },
+    }),
+  verifyTOTP: (pendingToken: string, code: string) =>
+    api<AuthPayload>("/auth/totp/verify", {
+      method: "POST",
+      body: { pending_token: pendingToken, code },
+    }),
+  verifyBackupCode: (pendingToken: string, code: string) =>
+    api<AuthPayload>("/auth/totp/backup-codes/verify", {
+      method: "POST",
+      body: { pending_token: pendingToken, code },
+    }),
+  /**
+   * Exchange a Google Identity Services ID token for a CampVote session.
+   *
+   * The token is sent over the existing API transport and verified by the
+   * backend. The browser never decodes it or treats its claims as trusted.
+   */
+  googleSignIn: (idToken: string) =>
+    api<AuthPayload>("/auth/google", {
+      method: "POST",
+      body: { id_token: idToken },
+    }),
   logout: () => api<unknown>("/auth/logout", { method: "POST" }),
   /** Direct registration: create account and get tokens immediately. */
   register: (body: { first_name: string; last_name: string; email: string; password: string }) =>
@@ -144,10 +211,28 @@ export const auth = {
   }) => api<AuthPayload>("/auth/signup/complete", { method: "POST", body }),
   /** Verify email for an already-registered user using a code. */
   verifyEmail: (code: string) =>
-    api<{ message: string }>("/auth/verify-email", { method: "POST", body: { code } }),
+    api<{ message: string }>("/auth/verify-email", {
+      method: "POST",
+      body: { code },
+    }),
   /** Re-send the email verification link to the signed-in user. */
   resendVerification: () =>
     api<{ message: string }>("/auth/verify-email/resend", { method: "POST" }),
+  /** Request a password reset link via email. */
+  forgotPassword: (email: string) =>
+    api<{ message: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: { email },
+    }),
+  /** Reset password using the token from the email link. */
+  resetPassword: (body: { token: string; password: string }) =>
+    api<{ message: string }>("/auth/reset-password", { method: "POST", body }),
+  /** Invite an administrator (creates account without password, emails reset link). */
+  inviteAdmin: (body: { first_name: string; last_name: string; email: string }) =>
+    api<{ data: User; message: string }>("/staff/admins/invite", {
+      method: "POST",
+      body,
+    }),
 };
 
 /** Multipart upload. The API sniffs the real type and enforces accepts/max_size. */
@@ -185,10 +270,16 @@ export const candidates = {
   application: (electionId: string) =>
     api<CandidateApplicationView>(`/elections/${electionId}/candidate-application`),
   apply: (electionId: string, body: Record<string, unknown>) =>
-    api<Candidate>(`/elections/${electionId}/candidates/apply`, { method: "POST", body }),
+    api<Candidate>(`/elections/${electionId}/candidates/apply`, {
+      method: "POST",
+      body,
+    }),
   mine: () => api<{ candidates: MyCandidate[] }>("/candidates/my"),
   withdraw: (candidateId: string, reason: string) =>
-    api<Candidate>(`/candidates/my/${candidateId}/withdraw`, { method: "POST", body: { reason } }),
+    api<Candidate>(`/candidates/my/${candidateId}/withdraw`, {
+      method: "POST",
+      body: { reason },
+    }),
   /**
    * Replace the image shown on the ballot (approved candidates only, before
    * voting opens). When unset the passport photo is used.
@@ -198,6 +289,26 @@ export const candidates = {
       method: "POST",
       body: { ballot_photo_url: ballotPhotoUrl },
     }),
+  /**
+   * Publish, update or remove a manifesto (text and/or a document link).
+   * Approved candidates only, before voting opens. `clear: true` removes both
+   * the text and the document link in one request.
+   */
+  setManifesto: (
+    candidateId: string,
+    body: { manifesto?: string; manifesto_url?: string; clear?: boolean }
+  ) => api<Candidate>(`/candidates/my/${candidateId}/manifesto`, { method: "POST", body }),
+  /**
+   * The approved candidates of an election, with manifestos, for an eligible
+   * voter. Answers before voting opens so manifestos can be read in advance.
+   */
+  forVoters: (electionId: string) =>
+    api<{
+      election_id: string;
+      title: string;
+      status: ElectionStatus;
+      positions: BallotContent["positions"];
+    }>(`/elections/${electionId}/candidates-for-voters`),
   list: (electionId: string, status?: string) =>
     api<{ candidates: Candidate[] }>(
       `/elections/${electionId}/candidates${status ? `?status=${status}` : ""}`
@@ -218,11 +329,19 @@ export const positions = {
   list: (electionId: string) =>
     api<{ positions: Position[] }>(`/elections/${electionId}/positions`),
   create: (electionId: string, body: Record<string, unknown>) =>
-    api<Position>(`/elections/${electionId}/positions`, { method: "POST", body }),
+    api<Position>(`/elections/${electionId}/positions`, {
+      method: "POST",
+      body,
+    }),
   update: (electionId: string, positionId: string, body: Record<string, unknown>) =>
-    api<Position>(`/elections/${electionId}/positions/${positionId}`, { method: "PUT", body }),
+    api<Position>(`/elections/${electionId}/positions/${positionId}`, {
+      method: "PUT",
+      body,
+    }),
   remove: (electionId: string, positionId: string) =>
-    api<unknown>(`/elections/${electionId}/positions/${positionId}`, { method: "DELETE" }),
+    api<unknown>(`/elections/${electionId}/positions/${positionId}`, {
+      method: "DELETE",
+    }),
 
   // Standalone (positions-first) endpoints. A position exists before any
   // election does; these paths are not election-scoped.
@@ -321,6 +440,26 @@ export const staff = {
     }),
 };
 
+/**
+ * Downloadable documents for an election.
+ *
+ * They are rendered in the browser so they can be laid out to the UI kit's
+ * design. The results ledger still reports exactly what the results screen
+ * publishes, and is refused until the election's policy allows publication so
+ * the caller shows the same refusal. Both generators are loaded on demand:
+ * they pull in the PDF toolkit, which no other screen needs.
+ */
+export const documents = {
+  resultsPdf: async (electionId: string) => {
+    const { downloadResultsLedger } = await import("./pdf");
+    await downloadResultsLedger(electionId);
+  },
+  infoPdf: async (electionId: string) => {
+    const { downloadInfoSheet } = await import("./pdf");
+    await downloadInfoSheet(electionId);
+  },
+};
+
 export const elections = {
   list: () => api<Election[]>("/elections"),
   get: (id: string) => api<Election>(`/elections/${id}`),
@@ -333,7 +472,10 @@ export const elections = {
    */
   remove: (id: string) => api<unknown>(`/elections/${id}`, { method: "DELETE" }),
   transition: (id: string, to: string, reason = "") =>
-    api<Election>(`/elections/${id}/transitions`, { method: "POST", body: { to, reason } }),
+    api<Election>(`/elections/${id}/transitions`, {
+      method: "POST",
+      body: { to, reason },
+    }),
   readiness: (id: string) =>
     api<{
       ready: boolean;
@@ -343,9 +485,12 @@ export const elections = {
   roles: {
     list: (id: string) => api<ElectionRole[]>(`/elections/${id}/roles`),
     lookup: (id: string, email: string) =>
-      api<{ user_id: string; email: string; full_name: string; election_id: string }>(
-        `/elections/${id}/roles/lookup?email=${encodeURIComponent(email)}`
-      ),
+      api<{
+        user_id: string;
+        email: string;
+        full_name: string;
+        election_id: string;
+      }>(`/elections/${id}/roles/lookup?email=${encodeURIComponent(email)}`),
     assign: (id: string, userId: string, role: string) =>
       api<ElectionRole>(`/elections/${id}/roles/${userId}`, {
         method: "PUT",
@@ -397,4 +542,17 @@ export const elections = {
       `/elections/${id}/results/certify`,
       { method: "POST", body: { snapshot_id: snapshotId, reason } }
     ),
+};
+
+/**
+ * The landing-page CMS. Editing writes a draft; publish snapshots it for the
+ * public page. Every action returns the fresh editor state except publish,
+ * which returns only the new snapshot, so callers reload after it.
+ */
+export const landing = {
+  get: () => api<LandingAdminState>("/admin/landing"),
+  save: (draft: LandingDraft) =>
+    api<LandingAdminState>("/admin/landing", { method: "PUT", body: draft }),
+  publish: () => api<Partial<LandingAdminState>>("/admin/landing/publish", { method: "POST" }),
+  revert: () => api<LandingAdminState>("/admin/landing/revert", { method: "POST" }),
 };

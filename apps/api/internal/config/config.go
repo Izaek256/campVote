@@ -127,6 +127,12 @@ type Config struct {
 	AppURL      string
 	DatabaseURL string
 
+	// StudentEmailDomain is the only domain that may self-register, and
+	// AdminEmailDomain is the domain administrators sign in with. Both are
+	// matched exactly after the final "@", never by suffix.
+	StudentEmailDomain string
+	AdminEmailDomain   string
+
 	JWTSecret string
 	// Asymmetric signing, opt-in. With JWTPrivateKey set the API signs RS256
 	// and publishes the public half at /.well-known/jwks.json, so another
@@ -273,6 +279,19 @@ type Config struct {
 	GithubClientSecret string
 	OAuthFrontendURL   string // Where to redirect after OAuth callback
 
+	// Google Identity Services. GoogleOAuthClientID is the OAuth 2.0 Web
+	// Application client whose ID tokens the API accepts at /auth/google. It
+	// is deliberately separate from GoogleClientID, which belongs to the older
+	// redirect-based Goth provider: both may name the same client, but only
+	// this one is required for student sign-in.
+	GoogleOAuthClientID string
+	// GoogleOAuthHostedDomain is the Workspace hosted domain ("hd") every
+	// student ID token must carry. Empty means the email-domain check below is
+	// the only gate. Set it when the university's Workspace primary domain is
+	// known; student addresses may live on a secondary domain such as
+	// std.must.ac.ug while hd is must.ac.ug.
+	GoogleOAuthHostedDomain string
+
 	// Serve the API reference at /docs in production (API_DOCS_PUBLIC).
 	APIDocsPublic bool
 }
@@ -294,7 +313,7 @@ func Load() (*Config, error) {
 	storageDriver := resolveStorageDriver()
 
 	cfg := &Config{
-		AppName: getEnv("APP_NAME", "grit-app"),
+		AppName: getEnv("APP_NAME", "CampVote"),
 		// Production unless told otherwise: a server that forgot APP_ENV is strict.
 		AppEnv: getEnv("APP_ENV", "production"),
 		// PORT first: every platform that routes to a container injects it, and
@@ -304,6 +323,8 @@ func Load() (*Config, error) {
 		Port:               firstNonEmpty(os.Getenv("PORT"), os.Getenv("APP_PORT"), "8080"),
 		AppURL:             resolveAppURL(firstNonEmpty(os.Getenv("PORT"), os.Getenv("APP_PORT"), "8080")),
 		DatabaseURL:        resolveDatabaseURL(),
+		StudentEmailDomain: NormalizeDomain(getEnv("STUDENT_EMAIL_DOMAIN", DefaultStudentEmailDomain)),
+		AdminEmailDomain:   NormalizeDomain(getEnv("ADMIN_EMAIL_DOMAIN", DefaultAdminEmailDomain)),
 		JWTSecret:          getEnv("JWT_SECRET", ""),
 		FieldEncryptionKey: getEnv("FIELD_ENCRYPTION_KEY", ""),
 		RedisURL:           resolveRedisURL(),
@@ -320,8 +341,11 @@ func Load() (*Config, error) {
 		StoragePublicPrefixes: resolveStoragePublicPrefixes(),
 
 		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
-		MailFrom:     getEnv("MAIL_FROM", "noreply@localhost"),
-		Mail:         loadMailConfig(),
+		// Empty means "not set": the mail package then uses SMTP_USERNAME for
+		// SMTP and a local-only address for the log driver. A default here
+		// would silently override that and providers reject noreply@localhost.
+		MailFrom: getEnv("MAIL_FROM", ""),
+		Mail:     loadMailConfig(),
 
 		// The Wails desktop webview is allowed by middleware.isWailsOrigin (it
 		// matches the wails.localhost host on any port), so it needs no entry
@@ -357,7 +381,7 @@ func Load() (*Config, error) {
 		AIGatewayModel:  getEnv("AI_GATEWAY_MODEL", "anthropic/claude-sonnet-4-6"),
 		AIGatewayURL:    getEnv("AI_GATEWAY_URL", "https://ai-gateway.vercel.sh/v1"),
 
-		TOTPIssuer: getEnv("TOTP_ISSUER", getEnv("APP_NAME", "grit-app")),
+		TOTPIssuer: getEnv("TOTP_ISSUER", getEnv("APP_NAME", "CampVote")),
 		// Off by default and deliberately so: switching it on for an existing
 		// project would lock out every user at once, because they all have a
 		// NULL email_verified_at.
@@ -394,6 +418,9 @@ func Load() (*Config, error) {
 		GithubClientID:     getEnv("GITHUB_CLIENT_ID", ""),
 		GithubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
 		OAuthFrontendURL:   getEnv("OAUTH_FRONTEND_URL", "http://localhost:3001"),
+
+		GoogleOAuthClientID:     getEnv("GOOGLE_OAUTH_CLIENT_ID", ""),
+		GoogleOAuthHostedDomain: NormalizeDomain(getEnv("GOOGLE_OAUTH_HOSTED_DOMAIN", "")),
 	}
 
 	// The local driver keeps files on this server's disk: a second replica cannot
@@ -474,6 +501,10 @@ func Load() (*Config, error) {
 	cfg.JWTRefreshExpiry = refreshExpiry
 
 	cfg.warnCrossSiteAuth()
+
+	if cfg.GoogleOAuthClientID == "" {
+		log.Printf("WARNING: GOOGLE_OAUTH_CLIENT_ID is not set; Google sign-in is disabled and POST /api/v1/auth/google will answer 503")
+	}
 
 	return cfg, nil
 }
@@ -771,7 +802,7 @@ func resolveDatabaseURL() string {
 		pass := getEnv("POSTGRES_PASSWORD", "grit")
 		host := getEnv("POSTGRES_HOST", "localhost")
 		port := getEnv("POSTGRES_PORT", "5432")
-		db := getEnv("POSTGRES_DB", getEnv("APP_NAME", "grit-app"))
+		db := getEnv("POSTGRES_DB", "campvote")
 		return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
 			user, pass, host, port, db, getEnv("POSTGRES_SSLMODE", "disable"))
 
@@ -782,7 +813,7 @@ func resolveDatabaseURL() string {
 		pass := getEnv("MYSQL_PASSWORD", "grit")
 		host := getEnv("MYSQL_HOST", "localhost")
 		port := getEnv("MYSQL_PORT", "3306")
-		db := getEnv("MYSQL_DB", getEnv("APP_NAME", "grit-app"))
+		db := getEnv("MYSQL_DB", "campvote")
 		return fmt.Sprintf("mysql:%s:%s@tcp(%s:%s)/%s", user, pass, host, port, db)
 
 	case "sqlite", "sqlite3", "file":
@@ -1157,6 +1188,7 @@ type MailConfig struct {
 	SESAccessKeyID     string
 	SESSecretAccessKey string
 	SESSessionToken    string
+	EchoCodes          bool // MAIL_ECHO_CODES: dev-only opt-in to echo verification codes in API responses when delivery fails
 }
 
 func loadMailConfig() MailConfig {
@@ -1188,5 +1220,6 @@ func loadMailConfig() MailConfig {
 		SESAccessKeyID:     getEnv("AWS_ACCESS_KEY_ID", ""),
 		SESSecretAccessKey: getEnv("AWS_SECRET_ACCESS_KEY", ""),
 		SESSessionToken:    getEnv("AWS_SESSION_TOKEN", ""),
+		EchoCodes:          getEnv("MAIL_ECHO_CODES", "false") == "true",
 	}
 }

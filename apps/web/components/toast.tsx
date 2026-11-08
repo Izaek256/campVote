@@ -32,7 +32,11 @@ interface ToastApi {
 const ToastContext = createContext<ToastApi | null>(null);
 
 // A failure is worth a second look, so it stays longer than a confirmation.
-const AUTO_DISMISS_MS: Record<Kind, number> = { ok: 4000, bad: 8000, warn: 8000 };
+const AUTO_DISMISS_MS: Record<Kind, number> = {
+  ok: 4000,
+  bad: 8000,
+  warn: 8000,
+};
 
 const EXIT_MS = 250;
 

@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"campvote/apps/api/internal/ids"
+
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
 	"campvote/apps/api/internal/appendonly"
 	"campvote/apps/api/internal/crypto"
+	"campvote/apps/api/internal/migrations"
 )
 
 // Role constants
@@ -42,7 +44,7 @@ type User struct {
 	LastName  string                 `gorm:"size:255;not null" json:"last_name" binding:"required"`
 	Email     string                 `gorm:"size:255;uniqueIndex;not null" json:"email" binding:"required,email"`
 	Password  string                 `gorm:"size:255" json:"-"`
-	Role      string                 `gorm:"size:20;default:USER" json:"role"`
+	Role      string                 `gorm:"size:20;default:USER;index" json:"role"`
 	Avatar    string                 `gorm:"size:500" json:"avatar"`
 	JobTitle  string                 `gorm:"size:255" json:"job_title"`
 	Bio       crypto.EncryptedString `gorm:"type:text" json:"bio"`
@@ -188,6 +190,10 @@ func Models() []interface{} {
 		&ResultSnapshot{},
 		&ResultRecount{},
 		&ElectionAuditLog{},
+		// Public landing-page content (draft rows + published snapshot).
+		&LandingSettings{},
+		&LandingFeature{},
+		&LandingFAQ{},
 		// grit:models
 	}
 }
@@ -285,6 +291,23 @@ func Migrate(db *gorm.DB) error {
 
 	if err := SeedRoles(db); err != nil {
 		return fmt.Errorf("seeding default roles: %w", err)
+	}
+
+	// Run manual migrations for changes that AutoMigrate doesn't handle
+	if err := migrations.AddCandidateUserID(db); err != nil {
+		return fmt.Errorf("adding candidate user_id column: %w", err)
+	}
+
+	if err := migrations.AddPerformanceIndexes(db); err != nil {
+		return fmt.Errorf("adding performance indexes: %w", err)
+	}
+
+	if err := migrations.AddGoogleIDUniqueIndex(db); err != nil {
+		return fmt.Errorf("adding Google identity index: %w", err)
+	}
+
+	if err := migrations.AddLandingIndexes(db); err != nil {
+		return fmt.Errorf("adding landing page indexes: %w", err)
 	}
 
 	log.Println(separator)

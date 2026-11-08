@@ -9,7 +9,8 @@ import { Icon } from "@/components/icon";
 import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { useToast } from "@/components/toast";
-import { ApiError, positions, upload } from "@/lib/api";
+import { FilePicker } from "@/components/file-picker";
+import { ApiError, positions } from "@/lib/api";
 import type { EligiblePosition } from "@/lib/types";
 
 function eligibilitySummary(position: EligiblePosition): string {
@@ -65,7 +66,6 @@ function RunForOffice() {
   const toast = useToast();
   const [applying, setApplying] = useState<EligiblePosition | null>(null);
   const [form, setForm] = useState<ApplicationForm>(emptyApplication);
-  const [uploading, setUploading] = useState<"passport" | "transcript" | "">("");
 
   const load = useCallback(async () => {
     try {
@@ -88,32 +88,6 @@ function RunForOffice() {
       ...emptyApplication,
       full_name: user ? `${user.first_name} ${user.last_name}` : "",
     });
-  }
-
-  async function pickFile(kind: "passport" | "transcript", file: File | undefined) {
-    if (!file) return;
-    setUploading(kind);
-    try {
-      const ref =
-        kind === "transcript"
-          ? await upload(file, { accepts: "pdf", maxSize: 5 * 1024 * 1024 })
-          : await upload(file, { accepts: "image", maxSize: 2 * 1024 * 1024 });
-      setForm((current) =>
-        kind === "transcript"
-          ? { ...current, partial_transcript_url: ref.url }
-          : { ...current, passport_photo_url: ref.url }
-      );
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError
-          ? err.message
-          : kind === "transcript"
-            ? "The transcript could not be uploaded."
-            : "The passport photo could not be uploaded."
-      );
-    } finally {
-      setUploading("");
-    }
   }
 
   async function submit(event: React.FormEvent) {
@@ -257,48 +231,22 @@ function RunForOffice() {
                 onChange={(event) => setForm({ ...form, bio: event.target.value })}
               />
             </div>
-            <div className="field">
-              <label htmlFor="apply-passport">Passport photo (JPEG or PNG, max 2 MB) *</label>
-              <input
-                id="apply-passport"
-                className="in"
-                type="file"
-                accept="image/jpeg,image/png"
-                disabled={uploading !== ""}
-                onChange={(event) => pickFile("passport", event.target.files?.[0])}
-              />
-              {uploading === "passport" ? (
-                <span className="hint">Uploading passport photo…</span>
-              ) : null}
-              {form.passport_photo_url ? (
-                <span className="fileline">
-                  <Icon name="check" size="s" />
-                  Passport photo uploaded
-                  <span className="mono">ready</span>
-                </span>
-              ) : null}
-            </div>
-            <div className="field">
-              <label htmlFor="apply-transcript">Partial transcript (PDF, max 5 MB) *</label>
-              <input
-                id="apply-transcript"
-                className="in"
-                type="file"
-                accept="application/pdf"
-                disabled={uploading !== ""}
-                onChange={(event) => pickFile("transcript", event.target.files?.[0])}
-              />
-              {uploading === "transcript" ? (
-                <span className="hint">Uploading transcript…</span>
-              ) : null}
-              {form.partial_transcript_url ? (
-                <span className="fileline">
-                  <Icon name="check" size="s" />
-                  Transcript uploaded
-                  <span className="mono">ready</span>
-                </span>
-              ) : null}
-            </div>
+            <FilePicker
+              accepts="image"
+              maxSize={2 * 1024 * 1024}
+              value={form.passport_photo_url}
+              onChange={(url) => setForm({ ...form, passport_photo_url: url })}
+              label="Passport photo *"
+              hint="JPEG, PNG, GIF, WebP · max 2 MB"
+            />
+            <FilePicker
+              accepts="pdf"
+              maxSize={5 * 1024 * 1024}
+              value={form.partial_transcript_url}
+              onChange={(url) => setForm({ ...form, partial_transcript_url: url })}
+              label="Partial transcript *"
+              hint="PDF · max 5 MB"
+            />
           </div>
           <div className="row">
             <button className="btn primary" type="submit" disabled={busy}>

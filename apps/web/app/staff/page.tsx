@@ -9,7 +9,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
-import { ApiError, elections } from "@/lib/api";
+import { ApiError, elections, auth } from "@/lib/api";
 import { categoryLabel, formatShortEAT } from "@/lib/format";
 import type { Election } from "@/lib/types";
 
@@ -62,6 +62,16 @@ function StaffHome() {
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
+  // Admin invite form state
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteForm, setInviteForm] = useState({
+    first_name: "",
+    last_name: "",
+    email: "",
+  });
+  const [inviteFields, setInviteFields] = useState<Record<string, string>>({});
+  const [inviteBusy, setInviteBusy] = useState(false);
+
   function load() {
     elections
       .list()
@@ -108,6 +118,29 @@ function StaffHome() {
     toast.success("Reloaded from the server.");
   }
 
+  async function inviteAdmin(event: React.FormEvent) {
+    event.preventDefault();
+    setInviteBusy(true);
+    setInviteFields({});
+    try {
+      await auth.inviteAdmin(inviteForm);
+      toast.success(
+        "Invitation sent. The administrator will choose a password from the emailed link."
+      );
+      setShowInviteForm(false);
+      setInviteForm({ first_name: "", last_name: "", email: "" });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        toast.error(err.message);
+        setInviteFields(err.fields ?? {});
+      } else {
+        toast.error("The invitation could not be sent.");
+      }
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
   return (
     <StaffShell>
       <div className="page-head" style={{ marginBottom: 20 }}>
@@ -123,6 +156,10 @@ function StaffHome() {
           <button type="button" className="btn" onClick={refresh}>
             <Icon name="hist" size="s" />
             Refresh
+          </button>
+          <button type="button" className="btn" onClick={() => setShowInviteForm((open) => !open)}>
+            <Icon name="user" size="s" />
+            Invite admin
           </button>
           <button
             type="button"
@@ -186,7 +223,10 @@ function StaffHome() {
                     className="btn sm"
                     disabled={!form.starts_at}
                     onClick={() =>
-                      setForm({ ...form, ends_at: addMinutes(form.starts_at, preset.minutes) })
+                      setForm({
+                        ...form,
+                        ends_at: addMinutes(form.starts_at, preset.minutes),
+                      })
                     }
                   >
                     {preset.label}
@@ -203,6 +243,81 @@ function StaffHome() {
               {busy ? "Creating…" : "Create draft"}
             </button>
             <button className="btn ghost" type="button" onClick={() => setShowForm(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {showInviteForm ? (
+        <form className="panel stack" onSubmit={inviteAdmin} style={{ marginBottom: 24 }}>
+          <div className="section-h" style={{ marginTop: 0 }}>
+            <h2>Invite an administrator</h2>
+            <span className="mono">must use @must.ac.ug domain</span>
+          </div>
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="invite-first-name">First name *</label>
+              <input
+                id="invite-first-name"
+                className={`in${inviteFields.first_name ? " bad" : ""}`}
+                value={inviteForm.first_name}
+                onChange={(event) =>
+                  setInviteForm({
+                    ...inviteForm,
+                    first_name: event.target.value,
+                  })
+                }
+                placeholder="Jane"
+                required
+                minLength={2}
+              />
+              {inviteFields.first_name ? (
+                <span className="err">{inviteFields.first_name}</span>
+              ) : null}
+            </div>
+            <div className="field">
+              <label htmlFor="invite-last-name">Last name *</label>
+              <input
+                id="invite-last-name"
+                className={`in${inviteFields.last_name ? " bad" : ""}`}
+                value={inviteForm.last_name}
+                onChange={(event) =>
+                  setInviteForm({
+                    ...inviteForm,
+                    last_name: event.target.value,
+                  })
+                }
+                placeholder="Doe"
+                required
+                minLength={2}
+              />
+              {inviteFields.last_name ? (
+                <span className="err">{inviteFields.last_name}</span>
+              ) : null}
+            </div>
+            <div className="field full">
+              <label htmlFor="invite-email">Email (must be @must.ac.ug) *</label>
+              <input
+                id="invite-email"
+                className={`in${inviteFields.email ? " bad" : ""}`}
+                type="email"
+                value={inviteForm.email}
+                onChange={(event) => setInviteForm({ ...inviteForm, email: event.target.value })}
+                placeholder="jane.doe@must.ac.ug"
+                required
+              />
+              {inviteFields.email ? <span className="err">{inviteFields.email}</span> : null}
+              <span className="hint">
+                The invited person will receive an email with a link to set their password.
+              </span>
+            </div>
+          </div>
+          <div className="row">
+            <button className="btn primary" type="submit" disabled={inviteBusy}>
+              {inviteBusy ? "Sending…" : "Send invitation"}
+            </button>
+            <button className="btn ghost" type="button" onClick={() => setShowInviteForm(false)}>
               Cancel
             </button>
           </div>

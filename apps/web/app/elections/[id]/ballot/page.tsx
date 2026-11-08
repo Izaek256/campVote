@@ -9,9 +9,10 @@ import { Icon } from "@/components/icon";
 import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
+import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/toast";
 import { VoteSuccess } from "@/components/vote-success";
-import { ApiError, elections } from "@/lib/api";
+import { ApiError, elections, fileUrl } from "@/lib/api";
 import { formatEAT } from "@/lib/format";
 import {
   ABSTAIN,
@@ -27,6 +28,14 @@ import type { Ballot, BallotPosition, SubmitResult } from "@/lib/types";
 function BallotForm({ id }: { id: string }) {
   const toast = useToast();
   const router = useRouter();
+  const { user } = useAuth();
+
+  // Administrators do not vote; redirect to staff dashboard
+  useEffect(() => {
+    if (user?.role === "ADMIN") {
+      router.replace("/staff");
+    }
+  }, [user, router]);
   const [ballot, setBallot] = useState<Ballot | null>(null);
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -97,7 +106,10 @@ function BallotForm({ id }: { id: string }) {
       // pick for this position. Multi-choice positions are not used here.
       if (position.question_type === "MULTI_CHOICE") {
         if (chosen.includes(value)) {
-          return { ...current, [position.id]: chosen.filter((item) => item !== value) };
+          return {
+            ...current,
+            [position.id]: chosen.filter((item) => item !== value),
+          };
         }
         if (chosen.includes(ABSTAIN)) {
           return { ...current, [position.id]: [value] };
@@ -136,7 +148,10 @@ function BallotForm({ id }: { id: string }) {
       const result = await elections.submitBallot(
         ballot.election_id,
         buildSelections(ballot, selections),
-        { ballotVersionId: ballot.ballot_version_id, idempotencyKey: attemptKey.current }
+        {
+          ballotVersionId: ballot.ballot_version_id,
+          idempotencyKey: attemptKey.current,
+        }
       );
       setSelections({});
       setConfirming(false);
@@ -402,7 +417,7 @@ function BallotForm({ id }: { id: string }) {
                         {candidate.photo_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={candidate.photo_url}
+                            src={fileUrl(candidate.photo_url)}
                             alt=""
                             width={44}
                             height={44}

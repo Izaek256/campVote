@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"campvote/apps/api/internal/eligibility"
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/policy"
 	"campvote/apps/api/internal/respond"
@@ -319,12 +320,22 @@ func (h *ResultsHandler) Read(c *gin.Context) {
 		respond.Internal(c, errors.New("stored tally content could not be read"))
 		return
 	}
+	// Participation by faculty is read from the roster and the participation
+	// records rather than from the snapshot, so it never enters the tally hash.
+	// It rides on this response so a download can only ever show what this
+	// screen already shows, and so it obeys one publication gate, not two.
+	faculties, err := eligibility.FacultyTurnoutBreakdown(h.DB, &election, turnoutPrivacyThreshold())
+	if err != nil {
+		respond.Internal(c, err)
+		return
+	}
 	respond.OK(c, gin.H{
-		"election_id":     election.ID,
-		"election_status": election.Status,
-		"available":       true,
-		"label":           snapshot.Status,
-		"snapshot":        view,
+		"election_id":        election.ID,
+		"election_status":    election.Status,
+		"available":          true,
+		"label":              snapshot.Status,
+		"snapshot":           view,
+		"turnout_by_faculty": faculties,
 	})
 }
 

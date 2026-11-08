@@ -9,7 +9,7 @@ import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
-import { ApiError, elections } from "@/lib/api";
+import { ApiError, documents, elections } from "@/lib/api";
 import { formatShortEAT } from "@/lib/format";
 import type { Election } from "@/lib/types";
 
@@ -24,6 +24,7 @@ function ResultsView() {
   const toast = useToast();
   const [items, setItems] = useState<Election[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -42,14 +43,34 @@ function ResultsView() {
     return () => controller.abort();
   }, [toast]);
 
-  // Only elections this voter took part in belong here. Everything else stays
-  // on the Elections page until they vote.
-  const participated = useMemo(
-    () => (items ?? []).filter((election) => election.my_vote_status?.voted),
+  async function download(election: Election) {
+    setDownloading(election.id);
+    try {
+      await documents.resultsPdf(election.id);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "The results document could not be downloaded."
+      );
+    } finally {
+      setDownloading("");
+    }
+  }
+
+  // A student waits on the elections they voted in that have not closed yet.
+  const pending = useMemo(
+    () =>
+      (items ?? []).filter(
+        (election) => election.my_vote_status?.voted && !isClosed(election.status)
+      ),
     [items]
   );
-  const pending = participated.filter((election) => !isClosed(election.status));
-  const published = participated.filter((election) => isClosed(election.status));
+  // Results are public record: every closed election appears here so the whole
+  // campus can read the outcome, whether or not a student was eligible to vote
+  // in it. The API only returns elections this caller may see.
+  const published = useMemo(
+    () => (items ?? []).filter((election) => isClosed(election.status)),
+    [items]
+  );
 
   return (
     <AppShell title="Results">
@@ -58,8 +79,8 @@ function ResultsView() {
           <span className="lbl">Results</span>
           <h1>My results</h1>
           <p>
-            Elections you voted in stay pending until they close. The result appears here once the
-            count is published.
+            Elections you voted in stay pending until they close. Every closed election is listed
+            under published results, so you can see what came out of the elections held on campus.
           </p>
         </div>
         <Link className="btn" href="/elections">
@@ -82,7 +103,7 @@ function ResultsView() {
         </div>
       ) : null}
 
-      {items && participated.length === 0 ? (
+      {items && published.length === 0 && pending.length === 0 ? (
         <EmptyState
           title="Nothing to show yet"
           action={
@@ -91,8 +112,8 @@ function ResultsView() {
             </Link>
           }
         >
-          You have not voted in any election. Once you cast a ballot it will appear here while you
-          wait for the result.
+          No election has closed yet. Once a count is published it will appear here for the whole
+          campus to read.
         </EmptyState>
       ) : null}
 
@@ -136,13 +157,27 @@ function ResultsView() {
                 <div className="cb">
                   <div className="row-between">
                     <StatusChip status={election.status} />
+                    {election.my_vote_status?.voted ? (
+                      <span className="chip draft">
+                        <Icon name="check" size="s" /> You voted
+                      </span>
+                    ) : null}
                   </div>
                   <b style={{ fontSize: 18, lineHeight: 1.3 }}>{election.title}</b>
                   <span className="hint">Closed {formatShortEAT(election.ends_at)}</span>
-                  <div style={{ marginTop: "auto", paddingTop: 8 }}>
+                  <div className="stack" style={{ marginTop: "auto", paddingTop: 8 }}>
                     <Link className="btn block primary" href={`/elections/${election.id}/results`}>
                       View results
                     </Link>
+                    <button
+                      type="button"
+                      className="btn block"
+                      disabled={downloading === election.id}
+                      onClick={() => download(election)}
+                    >
+                      <Icon name="dl" size="s" />
+                      {downloading === election.id ? "Preparing…" : "Download PDF"}
+                    </button>
                   </div>
                 </div>
               </article>

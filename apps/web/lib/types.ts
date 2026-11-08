@@ -16,6 +16,12 @@ export interface AuthPayload {
   tokens: { access_token: string; refresh_token: string; expires_at: number };
 }
 
+export interface AuthChallenge {
+  totp_required: true;
+  pending_token: string;
+  method?: string;
+}
+
 /**
  * The election lifecycle has three stages. DRAFT is private while it is being
  * built; the server opens it automatically at its start time; it closes at its
@@ -49,6 +55,8 @@ export interface Election {
   accepting_votes: boolean;
   display_timezone: string;
   allowed_transitions: ElectionStatus[] | null;
+  /** Listed on the public landing page while it is still a draft. */
+  public_listing: boolean;
   my_vote_status?: VoteStatus;
 }
 
@@ -196,6 +204,17 @@ export interface ResultSnapshot {
   ballots_spoiled: number;
 }
 
+// Participation split by faculty. Counts only: the server never sends a name,
+// an address or anything that could be joined back to a choice, and it
+// withholds the figures for a group smaller than the reporting threshold.
+export interface FacultyTurnout {
+  faculty: string;
+  eligible: number;
+  ballots: number;
+  percent: number;
+  suppressed?: boolean;
+}
+
 export interface Results {
   election_id: string;
   election_status?: ElectionStatus;
@@ -203,6 +222,7 @@ export interface Results {
   label: ResultStatus | "UNAVAILABLE";
   reason?: string;
   snapshot?: ResultSnapshot;
+  turnout_by_faculty?: FacultyTurnout[];
 }
 
 export interface ResultsHistory {
@@ -293,7 +313,25 @@ export interface Candidate {
 export interface MyCandidate {
   candidate: Candidate;
   election_title: string;
+  election_status: ElectionStatus;
+  election_starts_at: string;
+  election_ends_at: string;
   position_title: string;
+  /**
+   * The candidate's own line from the published count. Present only once the
+   * election has closed; it is the candidate's figure, never about a voter.
+   */
+  result?: CandidacyResult;
+}
+
+/** A candidate's own result in a closed election, from the stored snapshot. */
+export interface CandidacyResult {
+  position_title: string;
+  votes: number;
+  share_percent: number;
+  is_winner: boolean;
+  is_tie: boolean;
+  snapshot_status: ResultStatus | string;
 }
 
 export type PositionStatus = "OPEN" | "CLOSED";

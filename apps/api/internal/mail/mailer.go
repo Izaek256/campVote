@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"strings"
 	"time"
 )
 
@@ -61,11 +62,72 @@ func (m *Mailer) Send(ctx context.Context, opts SendOptions) error {
 	if opts.Data["Preheader"] == nil {
 		opts.Data["Preheader"] = opts.Subject
 	}
+	// Inject recipient email and support contact for the footer. These are
+	// available here from SendOptions but not inside the caller's data map.
+	if opts.Data["RecipientEmail"] == nil {
+		opts.Data["RecipientEmail"] = recipientEmail(opts.To)
+	}
+	if opts.Data["SupportEmail"] == nil {
+		opts.Data["SupportEmail"] = ""
+	}
 	htmlBody, err := m.renderTemplate(opts.Template, opts.Data)
 	if err != nil {
 		return fmt.Errorf("rendering template %q: %w", opts.Template, err)
 	}
-	return m.SendMessage(ctx, &Message{To: []string{opts.To}, Subject: opts.Subject, HTML: htmlBody})
+	// Always include a text/plain part alongside the HTML. Google Workspace and
+	// most spam filters expect multipart/alternative. For verification emails,
+	// generate a human-readable plain text with the code prominent, rather
+	// than stripping the HTML (which produces a wall of style tokens).
+	textBody := buildTextBody(opts)
+	if textBody == "" {
+		textBody = htmlToText(htmlBody)
+	}
+	return m.SendMessage(ctx, &Message{To: []string{opts.To}, Subject: opts.Subject, HTML: htmlBody, Text: textBody})
+}
+
+// buildTextBody produces a clean plain-text version for templates that carry
+// a Code. A stripped version of the full HTML template is hard to read; a
+// hand-written plain text is more likely to pass spam filters and render well
+// in text-only clients.
+func buildTextBody(opts SendOptions) string {
+	if opts.Data == nil {
+		return ""
+	}
+	code, hasCode := opts.Data["Code"]
+	if !hasCode {
+		return ""
+	}
+	appName := "CampVote"
+	if v, ok := opts.Data["AppName"]; ok {
+		appName = fmt.Sprintf("%v", v)
+	}
+	msg := "Enter this code to verify your address."
+	if v, ok := opts.Data["Message"]; ok {
+		msg = fmt.Sprintf("%v", v)
+	}
+	minutes := "10"
+	if v, ok := opts.Data["Minutes"]; ok {
+		minutes = fmt.Sprintf("%v", v)
+	}
+	to := ""
+	if v, ok := opts.Data["RecipientEmail"]; ok {
+		to = fmt.Sprintf("%v", v)
+	}
+
+	return fmt.Sprintf(
+		"%s\n\n%s\n\nYour verification code:\n\n  %v\n\nThis code expires in %s minutes and works once.\n\n--\n%s will never ask for this code by email or phone.\nSent to %s.",
+		opts.Subject, msg, code, minutes, appName, to,
+	)
+}
+
+// recipientEmail pulls a bare address from a To value that may be either
+// "Name <addr>" or plain "addr", for use in the footer.
+func recipientEmail(to string) string {
+	to = strings.TrimSpace(to)
+	if i := strings.LastIndex(to, "<"); i >= 0 {
+		to = strings.TrimSuffix(strings.TrimPrefix(to[i:], "<"), ">")
+	}
+	return to
 }
 
 // SendRaw sends an email with raw HTML content (no template rendering).
@@ -110,6 +172,36 @@ func (m *Mailer) renderTemplate(name string, data map[string]interface{}) (strin
 	}
 	if full["Year"] == nil {
 		full["Year"] = time.Now().Year()
+	}
+	// RecipientEmail, Digits, and DigitInk are injected by Send() from the
+	// SendOptions rather than from the caller's data map: they are structural
+	// properties of every email, not template-specific values.
+	// Callers that use renderTemplate directly (RenderLayout, preview) may
+	// supply them themselves; if they do not, safe fallbacks are used.
+	if full["RecipientEmail"] == nil {
+		full["RecipientEmail"] = ""
+	}
+	if full["SupportEmail"] == nil {
+		full["SupportEmail"] = ""
+	}
+	// Split the Code into individual runes for the digit-cell table. If no Code
+	// is present (non-verification templates) these remain nil and the template
+	// range produces nothing.
+	if code, ok := full["Code"]; ok && full["Digits"] == nil {
+		codeStr := fmt.Sprintf("%v", code)
+		// CodeRaw is the plain string for the copy bar.
+		if full["CodeRaw"] == nil {
+			full["CodeRaw"] = codeStr
+		}
+		digits := []string{}
+		inks := []template.CSS{}
+		ink := template.CSS(full["Ink"].(string))
+		for _, ch := range codeStr {
+			digits = append(digits, string(ch))
+			inks = append(inks, ink)
+		}
+		full["Digits"] = digits
+		full["DigitInk"] = inks
 	}
 
 	tmpl, err := template.New(name).Parse(tmplStr)

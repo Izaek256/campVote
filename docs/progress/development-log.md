@@ -540,3 +540,84 @@ Already enforced server-side: `GET /positions/eligible` (`position_workflow.go`)
 - No browser/Playwright evidence for the confetti modal, the ballot-photo upload or the duration presets (no local Playwright suite).
 - The apply form keeps **Ballot photo** as an optional extra on top of the required **Passport photo**; the two remain distinct columns.
 
+
+---
+
+## [2026-11-05] Docker 29 build fix, WSL full stack, Windows PostgreSQL, and CampVote branding
+
+**Branch:** `feature/domains-admins-uploads-email`.
+**Goal:** make the API image build on a host whose Docker bridge has no DNS, add an opt-in WSL2/Linux stack that containerises PostgreSQL, the API and the web app, add a Windows Docker Desktop PostgreSQL setup, and stop the application defaulting to `grit-app` instead of CampVote.
+
+### Docker
+- Diagnosed the build failure as the default Docker bridge having no DNS/egress on this machine, plus Docker 29 refusing `--network=host` unless the CLI grants `network.host`.
+- Removed `build.network`/`build.entitlements` from `docker-compose.yaml`: Compose can only request the entitlement, so leaving it made `docker compose build` fail on every host.
+- Added `scripts/docker-api.sh` (`pnpm docker:build`, `pnpm docker:up`) to build the API directly with `--network=host --allow=network.host`, then start with `--no-build`.
+- Added `docker-compose.wsl.yaml`: `db` + `api` + `web` on a private bridge, with `DATABASE_URL` overridden to `db:5432`, published 8080/3000, API/web health gates and named volumes for PostgreSQL and uploads.
+- Added `docker-compose.windows.yaml`: PostgreSQL only, loopback-published on 5432, with values from `.env` and local defaults.
+- Added `scripts/docker-stack.sh` (`pnpm docker:stack`, `:build`, `:down`) for hosts where Compose cannot build with host networking.
+- Fixed `apps/web/Dockerfile`'s public-directory copy by adding `apps/web/public/.gitkeep`; the first web image build failed because the directory did not exist.
+- Changed the web health probe to `127.0.0.1:3000`; Alpine resolved `localhost` to `::1` while Next.js listened on IPv4 only.
+
+### Branding
+- Backend defaults now use `CampVote`: `APP_NAME`, TOTP issuer, settings `app.name`, OCSF product name and the tracing fallback (`campvote-api`).
+- Database fallbacks use the lowercase `campvote` identifier rather than the display name.
+- UI text, auth emails, PDF metadata/footers, the app shell, manifest, page titles and the server banner now read **CampVote**.
+- `.env.example` gained `APP_NAME=CampVote` and the `POSTGRES_DB`/`POSTGRES_USER` values used by the Windows compose file.
+- Framework references to Grit (CLI markers, generator comments) were intentionally left alone; they describe the scaffold, not the application name.
+
+### Checks Run
+- `docker compose -f docker-compose.wsl.yaml config` — PASS; services and rewritten `DATABASE_URL` inspected.
+- `docker compose -f docker-compose.windows.yaml config` — PASS; not started because the host already uses port 5432.
+- API and web images built with `--network=host --allow=network.host` — PASS.
+- `docker compose -f docker-compose.wsl.yaml up -d --no-build` followed by health checks — PASS; API `/api/health` 200 with 67 tables on the compose database, web `/` 307 → `/elections` → 200, `/login` 200; all three containers healthy.
+- `go build ./...` — PASS.
+- `go test ./internal/config ./internal/settings ./internal/mail -count=1` — PASS.
+- `pnpm --filter @campvote/web type-check` — PASS (after `pnpm install --frozen-lockfile`).
+- `pnpm --filter @campvote/web test` — PASS, 25/25.
+- `go test ./internal/handlers` — pre-existing `TestAuthHandler_Login_Success` failure; reproduced on `HEAD` in a detached worktree, so not introduced here.
+
+### Documentation
+- Added `docs/operations/docker-full-stack.md`; linked it from `docs/README.md` and cross-referenced it from `docs/operations/docker-compose.md`.
+- README gained Option 5 (WSL2/Linux full stack) and Option 6 (PostgreSQL in Docker Desktop on Windows), plus the build-network note and updated environment-variable table.
+- README documents, per setup, what to do after a code change and how to start a stopped service again, with a summary table under Common tasks. Containerised setups require an image rebuild; host setups hot-reload and run migrations manually.
+
+### Deferred / Known limitations
+- The full stack has no Redis, MinIO, Mailpit or reverse proxy; `REDIS_URL` is empty, so jobs and scheduled transitions are off.
+- The Windows compose file was configuration-checked but not started on this machine (port 5432 is occupied by the host PostgreSQL).
+- The pre-existing handlers login-test failure remains open.
+
+---
+
+## [2026-11-05] Fix: Verification Code Echo Security Hole + Mail Delivery
+
+### Goal
+Fix undelivered verification-code emails and close a security hole where the code was leaked in API responses whenever `APP_ENV != "production"` (the Docker default), allowing anyone to verify any email address.
+
+### Root Cause
+1. **No SMTP credentials in `.env`**: Host `.env` had no `MAIL_MAILER`, `SMTP_*`, or `RESEND_API_KEY`. The container's effective driver was `failover(smtp,log)`, which tried `localhost:1025`, failed, and fell back to the log driver — codes were saved to `storage/mail/*.html` but never sent to an inbox.
+2. **`MAIL_FROM` defaulted to `noreply@localhost`**, which real SMTP providers reject ("sender address rejected").
+3. **Security hole**: The dev echo of `verification_code`/`verify_code` triggered on `AppEnv != "production"` alone. Since Docker defaults to `APP_ENV=development`, a deployment with working SMTP would still return the code in the API response, letting anyone verify any email address.
+4. **Regression**: commit `a8daaea` removed the dev echo from `SignupInitiate`, but `apps/web` and `docs/auth.md` still expected it.
+5. **Test breakage**: `testCfg()` had no campus domain, so `IsStudentEmail` returned 403 for `@example.com`.
+
+### Changes
+- **`apps/api/internal/config/config.go`**: Added `EchoCodes bool` to `MailConfig` (`MAIL_ECHO_CODES`, default false). `MailFrom` default changed from `noreply@localhost` to `""`.
+- **`apps/api/internal/handlers/auth_email_verification.go`**: `deliverVerificationEmail` now returns `(string, error)`; the no-mailer-dev path returns `ErrNoMailer` instead of `nil`. `SendVerificationEmail` echoes `verify_code` only when `MAIL_ECHO_CODES=true`, not production, AND delivery failed (`err != nil`).
+- **`apps/api/internal/handlers/auth.go`**: `SignupInitiate` echoes `verification_code` under the same conditions. `deliverSignupVerificationEmail` returns `ErrNoMailer` in the no-mailer-dev case. Uses `dispatchMail` with the `email-verification` template. Removed hardcoded HTML helpers and unused `fmt` import.
+- **`apps/api/internal/mail/from_config.go`**: `fromAddress` falls back to `SMTP_USERNAME` then `noreply@localhost` when `MAIL_FROM` is empty.
+- **`apps/api/cmd/server/main.go`**: Startup warning when the effective mail driver contains "log".
+- **Tests**: `testCfg()` and bench configs set campus domains. New tests prove the code is NOT echoed when a mailer succeeds (with and without `MAIL_ECHO_CODES`), IS echoed when no mailer and flag is on, and is hidden in production. SMTP_USERNAME from-fallback test added.
+- **`.env.example`**: Mail block rewritten with SMTP guidance, `SMTP_ENCRYPTION`, blank `MAIL_FROM`, and `MAIL_ECHO_CODES` documentation.
+- **`docs/auth.md`**: Updated dev echo behaviour description.
+- **`README.md`**: Added `MAIL_ECHO_CODES` to env table and quick-start comments.
+
+### Checks Run
+- `gofmt -l .` — only pre-existing files flagged (my files clean after `gofmt -w`).
+- `go build ./...` — PASS.
+- `go test ./... -count=1` — PASS (all packages, including handlers 21s, mail, config).
+- Targeted test run for all echo/security tests — PASS.
+
+### Known Limitations / Open Questions
+- Could not verify real inbox delivery: `.env` has no SMTP credentials. The user needs to provide them.
+- `MAIL_ECHO_CODES` defaults to false; the dev echo only works when explicitly opted in AND delivery fails.
+- The `failover(smtp,log)` driver in dev-without-SMTP hides SMTP failures behind the log fallback; the new startup warning makes this visible.

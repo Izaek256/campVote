@@ -7,13 +7,14 @@ package respond
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+
+	"campvote/apps/api/internal/logging"
 )
 
 // Error is the wire shape of every error envelope.
@@ -282,7 +283,7 @@ func ServerError(c *gin.Context, code string, err error, message string) {
 	if err != nil {
 		_ = c.Error(err)
 	}
-	log.Printf("[500] %s %s | id=%s | %s: %v", c.Request.Method, c.Request.URL.Path, c.GetString("request_id"), code, err)
+	logging.Error("%s %s returned 500 %s (id=%s): %v", c.Request.Method, c.Request.URL.Path, code, c.GetString("request_id"), err)
 	// Not Fail: code is a plain string here, so callers can name the subsystem
 	// that broke (DB_ERROR, STORAGE_ERROR) without every one of them being a
 	// catalogued constant. The status is 500 either way.

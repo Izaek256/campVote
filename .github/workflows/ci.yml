@@ -130,7 +130,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # jsdom (used by the web component tests) depends on undici@8, which
+          # declares "node": ">=22.19.0" and reads createZstdDecompress() at
+          # load time. On Node 20 that symbol is missing, so every jsdom worker
+          # dies before it runs a test. Do not lower this back to 20.
+          node-version: '22'
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
@@ -167,7 +171,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Matches the frontend job: the lockfile's undici@8 requires Node >= 22.19.
+          node-version: '22'
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 

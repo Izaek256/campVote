@@ -23,7 +23,7 @@ type OCSFHandler struct {
 
 func NewOCSFHandler(db *gorm.DB, productName string) *OCSFHandler {
 	if productName == "" {
-		productName = "grit-app"
+		productName = "CampVote"
 	}
 	return &OCSFHandler{DB: db, ProductName: productName}
 }

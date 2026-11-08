@@ -9,6 +9,9 @@ Do not silently guess these. Create/link issues and record decisions in `ADR.md`
 - [ ] **Eligibility freeze:** should the roster freeze automatically when polls open, or remain a deliberate officer action (current behaviour)?
 - [ ] **Roster import approval:** who may import a roll, and is a second approver required before it becomes authoritative?
 - [ ] **Email domains:** Confirm the proposed `@std.must.ac.ug` and `@must.ac.ug` domains with university IT; domain possession alone does not prove eligibility.
+- [ ] **Google Workspace domain:** Is the student domain (`std.must.ac.ug`) inside a Google Workspace whose `hd` claim is `must.ac.ug`? If so, set `GOOGLE_OAUTH_HOSTED_DOMAIN=must.ac.ug` to reject personal Gmail accounts. If students use personal Google accounts with a university email, confirm that is acceptable.
+- [ ] **Google OAuth client ownership:** Who owns the Google Cloud project and OAuth client, and which origins must be authorised for local, preview and production? The ID is public; the client secret must stay server-side and is not used by this flow.
+- [ ] **GIS nonce:** Is the current popup flow (audience-bound, existing CSRF/rate limits) sufficient for the assignment, or is a server-issued nonce required? It is not implemented.
 - [ ] **Roster import fallback:** Who can upload rosters, what validation/approval is required, and how are disputes and corrections handled?
 - [ ] **Election rules:** Who approves nomination rules, ballot limits, tie handling, election extensions, recounts, and certification?
 - [ ] **Results visibility:** For each election, are results live provisional, released after closing, or published after certification?

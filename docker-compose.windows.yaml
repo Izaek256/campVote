@@ -1,0 +1,43 @@
+# PostgreSQL in Docker Desktop on Windows.
+#
+# This file containerises only the database, for running the Go API and Next.js
+# app directly on Windows or in WSL. For the fully containerised WSL stack, use
+# docker-compose.wsl.yaml instead.
+#
+#   docker compose -f docker-compose.windows.yaml up -d
+#   docker compose -f docker-compose.windows.yaml ps
+#   docker compose -f docker-compose.windows.yaml logs postgres
+#   docker compose -f docker-compose.windows.yaml down
+#
+# Then set DATABASE_URL in .env to the published port:
+#   DATABASE_URL=postgres://campvote_dev:campvote_dev_password@localhost:5432/campvote_dev?sslmode=disable&client_encoding=UTF8
+#
+# POSTGRES_DB, POSTGRES_USER and POSTGRES_PASSWORD are read from .env when set;
+# otherwise the local-development defaults below apply. If you change the
+# password, percent-encode @, %, / and # inside DATABASE_URL.
+#
+# This is a local development database. Do not put real election data in it.
+
+name: campvote-windows
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-campvote_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-campvote_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-campvote_dev_password}
+    ports:
+      # Bound to loopback only: reachable from Windows/WSL, not the network.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - campvote_windows_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  campvote_windows_postgres:

@@ -10,7 +10,7 @@ import { SiteHeader } from "@/components/site-header";
 import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
 import { useChannel } from "@/hooks/use-realtime";
-import { ApiError, elections } from "@/lib/api";
+import { ApiError, documents, elections } from "@/lib/api";
 import { formatNumber, formatPercent } from "@/lib/format";
 import type { PositionResult, Results } from "@/lib/types";
 
@@ -38,7 +38,11 @@ function PositionTally({ position, certified }: { position: PositionResult; cert
                 {row.is_tie ? <span className="lead-tag">Tie</span> : null}
               </span>
               <div className={`bar${row.is_winner ? " lead" : ""}`}>
-                <i style={{ width: `${Math.min(100, Math.max(0, row.share_percent))}%` }} />
+                <i
+                  style={{
+                    width: `${Math.min(100, Math.max(0, row.share_percent))}%`,
+                  }}
+                />
               </div>
               <span className="vl">
                 <b>{formatNumber(row.votes)}</b> · {formatPercent(row.share_percent)}
@@ -58,6 +62,7 @@ function ResultsView({ id }: { id: string }) {
   const toast = useToast();
   const [results, setResults] = useState<Results | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -77,6 +82,20 @@ function ResultsView({ id }: { id: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // The downloadable ledger holds exactly what this page publishes.
+  async function downloadLedger() {
+    setDownloading(true);
+    try {
+      await documents.resultsPdf(id);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "The results document could not be downloaded."
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   // The automatic tally at close publishes on this channel, so a page already
   // open updates without a refresh or a staff click.
@@ -108,7 +127,20 @@ function ResultsView({ id }: { id: string }) {
             certified.
           </p>
         </div>
-        {results?.election_status ? <StatusChip status={results.election_status} /> : null}
+        <div className="row">
+          {results?.election_status ? <StatusChip status={results.election_status} /> : null}
+          {snapshot ? (
+            <button
+              type="button"
+              className="btn sm"
+              disabled={downloading}
+              onClick={downloadLedger}
+            >
+              <Icon name="dl" size="s" />
+              {downloading ? "Preparing…" : "Download PDF"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {loadError ? (

@@ -75,6 +75,10 @@ type createElectionRequest struct {
 	AllowedDomain  string `json:"allowed_domain"`
 	AllowedYears   string `json:"allowed_years"`
 	AllowedCourses string `json:"allowed_courses"`
+	// PublicListing opts the election into the public landing page's upcoming
+	// list. Off by default: a draft is private until an administrator says
+	// otherwise.
+	PublicListing bool `json:"public_listing"`
 }
 
 // Create writes a new DRAFT election. Scheduling is a separate, validated
@@ -107,6 +111,7 @@ func (h *ElectionLifecycleHandler) Create(c *gin.Context) {
 		AllowedDomain:  strings.ToLower(strings.TrimPrefix(strings.TrimSpace(in.AllowedDomain), "@")),
 		AllowedYears:   strings.TrimSpace(in.AllowedYears),
 		AllowedCourses: strings.ToLower(strings.TrimSpace(in.AllowedCourses)),
+		PublicListing:  in.PublicListing,
 		CreatedByID:    c.GetString("user_id"),
 	}
 	if election.Category == "" {
@@ -151,18 +156,18 @@ func (h *ElectionLifecycleHandler) Create(c *gin.Context) {
 	respond.Created(c, h.view(election, now), "Election created")
 }
 
-// List returns the elections a signed-in caller may see. A draft is visible
-// only to its creator. For non-staff/non-admin callers with a parseable
-// registration-number email, only elections whose rule allows them are returned.
+// List returns the elections a signed-in caller may see.
+//
+// Visibility here is deliberately wider than the right to vote. A draft is
+// shown to the students it will admit, so the candidates and their manifestos
+// can be read before polls open. A closed election is shown to every signed-in
+// student, not only those who could have voted in it, so the outcome is
+// transparent across campus. Whether a caller may actually cast a ballot is
+// still decided per election by the ballot handler.
 func (h *ElectionLifecycleHandler) List(c *gin.Context) {
 	actor := policy.ActorFrom(c)
-	query := h.DB.Order("starts_at DESC").Limit(100)
-	if !actor.Admin {
-		query = query.Where("status <> ? OR created_by_id = ?",
-			models.ElectionStatusDraft, actor.UserID)
-	}
 	var elections []models.Election
-	if err := query.Find(&elections).Error; err != nil {
+	if err := h.DB.Order("starts_at DESC").Limit(100).Find(&elections).Error; err != nil {
 		respond.Internal(c, err)
 		return
 	}
@@ -184,23 +189,48 @@ func (h *ElectionLifecycleHandler) List(c *gin.Context) {
 			respond.Internal(c, err)
 			return
 		}
-		// Filter non-admin, non-role-holder students to elections they are eligible for.
-		if !actor.Admin && callerParsed {
-			// If this caller has a role on this specific election, always show it.
-			hasRole := false
-			var roleCount int64
-			h.DB.Model(&models.ElectionRole{}).
-				Where("election_id = ? AND user_id = ?", elections[i].ID, actor.UserID).
-				Count(&roleCount)
-			hasRole = roleCount > 0
-			if !hasRole && !eligibility.RuleAllows(&elections[i], callerID) {
-				continue // skip elections the caller cannot see
-			}
+		if !actor.Admin && !h.visibleTo(&elections[i], actor.UserID, callerID, callerParsed) {
+			continue
 		}
 		out = append(out, h.view(&elections[i], now))
 	}
 	h.attachVoteStatus(c, out)
 	respond.OK(c, out)
+}
+
+// visibleTo decides whether a signed-in non-admin caller may see one election.
+// A caller holding a role on the election always may. A closed election is
+// public to every signed-in student. A draft is previewed only by the students
+// its rule admits, and an open election keeps the established behaviour: shown
+// to the students the rule admits, or to everyone when the caller's own
+// address is one the domain parser does not recognise.
+func (h *ElectionLifecycleHandler) visibleTo(
+	election *models.Election, userID string,
+	callerID eligibility.Identity, callerParsed bool,
+) bool {
+	return electionVisibleTo(h.DB, election, userID, callerID, callerParsed)
+}
+
+// electionVisibleTo is the single visibility rule for one election, shared by
+// the list and by the downloadable information notice so the two cannot drift.
+func electionVisibleTo(
+	db *gorm.DB, election *models.Election, userID string,
+	callerID eligibility.Identity, callerParsed bool,
+) bool {
+	if election.Status == models.ElectionStatusClosed {
+		return true
+	}
+	var roleCount int64
+	db.Model(&models.ElectionRole{}).
+		Where("election_id = ? AND user_id = ?", election.ID, userID).
+		Count(&roleCount)
+	if roleCount > 0 {
+		return true
+	}
+	if election.Status == models.ElectionStatusDraft {
+		return callerParsed && eligibility.RuleAllows(election, callerID)
+	}
+	return !callerParsed || eligibility.RuleAllows(election, callerID)
 }
 
 // attachVoteStatus adds the caller's own participation flag to the list. It is
@@ -362,6 +392,7 @@ type updateElectionRequest struct {
 	AllowedDomain  *string `json:"allowed_domain"`
 	AllowedYears   *string `json:"allowed_years"`
 	AllowedCourses *string `json:"allowed_courses"`
+	PublicListing  *bool   `json:"public_listing"`
 	Reason         string  `json:"reason"`
 }
 
@@ -408,6 +439,9 @@ func (h *ElectionLifecycleHandler) Update(c *gin.Context) {
 	}
 	if in.AllowedCourses != nil {
 		updated.AllowedCourses = strings.ToLower(strings.TrimSpace(*in.AllowedCourses))
+	}
+	if in.PublicListing != nil {
+		updated.PublicListing = *in.PublicListing
 	}
 	if in.StartsAt != nil {
 		startsAt, ok := scheduleField(c, "starts_at", *in.StartsAt)
@@ -663,6 +697,9 @@ func changedElectionFields(before, after models.Election) []string {
 	if before.AllowedCourses != after.AllowedCourses {
 		changed = append(changed, "allowed_courses")
 	}
+	if before.PublicListing != after.PublicListing {
+		changed = append(changed, "public_listing")
+	}
 	return changed
 }
 
@@ -678,6 +715,7 @@ func electionUpdateValues(e *models.Election) map[string]interface{} {
 		"allowed_domain":  e.AllowedDomain,
 		"allowed_years":   e.AllowedYears,
 		"allowed_courses": e.AllowedCourses,
+		"public_listing":  e.PublicListing,
 	}
 }
 

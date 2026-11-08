@@ -1,12 +1,19 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { ToastProvider } from "@/components/toast";
 import { CAMPUS_NAME } from "@/lib/config";
 
 export const metadata: Metadata = {
-  title: `campVote — ${CAMPUS_NAME} elections`,
+  title: `CampVote — ${CAMPUS_NAME} elections`,
   description: `Vote in authorised ${CAMPUS_NAME} elections.`,
+};
+
+// The browser chrome and mobile status bar wear the kit's primary green.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#12783F",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -22,10 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Apply the saved theme before paint so every page starts in the
             chosen mode instead of flashing the default. */}
         <script
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: the theme must be set before first paint; this is a static literal with no user or server input.
           dangerouslySetInnerHTML={{
             __html:
-              'try{var t=localStorage.getItem("theme");if(t&&t!=="system"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}',
+              'try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}',
           }}
         />
       </head>

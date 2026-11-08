@@ -76,6 +76,14 @@ func docsAuthRoutes(docs *gindocs.GinDocs) {
 		RequestBody(handlers.LoginRequest{}).
 		Response(200, handlers.AuthResponse{}, "Signed in").
 		Response(401, handlers.ErrorResponse{}, "Invalid credentials")
+	docs.Route("POST /api/v1/auth/google").
+		Summary("Sign in with a Google Identity Services ID token").
+		RequestBody(handlers.GoogleSignInRequest{}).
+		Response(200, handlers.AuthResponse{}, "Signed in").
+		Response(201, handlers.AuthResponse{}, "Student account created and signed in").
+		Response(401, handlers.ErrorResponse{}, "The Google token could not be verified").
+		Response(403, handlers.ErrorResponse{}, "Not a permitted student Google account").
+		Response(503, handlers.ErrorResponse{}, "GOOGLE_OAUTH_CLIENT_ID is not configured")
 	docs.Route("POST /api/v1/auth/refresh").
 		Summary("Exchange a refresh token for a new access token").
 		RequestBody(handlers.RefreshRequest{}).

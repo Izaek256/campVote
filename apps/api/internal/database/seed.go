@@ -26,6 +26,10 @@ func Seed(db *gorm.DB) error {
 		return fmt.Errorf("seeding elections: %w", err)
 	}
 
+	if err := SeedLanding(db); err != nil {
+		return fmt.Errorf("seeding landing page: %w", err)
+	}
+
 	// grit:seeders
 
 	return nil

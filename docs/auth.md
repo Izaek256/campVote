@@ -34,9 +34,49 @@ This document records what the code actually does today and which test proves it
 - Codes: six digits from `crypto/rand`, stored as an HMAC-SHA256 hash keyed with the application `JWT_SECRET`, 10-minute TTL. The keyed hash matters because the six-digit space is small enough to brute-force from a plain hash. Issuing a new code marks every earlier unused code for that user as used.
 - Replay, expiry, unknown and email-changed all return `400 INVALID_LINK` with one message.
 - `REQUIRE_EMAIL_VERIFICATION` (default `false`) gates sign-in. It is opt-in so existing local accounts are not locked out; **production deployments should set it to `true`**. Social/SSO sign-ins are unaffected because the IdP already proved the address.
-- `POST /api/auth/send-verification` is authenticated (prevents using it as a spam relay) and rate-limited in the router. In development the response also carries `verify_code`, guarded on `APP_ENV=development`.
+- The registration page now uses Google Sign-In instead of the OTP form (see below). The OTP endpoints above remain mounted for backward compatibility.
+
+## Google sign-in (Google Identity Services)
+
+**Status:** implemented on `feature/google-signin-authentication`; see
+[`implementation/GOOGLE_SIGNIN.md`](implementation/GOOGLE_SIGNIN.md) for the full
+design, Google Cloud setup, rollback and troubleshooting.
+
+- The web app loads Google Identity Services and sends the raw ID token to
+  `POST /api/v1/auth/google`. It never decodes the token or trusts its claims.
+- The API verifies the token with `google.golang.org/api/idtoken`
+  (signature, issuer, audience, expiry) before reading any claim. A missing
+  `GOOGLE_OAUTH_CLIENT_ID` answers `503 GOOGLE_NOT_CONFIGURED`; there is no
+  fallback.
+- Google sign-in is student-only: the verified email must be on
+  `STUDENT_EMAIL_DOMAIN`, and the existing account (if any) must have the
+  `STUDENT_VOTER` role. Administrator Google sign-in is refused.
+  `GOOGLE_OAUTH_HOSTED_DOMAIN`, when set, must equal the token's `hd`.
+- The immutable Google `sub` is stored in `users.google_id`. A partial unique
+  index (`idx_users_google_id WHERE google_id <> ''`) keeps one subject per
+  account.
+- First sign-in creates a passwordless, active `STUDENT_VOTER` account
+  (`provider=google`, email verified). An existing account is linked by verified
+  email without changing its role, name or student identifiers. An existing
+  **unverified** account loses its old password and sessions before linking, as
+  with the redirect-OAuth path.
+- A disabled account is refused before linking. A verified email already bound to
+  a different Google subject is a `409` conflict, never an automatic merge.
+- The endpoint is public (bootstrap) and CSRF-exempt like login/register, but
+  rate-limited per IP and audited as `auth.login` / `auth.register`. The token is
+  never logged.
+- Staff and administrator accounts are not created by this endpoint.
+- `POST /api/auth/send-verification` is authenticated (prevents using it as a spam relay) and rate-limited in the router. When `MAIL_ECHO_CODES=true` (default false) and `APP_ENV` is not production, the response also carries `verify_code` — but only when mail delivery actually failed (no mailer configured, or a send error). This is a development fallback so the flow can complete without a working mail server; a deployment with working SMTP never exposes the code. The same gate applies to `POST /api/auth/signup/initiate`, which carries `verification_code` under the same conditions. Without the flag, the code is in the server log (`docker compose logs api`) and in `storage/mail/`.
 
 ## Login, rate limiting and lockout
+
+- Password login is reserved for accounts with the `ADMIN` role and an email on
+  `ADMIN_EMAIL_DOMAIN` (default `must.ac.ug`). The student `/login` and
+  `/register` pages use Google; administrators use `/admin/login`. The server
+  enforces the domain and database role before issuing any session.
+- Authenticated API requests reload the active user from the database and staff
+  routes apply server-side role or permission guards. Hiding staff pages in the
+  web client is not authorization.
 
 - Unknown email, wrong password, no-password social account and a locked account all return `401 INVALID_CREDENTIALS` with the same body. A dummy bcrypt comparison equalises the response time for unknown addresses.
 - Only wrong passwords on real accounts are counted (`failed_login_count`), incremented in SQL so concurrent attempts cannot overwrite each other.
@@ -68,7 +108,7 @@ This document records what the code actually does today and which test proves it
   | `grit_refresh` | yes | same | Lax | `/api/v1/auth` |
   | `grit_signed_in` | yes (no secret) | same | Lax | `/` |
 
-- `CSRF` / `AutoCSRF`: safe methods issue a readable `grit_csrf` cookie (SameSite=Lax, Secure behind TLS). Cookie-authenticated `POST/PUT/PATCH/DELETE` must echo it in `X-CSRF-Token`; bearer requests are exempt; login/register/refresh/forgot/reset/TOTP-verify and SAML ACS are exempt because they bootstrap the session.
+- `CSRF` / `AutoCSRF`: safe methods issue a readable `grit_csrf` cookie (SameSite=Lax, Secure behind TLS). Cookie-authenticated `POST/PUT/PATCH/DELETE` must echo it in `X-CSRF-Token`; bearer requests are exempt; login/register/google/refresh/forgot/reset/TOTP-verify and SAML ACS are exempt because they bootstrap the session.
 
 ## Account deactivation and deletion
 
@@ -89,6 +129,10 @@ BOOTSTRAP_ADMIN_FIRST_NAME=First \
 BOOTSTRAP_ADMIN_LAST_NAME=Admin \
 go run ./cmd/bootstrap
 ```
+
+After bootstrap, sign in at `/admin/login` with that email and password. Later
+administrator accounts are invited from the staff pages and set their password
+through the emailed reset link.
 
 Rules enforced by `database.CreateFirstAdmin`:
 
