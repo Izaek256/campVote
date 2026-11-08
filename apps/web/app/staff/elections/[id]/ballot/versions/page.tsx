@@ -40,7 +40,8 @@ function Versions({ id }: { id: string }) {
       const data = await staff.versions(id);
       setVersions(data.versions ?? []);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Ballot versions could not be loaded.";
+      const message =
+        err instanceof ApiError ? err.message : "Ballot versions could not be loaded.";
       setLoadError(message);
       toast.error(message);
     }

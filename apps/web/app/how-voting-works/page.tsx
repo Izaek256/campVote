@@ -26,8 +26,8 @@ export default function HowVotingWorksPage() {
           <p>
             Use your verified <span className="mono">@{STUDENT_EMAIL_DOMAIN}</span> or{" "}
             <span className="mono">@{STAFF_EMAIL_DOMAIN}</span> address. Holding an institutional
-            address is only an identity hint: the server also checks the election's eligibility
-            rule (domain, year and course).
+            address is only an identity hint: the server also checks the election's eligibility rule
+            (domain, year and course).
           </p>
         </section>
         <section className="panel stack">

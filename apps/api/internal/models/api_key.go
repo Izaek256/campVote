@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"campvote/apps/api/internal/ids"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
-	"campvote/apps/api/internal/ids"
 )
 
 // APIKey is a long-lived credential for machine callers.

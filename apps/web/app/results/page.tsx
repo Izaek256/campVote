@@ -34,8 +34,7 @@ function ResultsView() {
       })
       .catch((err) => {
         if (!controller.signal.aborted) {
-          const message =
-            err instanceof ApiError ? err.message : "We could not load your results.";
+          const message = err instanceof ApiError ? err.message : "We could not load your results.";
           setLoadError(message);
           toast.error(message);
         }

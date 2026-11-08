@@ -37,10 +37,10 @@ func openElection(t *testing.T, db *gorm.DB, id string, start, end time.Time) *m
 	t.Helper()
 	election := &models.Election{
 		ID: id, Title: id, Status: models.ElectionStatusOpen,
-		StartsAt:       start,
-		EndsAt:         end,
-		AllowedDomain:  "std.mast.ac.ug",
-		ResultPolicy:   models.ResultPolicyAfterClose,
+		StartsAt:      start,
+		EndsAt:        end,
+		AllowedDomain: "std.mast.ac.ug",
+		ResultPolicy:  models.ResultPolicyAfterClose,
 	}
 	if err := db.Create(election).Error; err != nil {
 		t.Fatal(err)
