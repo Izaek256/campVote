@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { EmptyState } from "@/components/empty-state";
@@ -11,6 +11,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { useToast } from "@/components/toast";
 import { FilePicker } from "@/components/file-picker";
 import { ApiError, positions } from "@/lib/api";
+import { scrollIntoView } from "@/lib/scroll-into-view";
 import type { EligiblePosition } from "@/lib/types";
 
 function eligibilitySummary(position: EligiblePosition): string {
@@ -66,6 +67,7 @@ function RunForOffice() {
   const toast = useToast();
   const [applying, setApplying] = useState<EligiblePosition | null>(null);
   const [form, setForm] = useState<ApplicationForm>(emptyApplication);
+  const applicationFormRef = useRef<HTMLFormElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -81,6 +83,10 @@ function RunForOffice() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (applying) scrollIntoView(applicationFormRef.current);
+  }, [applying]);
 
   function startApply(position: EligiblePosition) {
     setApplying(position);
@@ -139,9 +145,15 @@ function RunForOffice() {
       </div>
 
       {applying ? (
-        <form className="panel stack" onSubmit={submit} style={{ marginBottom: 20 }}>
+        <form
+          ref={applicationFormRef}
+          className="panel stack scroll-target"
+          onSubmit={submit}
+          style={{ marginBottom: 20 }}
+          aria-labelledby="position-application-title"
+        >
           <div className="section-h" style={{ marginTop: 0 }}>
-            <h2>Apply for {applying.title}</h2>
+            <h2 id="position-application-title">Apply for {applying.title}</h2>
             <p>{eligibilitySummary(applying)}</p>
           </div>
           <div className="form-grid">
@@ -280,19 +292,40 @@ function RunForOffice() {
       ) : null}
 
       {items && items.length > 0 ? (
-        <div className="grid">
+        <div className="grid position-cards">
           {items.map((position) => (
-            <div key={position.id} className="panel stack">
+            <div key={position.id} className="panel stack position-card">
               <div>
                 <span className="lbl">{position.election_title || "Applications open"}</span>
                 <h2 style={{ margin: "4px 0" }}>{position.title}</h2>
-                {position.description ? <p>{position.description}</p> : null}
+                {position.description ? (
+                  <p className="position-card-copy">{position.description}</p>
+                ) : null}
               </div>
               {position.requirements ? (
                 <div>
                   <span className="lbl">Requirements</span>
-                  <p style={{ whiteSpace: "pre-wrap" }}>{position.requirements}</p>
+                  <p className="position-card-copy">{position.requirements}</p>
                 </div>
+              ) : null}
+              {position.description || position.requirements ? (
+                <details className="position-details">
+                  <summary>Read more about this position</summary>
+                  <div className="position-details-body">
+                    {position.description ? (
+                      <div>
+                        <span className="lbl">About the position</span>
+                        <p>{position.description}</p>
+                      </div>
+                    ) : null}
+                    {position.requirements ? (
+                      <div>
+                        <span className="lbl">Requirements</span>
+                        <p>{position.requirements}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                </details>
               ) : null}
               <span className="candidate-meta">{eligibilitySummary(position)}</span>
               <div className="row">

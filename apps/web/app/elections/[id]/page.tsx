@@ -151,15 +151,21 @@ function ElectionView({ id }: { id: string }) {
           <h1>{election.title}</h1>
           <p>{election.description}</p>
         </div>
-        <button
-          type="button"
-          className="btn"
-          disabled={downloadingInfo}
-          onClick={downloadInfoSheet}
-        >
-          <Icon name="file" size="s" />
-          {downloadingInfo ? "Preparing…" : "Information sheet"}
-        </button>
+        <div className="row">
+          <Link className="btn" href="#candidate-manifestos">
+            <Icon name="users" size="s" />
+            Candidates &amp; manifestos
+          </Link>
+          <button
+            type="button"
+            className="btn"
+            disabled={downloadingInfo}
+            onClick={downloadInfoSheet}
+          >
+            <Icon name="file" size="s" />
+            {downloadingInfo ? "Preparing…" : "Information sheet"}
+          </button>
+        </div>
       </div>
 
       <div className="split">
@@ -192,7 +198,7 @@ function ElectionView({ id }: { id: string }) {
             <LifecycleRail status={election.status} />
           </section>
 
-          <section className="panel">
+          <section className="panel readable-anchor" id="candidate-manifestos">
             <div className="section-h" style={{ marginTop: 0 }}>
               <h2>Candidates &amp; manifestos</h2>
               {candidatePositions && candidatePositions.length > 0 ? (
@@ -248,7 +254,19 @@ function ElectionView({ id }: { id: string }) {
                               {candidate.bio ? <p style={{ margin: 0 }}>{candidate.bio}</p> : null}
                             </div>
                           </div>
-                          {candidate.manifesto ? (
+                          {candidate.manifesto && candidate.manifesto.length > 500 ? (
+                            <>
+                              <p className="position-card-copy" style={{ whiteSpace: "pre-wrap" }}>
+                                {candidate.manifesto}
+                              </p>
+                              <details className="position-details">
+                                <summary>Read full manifesto</summary>
+                                <div className="position-details-body">
+                                  <p>{candidate.manifesto}</p>
+                                </div>
+                              </details>
+                            </>
+                          ) : candidate.manifesto ? (
                             <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>
                               {candidate.manifesto}
                             </p>

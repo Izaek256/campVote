@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Icon } from "@/components/icon";
@@ -10,6 +10,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { useToast } from "@/components/toast";
 import { ApiError, elections, positions } from "@/lib/api";
+import { scrollIntoView } from "@/lib/scroll-into-view";
 import type { Election, Position } from "@/lib/types";
 
 type Form = {
@@ -45,6 +46,7 @@ function Manage({ id }: { id: string }) {
   const [editing, setEditing] = useState<Position | "new" | null>(null);
   const [form, setForm] = useState<Form>(emptyForm);
   const [deleting, setDeleting] = useState<Position | null>(null);
+  const editorRef = useRef<HTMLFormElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -61,6 +63,10 @@ function Manage({ id }: { id: string }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (editing) scrollIntoView(editorRef.current);
+  }, [editing]);
 
   const editable = election?.status === "DRAFT";
 
@@ -154,9 +160,17 @@ function Manage({ id }: { id: string }) {
       ) : null}
 
       {editing ? (
-        <form className="panel stack" onSubmit={save} style={{ marginBottom: 20 }}>
+        <form
+          ref={editorRef}
+          className="panel stack scroll-target"
+          onSubmit={save}
+          style={{ marginBottom: 20 }}
+          aria-labelledby="position-editor-title"
+        >
           <div className="section-h" style={{ marginTop: 0 }}>
-            <h2>{editing === "new" ? "New position" : `Edit ${editing.title}`}</h2>
+            <h2 id="position-editor-title">
+              {editing === "new" ? "New position" : `Edit ${editing.title}`}
+            </h2>
           </div>
           <div className="form-grid">
             <div className="field full">
@@ -191,8 +205,15 @@ function Manage({ id }: { id: string }) {
                 placeholder="Eligibility, experience or documents applicants must have. Shown before they apply."
               />
             </div>
+            <div className="full" style={{ marginTop: 4 }}>
+              <span className="lbl">Ballot settings</span>
+              <p className="hint">
+                How this position appears and how voters choose. These settings never limit how many
+                candidates may apply.
+              </p>
+            </div>
             <div className="field">
-              <label htmlFor="position-type">Question type</label>
+              <label htmlFor="position-type">Ballot question type</label>
               <select
                 id="position-type"
                 className="sel"
@@ -204,9 +225,13 @@ function Manage({ id }: { id: string }) {
                 <option value="YES_NO">Yes / No</option>
                 <option value="REFERENDUM">Referendum</option>
               </select>
+              <span className="hint">
+                Single choice is for one candidate. Multi choice allows several candidates; Yes / No
+                and referendum positions collect an answer instead.
+              </span>
             </div>
             <div className="field">
-              <label htmlFor="position-order">Display order</label>
+              <label htmlFor="position-order">Ballot display order</label>
               <input
                 id="position-order"
                 className="in"
@@ -220,9 +245,10 @@ function Manage({ id }: { id: string }) {
                   })
                 }
               />
+              <span className="hint">Lower numbers appear earlier on the ballot.</span>
             </div>
             <div className="field">
-              <label htmlFor="position-seats">Seats</label>
+              <label htmlFor="position-seats">Seats to fill</label>
               <input
                 id="position-seats"
                 className="in"
@@ -231,9 +257,13 @@ function Manage({ id }: { id: string }) {
                 value={form.seats}
                 onChange={(event) => setForm({ ...form, seats: Number(event.target.value) })}
               />
+              <span className="hint">
+                How many winners this position produces. Only the top candidates by vote fill these
+                seats; it does not limit how many students may apply.
+              </span>
             </div>
             <div className="field">
-              <label htmlFor="position-min">Minimum selections</label>
+              <label htmlFor="position-min">Minimum choices required</label>
               <input
                 id="position-min"
                 className="in"
@@ -247,9 +277,10 @@ function Manage({ id }: { id: string }) {
                   })
                 }
               />
+              <span className="hint">Minimum number of choices a voter must make.</span>
             </div>
             <div className="field">
-              <label htmlFor="position-max">Maximum selections</label>
+              <label htmlFor="position-max">Maximum choices per voter</label>
               <input
                 id="position-max"
                 className="in"
@@ -263,15 +294,24 @@ function Manage({ id }: { id: string }) {
                   })
                 }
               />
+              <span className="hint">
+                Maximum candidates a voter may select. Keep this at 1 for single choice.
+              </span>
             </div>
-            <label className="chk" style={{ alignSelf: "end" }}>
-              <input
-                type="checkbox"
-                checked={form.allow_blank}
-                onChange={(event) => setForm({ ...form, allow_blank: event.target.checked })}
-              />
-              <span>Allow leaving this position blank</span>
-            </label>
+            <div className="field full">
+              <label className="chk">
+                <input
+                  type="checkbox"
+                  checked={form.allow_blank}
+                  onChange={(event) => setForm({ ...form, allow_blank: event.target.checked })}
+                />
+                <span>Let voters leave this position blank</span>
+              </label>
+              <span className="hint">
+                Adds a “Leave this position blank” choice to the ballot. This does not change the
+                number of seats or candidates.
+              </span>
+            </div>
           </div>
           <div className="row">
             <button className="btn primary" type="submit" disabled={busy}>
@@ -315,7 +355,7 @@ function Manage({ id }: { id: string }) {
       ) : null}
 
       {items && items.length > 0 ? (
-        <div className="panel pad0">
+        <div className="tbl-wrap panel pad0">
           <table className="tbl">
             <thead>
               <tr>
@@ -332,12 +372,24 @@ function Manage({ id }: { id: string }) {
                   <td>
                     <b>{position.title}</b>
                     {position.description ? (
-                      <span className="candidate-meta">{position.description}</span>
+                      <span className="candidate-meta clamp-2" title={position.description}>
+                        {position.description}
+                      </span>
                     ) : null}
                     {position.requirements ? (
-                      <span className="candidate-meta">
-                        <b>Requirements:</b> {position.requirements}
-                      </span>
+                      <>
+                        <span className="candidate-meta clamp-2" title={position.requirements}>
+                          <b>Requirements:</b> {position.requirements}
+                        </span>
+                        {position.requirements.length > 120 ? (
+                          <details className="position-details">
+                            <summary>Full requirements</summary>
+                            <div className="position-details-body">
+                              <p>{position.requirements}</p>
+                            </div>
+                          </details>
+                        ) : null}
+                      </>
                     ) : null}
                   </td>
                   <td>{position.question_type.replaceAll("_", " ").toLowerCase()}</td>
