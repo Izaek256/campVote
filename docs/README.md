@@ -41,6 +41,7 @@
 - [`features/user-registration.md`](features/user-registration.md) — ISSUE-20 voter self-registration flow (FR-AUTH-01, FR-AUTH-07).
 - [`features/admin-user-management.md`](features/admin-user-management.md) — ISSUE-20 admin user management UI + missing admin infrastructure (FR-AUTH-06, FR-AUTH-07).
 - [`features/positions-first-workflow.md`](features/positions-first-workflow.md) — Phase 2 positions-first workflow: standalone positions, position eligibility, max candidates, admin/student views.
+- [`features/responsive-ui-usability.md`](features/responsive-ui-usability.md) — Mobile header/layout improvements, clearer ballot position settings, scroll behavior, and viewport audit status.
 - [`features/landing-page.md`](features/landing-page.md) — ISSUE-31 public landing page with admin CMS, draft/publish separation, upcoming elections, SEO and social previews.
 
 ## 6. Audit & Traceability

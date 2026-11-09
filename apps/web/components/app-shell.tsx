@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { isAdmin, useAuth } from "./auth-provider";
 import { Icon, type IconName } from "./icon";
 import { ThemeToggle } from "./theme-toggle";
@@ -91,6 +91,7 @@ export function AppShell({
   const router = useRouter();
   const hash = useHash();
   const [open, setOpen] = useState(false);
+  const burgerRef = useRef<HTMLButtonElement>(null);
 
   const admin = isAdmin(user);
   // Auto-detect the election from the URL so pages do not have to pass it.
@@ -105,6 +106,19 @@ export function AppShell({
     return () => {
       document.body.style.overflow = previous;
     };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      burgerRef.current?.focus();
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
   }, [open]);
 
   const close = () => setOpen(false);
@@ -212,6 +226,7 @@ export function AppShell({
       <div className="admin-main">
         <div className="admin-top">
           <button
+            ref={burgerRef}
             type="button"
             className="admin-burger"
             aria-label="Open navigation"
