@@ -330,13 +330,13 @@ svg.i.l {
 .grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
 }
 .grid.w2 {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
 }
 .grid.w3 {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
 }
 .full {
   grid-column: 1 / -1;
@@ -1718,15 +1718,17 @@ svg.i.l {
   color: var(--bg);
 }
 .rail {
-  min-width: 560px;
+  min-width: 0;
   display: flex;
   width: 100%;
 }
 .rail .ls {
   flex: 1;
+  min-width: 0;
   padding-top: 10px;
   border-top: 4px solid var(--line);
   font-size: 12px;
+  overflow-wrap: anywhere;
   color: var(--ink-3);
   font-weight: 500;
   margin-right: 4px;
@@ -1938,7 +1940,7 @@ svg.i.l {
   background: var(--scrim);
 }
 .pubnav {
-  min-width: 640px;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 24px;
@@ -3089,6 +3091,18 @@ body {
 }
 .app-topnav .pubnav {
   min-width: 0;
+  position: relative;
+}
+.site-nav-toggle {
+  display: none;
+}
+.site-header-desktop-session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.site-nav-session {
+  display: none;
 }
 .app-topnav .brand {
   display: flex;
@@ -3136,10 +3150,15 @@ body {
   margin-bottom: 28px;
   flex-wrap: wrap;
 }
+.page-head > div {
+  min-width: 0;
+  max-width: 100%;
+}
 .page-head h1 {
   font-size: 36px;
   line-height: 1.1;
   letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
 }
 .page-head p {
   color: var(--ink-2);
@@ -3173,12 +3192,12 @@ body {
 }
 .grid2 {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: 16px;
 }
 .grid3 {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 16px;
 }
 .panel {
@@ -3195,6 +3214,7 @@ body {
   grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.75fr);
   gap: 20px;
   align-items: start;
+  min-width: 0;
 }
 .hint {
   font-size: 13px;
@@ -3325,7 +3345,7 @@ body {
 }
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
 }
 .form-grid .full {
@@ -3445,6 +3465,7 @@ body {
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
   min-height: 100vh;
+  min-width: 0;
   background: var(--sunken);
 }
 .admin-side {
@@ -3516,10 +3537,21 @@ body {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
+.admin-top > b {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-top .chip {
+  white-space: nowrap;
+}
 .admin-body {
   padding: 24px;
   max-width: 1180px;
   width: 100%;
+  min-width: 0;
 }
 /* Mobile navigation: the sidebar becomes an off-canvas drawer. */
 .admin-burger {
@@ -3620,6 +3652,73 @@ body {
   gap: 8px;
   justify-content: flex-end;
 }
+.position-details {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.position-details summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--primary);
+  font-weight: 600;
+  cursor: pointer;
+}
+.position-details-body {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+}
+.position-details-body p {
+  white-space: pre-wrap;
+}
+.position-card-copy {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+/* Clamp long free-text so a single record cannot stretch a card or table row. */
+.clamp-1,
+.clamp-2,
+.clamp-3 {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+}
+.clamp-1 {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+.clamp-2 {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.clamp-3 {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+/* Values entered by users must not widen a layout with one long token. */
+.field > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tbl .candidate-meta {
+  max-width: 40ch;
+}
+.position-cards .position-card {
+  max-width: 720px;
+}
+.readable-anchor {
+  scroll-margin-top: 84px;
+}
+.scroll-target {
+  scroll-margin-top: 84px;
+}
 .tally-group + .tally-group {
   margin-top: 28px;
 }
@@ -3675,15 +3774,16 @@ body {
 }
 @media (max-width: 900px) {
   .split {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .admin-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .admin-side {
     position: fixed;
     inset: 0 auto 0 0;
-    width: 272px;
+    width: min(272px, calc(100vw - 40px));
+    max-width: 100vw;
     height: 100vh;
     transform: translateX(-100%);
     transition: transform 0.18s ease;
@@ -3701,6 +3801,77 @@ body {
   }
   .admin-body {
     padding: 18px 14px 80px;
+  }
+}
+@media (max-width: 800px) {
+  .app-topnav .lk {
+    display: none;
+  }
+  .site-nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .app-topnav .lk.open {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 31;
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-top: 0;
+    background: var(--surface);
+    box-shadow: 0 12px 24px rgba(10, 15, 12, 0.16);
+  }
+  .app-topnav .lk.open a {
+    min-height: 44px;
+    padding: 8px 10px;
+    border: 0;
+  }
+  .app-topnav .lk.open .site-nav-session {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--line);
+    margin-top: 4px;
+    padding-top: 4px;
+  }
+  .app-topnav .lk.open .site-nav-session a,
+  .app-topnav .lk.open .site-nav-session button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 10px;
+    border: 0;
+    background: transparent;
+    color: var(--ink-2);
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+  }
+  .site-header-desktop-session {
+    display: none;
+  }
+  .app-topnav .pubnav {
+    gap: 12px;
+    padding: 0 16px;
+  }
+  .app-topnav .pubnav > .row {
+    flex-shrink: 0;
+    gap: 8px;
   }
 }
 @media (max-width: 640px) {
@@ -3729,15 +3900,18 @@ body {
   .page-head h1 {
     font-size: 28px;
   }
+  .page-head {
+    align-items: stretch;
+    gap: 16px;
+  }
+  .page-head > .btn {
+    align-self: flex-start;
+  }
+  .page-head .row {
+    flex-wrap: wrap;
+  }
   .form-grid {
-    grid-template-columns: 1fr;
-  }
-  .app-topnav .lk {
-    display: none;
-  }
-  .app-topnav .pubnav {
-    gap: 12px;
-    padding: 0 14px;
+    grid-template-columns: minmax(0, 1fr);
   }
   .kpi .v {
     font-size: 26px;
@@ -3763,6 +3937,15 @@ body {
     gap: 8px;
     padding-right: 12px;
     padding-left: 12px;
+  }
+  .admin-body {
+    padding-right: max(14px, env(safe-area-inset-right, 0px));
+    padding-left: max(14px, env(safe-area-inset-left, 0px));
+  }
+  .tbl th,
+  .tbl td {
+    padding-right: 10px;
+    padding-left: 10px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -3860,7 +4043,8 @@ body {
 .file-picker-filled {
   display: flex;
   align-items: center;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 12px 16px;
   padding: 12px;
   min-height: 80px;
 }
@@ -3886,19 +4070,25 @@ body {
   color: var(--ink-3);
 }
 .file-picker-filename {
-  flex: 1;
+  flex: 1 1 140px;
   min-width: 0;
 }
 .file-picker-filename .lbl {
   margin-bottom: 2px;
 }
 .file-picker-filename .hint {
-  display: block;
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
   font-family: var(--font-mono);
   font-size: 12px;
+}
+.file-picker-filled .row {
+  flex: none;
+  margin-left: auto;
 }
 .file-picker .btn {
   z-index: 20;

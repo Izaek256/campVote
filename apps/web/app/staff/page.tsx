@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icon";
 import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
@@ -10,6 +10,7 @@ import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
 import { ApiError, elections, auth } from "@/lib/api";
+import { scrollIntoView } from "@/lib/scroll-into-view";
 import { categoryLabel, formatShortEAT } from "@/lib/format";
 import type { Election } from "@/lib/types";
 
@@ -61,6 +62,7 @@ function StaffHome() {
   const [form, setForm] = useState(emptyForm);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const createFormRef = useRef<HTMLFormElement>(null);
 
   // Admin invite form state
   const [showInviteForm, setShowInviteForm] = useState(false);
@@ -71,6 +73,7 @@ function StaffHome() {
   });
   const [inviteFields, setInviteFields] = useState<Record<string, string>>({});
   const [inviteBusy, setInviteBusy] = useState(false);
+  const inviteFormRef = useRef<HTMLFormElement>(null);
 
   function load() {
     elections
@@ -89,6 +92,14 @@ function StaffHome() {
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("new") === "1") setShowForm(true);
   }, []);
+
+  useEffect(() => {
+    if (showForm) scrollIntoView(createFormRef.current);
+  }, [showForm]);
+
+  useEffect(() => {
+    if (showInviteForm) scrollIntoView(inviteFormRef.current);
+  }, [showInviteForm]);
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
@@ -173,9 +184,15 @@ function StaffHome() {
       </div>
 
       {showForm ? (
-        <form className="panel stack" onSubmit={create} style={{ marginBottom: 24 }}>
+        <form
+          ref={createFormRef}
+          className="panel stack scroll-target"
+          onSubmit={create}
+          style={{ marginBottom: 24 }}
+          aria-labelledby="create-election-title"
+        >
           <div className="section-h" style={{ marginTop: 0 }}>
-            <h2>Create a draft election</h2>
+            <h2 id="create-election-title">Create a draft election</h2>
             <span className="mono">starts as DRAFT</span>
           </div>
           <div className="form-grid">
@@ -250,9 +267,15 @@ function StaffHome() {
       ) : null}
 
       {showInviteForm ? (
-        <form className="panel stack" onSubmit={inviteAdmin} style={{ marginBottom: 24 }}>
+        <form
+          ref={inviteFormRef}
+          className="panel stack scroll-target"
+          onSubmit={inviteAdmin}
+          style={{ marginBottom: 24 }}
+          aria-labelledby="invite-admin-title"
+        >
           <div className="section-h" style={{ marginTop: 0 }}>
-            <h2>Invite an administrator</h2>
+            <h2 id="invite-admin-title">Invite an administrator</h2>
             <span className="mono">must use @must.ac.ug domain</span>
           </div>
           <div className="form-grid">

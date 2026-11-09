@@ -145,7 +145,7 @@ function Review({ id }: { id: string }) {
                       }}
                     />
                   ) : null}
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <span className={`chip ${candidateStatusClass(candidate.approval_status)}`}>
                       {candidateStatusLabel(candidate.approval_status)}
                     </span>
@@ -155,9 +155,15 @@ function Review({ id }: { id: string }) {
                       {formatEAT(candidate.created_at)}
                       {candidate.ballot_number ? ` · ballot #${candidate.ballot_number}` : ""}
                     </p>
-                    {candidate.slogan ? <p style={{ marginTop: 6 }}>{candidate.slogan}</p> : null}
+                    {candidate.slogan ? (
+                      <p className="clamp-2" style={{ marginTop: 6 }} title={candidate.slogan}>
+                        {candidate.slogan}
+                      </p>
+                    ) : null}
                     {candidate.review_notes ? (
-                      <p className="hint">Reviewer note: {candidate.review_notes}</p>
+                      <p className="hint clamp-2" title={candidate.review_notes}>
+                        Reviewer note: {candidate.review_notes}
+                      </p>
                     ) : null}
                   </div>
                 </div>
@@ -220,9 +226,17 @@ function Review({ id }: { id: string }) {
                 </div>
                 <div className="field">
                   <span className="lbl">Position requirements</span>
-                  <span style={{ whiteSpace: "pre-wrap" }}>
+                  <span className="clamp-3" style={{ whiteSpace: "pre-wrap" }}>
                     {positionFor(candidate.position_id)?.requirements || "—"}
                   </span>
+                  {(positionFor(candidate.position_id)?.requirements?.length ?? 0) > 180 ? (
+                    <details className="position-details">
+                      <summary>Full requirements</summary>
+                      <div className="position-details-body">
+                        <p>{positionFor(candidate.position_id)?.requirements}</p>
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
               </div>
 

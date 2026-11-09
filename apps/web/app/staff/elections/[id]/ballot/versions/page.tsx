@@ -172,7 +172,7 @@ function Versions({ id }: { id: string }) {
             </div>
           ) : null}
 
-          <div className="panel pad0">
+          <div className="tbl-wrap panel pad0">
             <table className="tbl">
               <thead>
                 <tr>
