@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"campvote/apps/api/internal/eligibility"
+	"campvote/apps/api/internal/lifecycle"
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/respond"
 	"campvote/apps/api/internal/tally"
@@ -304,14 +305,20 @@ func (h *CandidateHandler) Apply(c *gin.Context) {
 	respond.Created(c, candidate, "Application submitted. Officials will review it.")
 }
 
-// WithdrawMine withdraws the caller's own candidacy.
+// WithdrawMine withdraws the caller's own candidacy. An approved candidate may
+// step down until the poll opens; after that the ballot is fixed.
 func (h *CandidateHandler) WithdrawMine(c *gin.Context) {
 	userID := c.GetString("user_id")
 	var input struct {
-		Reason string `json:"reason" binding:"required"`
+		Reason      string `json:"reason"`
+		DocumentURL string `json:"document_url"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		respond.BadRequest(c, "A withdrawal reason is required")
+		respond.BadRequest(c, "A withdrawal reason or document is required")
+		return
+	}
+	reason, documentURL, ok := withdrawalEvidence(c, input.Reason, input.DocumentURL)
+	if !ok {
 		return
 	}
 
@@ -333,24 +340,23 @@ func (h *CandidateHandler) WithdrawMine(c *gin.Context) {
 		respond.Conflict(c, "A rejected application cannot be withdrawn")
 		return
 	}
-	// Once approved a candidate is on the ballot: withdrawing would change the
-	// contest after officials signed it off. Only a draft-stage application may
-	// be withdrawn.
 	if candidate.ApprovalStatus == models.CandidateStatusApproved {
-		respond.Conflict(c, "An approved application can no longer be withdrawn. Contact an election official.")
-		return
+		if !h.withdrawalWindowOpen(c, candidate.ElectionID) {
+			return
+		}
 	}
 
 	now := h.now()
 	candidate.ApprovalStatus = models.CandidateStatusWithdrawn
 	candidate.WithdrawnAt = &now
-	candidate.WithdrawalReason = input.Reason
+	candidate.WithdrawalReason = reason
+	candidate.WithdrawalDocumentURL = documentURL
 	if err := h.DB.Save(&candidate).Error; err != nil {
 		respond.Internal(c, err)
 		return
 	}
 	h.audit(c, candidate.ElectionID, models.AuditActionCandidateWithdrawn,
-		"Application withdrawn: "+candidate.FullName+" - "+input.Reason)
+		"Candidate withdrew: "+candidate.FullName+" - "+withdrawalSummary(reason, documentURL))
 	respond.OK(c, candidate, "Application withdrawn")
 }
 
@@ -963,18 +969,24 @@ func notifyCandidate(tx *gorm.DB, candidate models.Candidate, title, body string
 	}).Error
 }
 
-// Withdraw handles candidate withdrawal.
+// Withdraw records an administrator-confirmed candidate withdrawal. It is
+// allowed only before the election opens: after that the ballot is fixed.
 func (h *CandidateHandler) Withdraw(c *gin.Context) {
 	electionID := c.Param("id")
 	candidateID := c.Param("candidate_id")
 	userID := c.GetString("user_id")
 
 	var input struct {
-		Reason string `json:"reason" binding:"required"`
+		Reason      string `json:"reason"`
+		DocumentURL string `json:"document_url"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		respond.BadRequest(c, "Reason is required")
+		respond.BadRequest(c, "A withdrawal reason or document is required")
+		return
+	}
+	reason, documentURL, ok := withdrawalEvidence(c, input.Reason, input.DocumentURL)
+	if !ok {
 		return
 	}
 
@@ -987,28 +999,79 @@ func (h *CandidateHandler) Withdraw(c *gin.Context) {
 		respond.Internal(c, err)
 		return
 	}
+	if candidate.ApprovalStatus == models.CandidateStatusWithdrawn {
+		respond.Conflict(c, "This candidate has already withdrawn")
+		return
+	}
+	if !h.withdrawalWindowOpen(c, electionID) {
+		return
+	}
 
 	now := h.now()
 	candidate.ApprovalStatus = models.CandidateStatusWithdrawn
 	candidate.WithdrawnAt = &now
-	candidate.WithdrawalReason = input.Reason
+	candidate.WithdrawalReason = reason
+	candidate.WithdrawalDocumentURL = documentURL
 
 	if err := h.DB.Save(&candidate).Error; err != nil {
 		respond.Internal(c, err)
 		return
 	}
 
-	// Audit log
-	audit := models.ElectionAuditLog{
-		ElectionID: electionID,
-		ActorID:    userID,
-		Action:     models.AuditActionCandidateWithdrawn,
-		Details:    "Candidate withdrawn: " + candidate.FullName + " - " + input.Reason,
-		IPAddress:  c.ClientIP(),
-	}
-	h.DB.Create(&audit)
+	h.audit(c, electionID, models.AuditActionCandidateWithdrawn,
+		"Candidate withdrawn by "+userID+": "+candidate.FullName+" - "+
+			withdrawalSummary(reason, documentURL))
+	respond.OK(c, candidate, "Candidate withdrawn")
+}
 
-	respond.OK(c, candidate)
+// withdrawalWindowOpen refuses a withdrawal once the election has opened or
+// closed. The ballot a voter sees must not change mid-contest.
+func (h *CandidateHandler) withdrawalWindowOpen(c *gin.Context, electionID string) bool {
+	var election models.Election
+	if err := h.DB.Where("id = ?", electionID).First(&election).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			respond.NotFound(c, "Election not found")
+			return false
+		}
+		respond.Internal(c, err)
+		return false
+	}
+	if err := lifecycle.Ensure(h.DB, &election, h.now()); err != nil {
+		respond.Internal(c, err)
+		return false
+	}
+	if election.Status != models.ElectionStatusDraft {
+		respond.Conflict(c, "A candidate can only withdraw before the election opens")
+		return false
+	}
+	return true
+}
+
+// withdrawalEvidence accepts either a typed reason or an uploaded document,
+// because a candidate may not be able to type a statement. Both may be sent.
+func withdrawalEvidence(c *gin.Context, reason, documentURL string) (string, string, bool) {
+	reason = strings.TrimSpace(reason)
+	documentURL = strings.TrimSpace(documentURL)
+	if reason == "" && documentURL == "" {
+		respond.BadRequest(c, "Type a reason or attach a signed withdrawal letter")
+		return "", "", false
+	}
+	if len([]rune(reason)) > 2000 {
+		respond.BadRequest(c, "The withdrawal reason must be 2000 characters or fewer")
+		return "", "", false
+	}
+	if documentURL != "" && len(documentURL) > 500 {
+		respond.BadRequest(c, "The document link is too long")
+		return "", "", false
+	}
+	return reason, documentURL, true
+}
+
+func withdrawalSummary(reason, documentURL string) string {
+	if reason != "" {
+		return reason
+	}
+	return "signed letter: " + documentURL
 }
 
 // GetMyCandidacies returns the current user's nominations.

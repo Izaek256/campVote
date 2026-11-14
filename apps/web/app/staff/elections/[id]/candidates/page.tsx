@@ -9,9 +9,9 @@ import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { useToast } from "@/components/toast";
-import { ApiError, candidates, fileUrl, positions } from "@/lib/api";
+import { ApiError, candidates, elections, fileUrl, positions } from "@/lib/api";
 import { candidateStatusClass, candidateStatusLabel, formatEAT } from "@/lib/format";
-import type { Candidate, Position } from "@/lib/types";
+import type { Candidate, ElectionStatus, Position } from "@/lib/types";
 
 const filters = ["ALL", "NOMINATED", "APPROVED", "REJECTED", "WITHDRAWN"] as const;
 
@@ -23,17 +23,20 @@ function Review({ id }: { id: string }) {
   const [filter, setFilter] = useState<(typeof filters)[number]>("ALL");
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState<Candidate | null>(null);
-  const [decision, setDecision] = useState<"approve" | "reject">("approve");
+  const [decision, setDecision] = useState<"approve" | "reject" | "withdraw">("approve");
+  const [status, setStatus] = useState<ElectionStatus | null>(null);
   const [reason, setReason] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [list, configured] = await Promise.all([
+      const [list, configured, election] = await Promise.all([
         candidates.list(id, filter === "ALL" ? undefined : filter),
         positions.list(id),
+        elections.get(id),
       ]);
       setItems(list.candidates ?? []);
       setConfiguredPositions(configured.positions ?? []);
+      setStatus(election.status);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Candidates could not be loaded.";
       setLoadError(message);
@@ -45,7 +48,7 @@ function Review({ id }: { id: string }) {
     load();
   }, [load]);
 
-  function open(candidate: Candidate, next: "approve" | "reject") {
+  function open(candidate: Candidate, next: "approve" | "reject" | "withdraw") {
     setReviewing(candidate);
     setDecision(next);
     setReason("");
@@ -62,6 +65,9 @@ function Review({ id }: { id: string }) {
       if (decision === "approve") {
         await candidates.approve(id, reviewing.id, reason.trim());
         toast.success(`${reviewing.full_name} was approved.`);
+      } else if (decision === "withdraw") {
+        await candidates.adminWithdraw(id, reviewing.id, reason.trim());
+        toast.success(`${reviewing.full_name} was withdrawn from the ballot.`);
       } else {
         await candidates.reject(id, reviewing.id, reason.trim());
         toast.success(`${reviewing.full_name} was rejected.`);
@@ -197,6 +203,15 @@ function Review({ id }: { id: string }) {
                         Reject
                       </button>
                     </>
+                  ) : null}
+                  {candidate.approval_status === "APPROVED" && status === "DRAFT" ? (
+                    <button
+                      type="button"
+                      className="btn sm danger-o"
+                      onClick={() => open(candidate, "withdraw")}
+                    >
+                      Withdraw
+                    </button>
                   ) : null}
                 </div>
               </div>
@@ -334,17 +349,32 @@ function Review({ id }: { id: string }) {
 
       <ConfirmDialog
         open={reviewing !== null}
-        title={decision === "approve" ? "Approve this candidate?" : "Reject this candidate?"}
-        confirmLabel={decision === "approve" ? "Approve" : "Reject"}
-        destructive={decision === "reject"}
+        title={
+          decision === "approve"
+            ? "Approve this candidate?"
+            : decision === "withdraw"
+              ? "Withdraw this candidate?"
+              : "Reject this candidate?"
+        }
+        confirmLabel={
+          decision === "approve" ? "Approve" : decision === "withdraw" ? "Withdraw" : "Reject"
+        }
+        destructive={decision !== "approve"}
         busy={busy}
         onClose={() => setReviewing(null)}
         onConfirm={submit}
       >
         <p>
-          {decision === "approve" ? "Approving" : "Rejecting"} <b>{reviewing?.full_name}</b> for{" "}
-          <b>{reviewing ? positionTitle(reviewing.position_id) : ""}</b>. The decision is audited
-          and the applicant sees your reason.
+          {decision === "approve"
+            ? "Approving"
+            : decision === "withdraw"
+              ? "Withdrawing"
+              : "Rejecting"}{" "}
+          <b>{reviewing?.full_name}</b> for{" "}
+          <b>{reviewing ? positionTitle(reviewing.position_id) : ""}</b>.{" "}
+          {decision === "withdraw"
+            ? "They come off the ballot and the reason is audited. This is only possible before voting opens."
+            : "The decision is audited and the applicant sees your reason."}
         </p>
         <div className="field">
           <label htmlFor="review-reason">Reason (required)</label>
@@ -356,7 +386,9 @@ function Review({ id }: { id: string }) {
             placeholder={
               decision === "approve"
                 ? "Documents checked and the application meets the rules."
-                : "Explain what is missing or why the application cannot be accepted."
+                : decision === "withdraw"
+                  ? "The candidate's signed withdrawal letter was received."
+                  : "Explain what is missing or why the application cannot be accepted."
             }
           ></textarea>
         </div>
@@ -368,7 +400,7 @@ function Review({ id }: { id: string }) {
 export default function CandidatesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <Review id={id} />
     </RequireAuth>
   );

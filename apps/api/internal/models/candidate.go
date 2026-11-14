@@ -43,6 +43,9 @@ type Candidate struct {
 	ReviewedAt       *time.Time `json:"reviewed_at,omitempty"`
 	WithdrawnAt      *time.Time `json:"withdrawn_at,omitempty"`
 	WithdrawalReason string     `gorm:"type:text" json:"withdrawal_reason,omitempty"`
+	// WithdrawalDocumentURL is the optional signed letter a candidate uploads
+	// through the normal upload endpoint instead of typing a reason.
+	WithdrawalDocumentURL string `gorm:"size:500" json:"withdrawal_document_url,omitempty"`
 
 	// Application details for candidate screening
 	DateOfBirth        *time.Time `json:"date_of_birth,omitempty"`

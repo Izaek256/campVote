@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { isAdmin, useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
 import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
@@ -26,6 +27,7 @@ import type {
   EligibilityReport,
   Position,
   Results,
+  RosterEntry,
 } from "@/lib/types";
 
 function toEatInput(iso: string): string {
@@ -81,6 +83,7 @@ function transitionLabel(to: string): string {
 function Manage({ id }: { id: string }) {
   const toast = useToast();
   const router = useRouter();
+  const { user } = useAuth();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [election, setElection] = useState<Election | null>(null);
   const [report, setReport] = useState<EligibilityReport | null>(null);
@@ -94,6 +97,7 @@ function Manage({ id }: { id: string }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [form, setForm] = useState({
     title: "",
+    description: "",
     starts_at: "",
     ends_at: "",
     public_listing: false,
@@ -104,7 +108,11 @@ function Manage({ id }: { id: string }) {
     allowed_domain: "",
     allowed_years: "",
     allowed_courses: "",
+    require_roster: false,
   });
+  const [rosterList, setRosterList] = useState<RosterEntry[] | null>(null);
+  const [rosterBusy, setRosterBusy] = useState(false);
+  const rosterFileRef = useRef<HTMLInputElement>(null);
   const [readiness, setReadiness] = useState<{
     ready: boolean;
     problems: Record<string, string>;
@@ -113,8 +121,12 @@ function Manage({ id }: { id: string }) {
   const [positionList, setPositionList] = useState<Position[]>([]);
   const [candidateList, setCandidateList] = useState<Candidate[]>([]);
   const [roleEmail, setRoleEmail] = useState("");
-  const [roleName, setRoleName] = useState("ELECTION_OFFICIAL");
+  const [roleName, setRoleName] = useState("CHIEF_ELECTION_ADMIN");
   const [roleBusy, setRoleBusy] = useState(false);
+  const [cloneForm, setCloneForm] = useState({ title: "", starts_at: "", ends_at: "" });
+  const [cloneBusy, setCloneBusy] = useState(false);
+  // Only the creator or a system administrator may hand out election roles.
+  const canManageRoles = isAdmin(user) || (!!election && election.created_by_id === user?.id);
 
   const load = useCallback(async () => {
     const messages: string[] = [];
@@ -123,6 +135,7 @@ function Manage({ id }: { id: string }) {
       setElection(current);
       setForm({
         title: current.title,
+        description: current.description ?? "",
         starts_at: toEatInput(current.starts_at),
         ends_at: toEatInput(current.ends_at),
         public_listing: current.public_listing,
@@ -132,7 +145,11 @@ function Manage({ id }: { id: string }) {
         allowed_domain: current.allowed_domain ?? "",
         allowed_years: current.allowed_years ?? "",
         allowed_courses: current.allowed_courses ?? "",
+        require_roster: current.require_roster ?? false,
       });
+      setRosterList(
+        current.require_roster ? await elections.roster.list(id).catch(() => null) : null
+      );
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Election could not be loaded.";
       setLoadError(message);
@@ -213,6 +230,7 @@ function Manage({ id }: { id: string }) {
       () =>
         elections.update(id, {
           title: form.title,
+          description: form.description,
           starts_at: toISO(form.starts_at),
           ends_at: toISO(form.ends_at),
           public_listing: form.public_listing,
@@ -241,11 +259,74 @@ function Manage({ id }: { id: string }) {
           allowed_domain: eligibility.allowed_domain.trim(),
           allowed_years: eligibility.allowed_years.trim(),
           allowed_courses: eligibility.allowed_courses.trim(),
+          require_roster: eligibility.require_roster,
           reason: form.reason,
         }),
       "Eligibility rule saved."
     );
     if (ok) await load();
+  }
+
+  async function cloneElection(event: React.FormEvent) {
+    event.preventDefault();
+    if (!cloneForm.starts_at || !cloneForm.ends_at) {
+      toast.error("Choose when the copied election opens and closes.");
+      return;
+    }
+    setCloneBusy(true);
+    try {
+      const copy = await elections.clone(id, {
+        title: cloneForm.title.trim() || undefined,
+        starts_at: toISO(cloneForm.starts_at),
+        ends_at: toISO(cloneForm.ends_at),
+      });
+      toast.success("Election copied as a new draft.");
+      router.push(`/staff/elections/${copy.id}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The election could not be copied.");
+    } finally {
+      setCloneBusy(false);
+    }
+  }
+
+  async function importRoster(event: React.FormEvent) {
+    event.preventDefault();
+    const file = rosterFileRef.current?.files?.[0];
+    if (!file) {
+      toast.error("Choose a roster CSV file.");
+      return;
+    }
+    setRosterBusy(true);
+    try {
+      const { preview } = await elections.roster.preview(id, file);
+      if (preview.errors.length > 0) {
+        toast.error(`${preview.errors.length} row(s) are invalid: ${preview.errors[0].reason}`);
+        return;
+      }
+      await elections.roster.import(id, file);
+      toast.success(`Roster imported: ${preview.creates} added, ${preview.updates} updated.`);
+      setRosterList(await elections.roster.list(id));
+      if (rosterFileRef.current) rosterFileRef.current.value = "";
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The roster could not be imported.");
+    } finally {
+      setRosterBusy(false);
+    }
+  }
+
+  async function revokeRoster(entry: RosterEntry) {
+    const reason = window.prompt(`Why should ${entry.email} lose eligibility?`);
+    if (!reason?.trim()) return;
+    setRosterBusy(true);
+    try {
+      await elections.roster.revoke(id, entry.id, reason.trim());
+      setRosterList(await elections.roster.list(id));
+      toast.success("Voter removed from the list.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The voter could not be removed.");
+    } finally {
+      setRosterBusy(false);
+    }
   }
 
   async function assignRole(event: React.FormEvent) {
@@ -474,6 +555,26 @@ function Manage({ id }: { id: string }) {
               />
             </div>
             <div className="field">
+              <label htmlFor="eligibility-roster">
+                <input
+                  id="eligibility-roster"
+                  type="checkbox"
+                  checked={eligibility.require_roster}
+                  onChange={(event) =>
+                    setEligibility({
+                      ...eligibility,
+                      require_roster: event.target.checked,
+                    })
+                  }
+                />{" "}
+                Only voters on the imported list may see or vote
+              </label>
+              <span className="hint">
+                The list replaces the rule above as the electorate. Add or remove names until the
+                election closes; nothing changes after that.
+              </span>
+            </div>
+            <div className="field">
               <label htmlFor="eligibility-reason">Reason (required once frozen)</label>
               <input
                 id="eligibility-reason"
@@ -500,6 +601,75 @@ function Manage({ id }: { id: string }) {
           </div>
         </form>
       </section>
+
+      {election.require_roster ? (
+        <section className="panel stack" id="roster" style={{ marginBottom: 20 }}>
+          <div className="section-h" style={{ marginTop: 0 }}>
+            <h2>Voter list</h2>
+            <span className="mono">{rosterList ? `${rosterList.length} listed` : "loading"}</span>
+          </div>
+          <p className="hint" style={{ marginTop: 0 }}>
+            Only these emails see the election and may vote in it. The CSV needs the columns
+            student_number, email and full_name. Re-importing updates rows in place; removing a
+            voter revokes eligibility and keeps the row for the audit trail.
+          </p>
+          <form className="row" onSubmit={importRoster}>
+            <input ref={rosterFileRef} type="file" accept=".csv,text/csv" className="in" />
+            <button className="btn primary" type="submit" disabled={rosterBusy}>
+              {rosterBusy ? "Working…" : "Import CSV"}
+            </button>
+          </form>
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Voter</th>
+                  <th>Student number</th>
+                  <th>Status</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {(rosterList ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={4}>
+                      No voters listed yet. Until the list has entries, nobody can see this
+                      election.
+                    </td>
+                  </tr>
+                ) : (
+                  (rosterList ?? []).map((entry) => (
+                    <tr key={entry.id}>
+                      <td>
+                        <b>{entry.full_name}</b>
+                        <div className="hint">{entry.email}</div>
+                      </td>
+                      <td className="mono">{entry.student_number}</td>
+                      <td>
+                        <span className="chip">{entry.status.toLowerCase()}</span>
+                      </td>
+                      <td>
+                        <div className="table-actions">
+                          {entry.status === "ELIGIBLE" ? (
+                            <button
+                              type="button"
+                              className="btn sm danger-o"
+                              disabled={rosterBusy}
+                              onClick={() => revokeRoster(entry)}
+                            >
+                              Remove
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       <div className="split">
         <div className="stack">
@@ -657,7 +827,9 @@ function Manage({ id }: { id: string }) {
           <section className="panel" id="schedule">
             <div className="section-h" style={{ marginTop: 0 }}>
               <h2>Schedule</h2>
-              <span className="mono">{frozen ? "frozen · reason required" : "before open"}</span>
+              <span className="mono">
+                {frozen ? "live · title, description, extension" : "before open"}
+              </span>
             </div>
             <form className="form-stack" onSubmit={update}>
               <div className="field">
@@ -670,6 +842,15 @@ function Manage({ id }: { id: string }) {
                 />
                 {fields.title ? <span className="err">{fields.title}</span> : null}
               </div>
+              <div className="field">
+                <label htmlFor="edit-description">Description</label>
+                <textarea
+                  id="edit-description"
+                  className="ta"
+                  value={form.description}
+                  onChange={(event) => setForm({ ...form, description: event.target.value })}
+                />
+              </div>
               <div className="form-grid">
                 <div className="field">
                   <label htmlFor="edit-start">Voting opens (EAT)</label>
@@ -678,6 +859,7 @@ function Manage({ id }: { id: string }) {
                     className={`in${fields.starts_at ? " bad" : ""}`}
                     type="datetime-local"
                     value={form.starts_at}
+                    disabled={frozen}
                     onChange={(event) => setForm({ ...form, starts_at: event.target.value })}
                   />
                   {fields.starts_at ? <span className="err">{fields.starts_at}</span> : null}
@@ -805,62 +987,110 @@ function Manage({ id }: { id: string }) {
         </div>
 
         <aside className="stack">
+          {canManageRoles ? (
+            <div className="panel stack">
+              <span className="lbl">Temporary election roles</span>
+              <form className="form-stack" onSubmit={assignRole}>
+                <div className="field">
+                  <label htmlFor="role-email">Account email</label>
+                  <input
+                    id="role-email"
+                    className="in"
+                    type="email"
+                    value={roleEmail}
+                    onChange={(event) => setRoleEmail(event.target.value)}
+                    placeholder="organizer@std.mast.ac.ug"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="role-name">Role on this election</label>
+                  <select
+                    id="role-name"
+                    className="sel"
+                    value={roleName}
+                    onChange={(event) => setRoleName(event.target.value)}
+                  >
+                    <option value="ELECTION_OFFICIAL">Election organizer</option>
+                    <option value="CHIEF_ELECTION_ADMIN">Chief election admin</option>
+                    <option value="ELECTION_AUDITOR">Election auditor</option>
+                    <option value="CANDIDATE">Candidate</option>
+                  </select>
+                </div>
+                <button className="btn sm primary" type="submit" disabled={roleBusy}>
+                  {roleBusy ? "Working…" : "Assign role"}
+                </button>
+              </form>
+              {roles.length === 0 ? (
+                <span className="hint">No temporary roles assigned.</span>
+              ) : (
+                <div className="stack">
+                  {roles.map((role) => (
+                    <div className="row-between" key={role.user_id + role.role}>
+                      <span>
+                        <b>{role.full_name || role.email || role.user_id}</b>
+                        <span className="hint" style={{ display: "block" }}>
+                          {role.email} · {role.role.replaceAll("_", " ").toLowerCase()}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className="btn sm danger-o"
+                        disabled={roleBusy}
+                        onClick={() => removeRole(role.user_id, role.role)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+
           <div className="panel stack">
-            <span className="lbl">Temporary election roles</span>
-            <form className="form-stack" onSubmit={assignRole}>
+            <span className="lbl">Re-run this election</span>
+            <p className="hint" style={{ marginTop: 0 }}>
+              Copies the rules, positions, candidates and voter list into a new draft. Votes,
+              results, ballot versions and role assignments stay behind, and the copy is yours.
+            </p>
+            <form className="form-stack" onSubmit={cloneElection}>
               <div className="field">
-                <label htmlFor="role-email">Account email</label>
+                <label htmlFor="clone-title">Title (blank keeps the current one)</label>
                 <input
-                  id="role-email"
+                  id="clone-title"
                   className="in"
-                  type="email"
-                  value={roleEmail}
-                  onChange={(event) => setRoleEmail(event.target.value)}
-                  placeholder="organizer@std.mast.ac.ug"
+                  value={cloneForm.title}
+                  onChange={(event) => setCloneForm({ ...cloneForm, title: event.target.value })}
+                  placeholder={`${election.title} (copy)`}
                 />
               </div>
               <div className="field">
-                <label htmlFor="role-name">Role on this election</label>
-                <select
-                  id="role-name"
-                  className="sel"
-                  value={roleName}
-                  onChange={(event) => setRoleName(event.target.value)}
-                >
-                  <option value="ELECTION_OFFICIAL">Election organizer</option>
-                  <option value="CHIEF_ELECTION_ADMIN">Chief election admin</option>
-                  <option value="ELECTION_AUDITOR">Election auditor</option>
-                  <option value="CANDIDATE">Candidate</option>
-                </select>
+                <label htmlFor="clone-start">Voting opens (EAT)</label>
+                <input
+                  id="clone-start"
+                  className="in"
+                  type="datetime-local"
+                  value={cloneForm.starts_at}
+                  onChange={(event) =>
+                    setCloneForm({ ...cloneForm, starts_at: event.target.value })
+                  }
+                />
               </div>
-              <button className="btn sm primary" type="submit" disabled={roleBusy}>
-                {roleBusy ? "Working…" : "Assign role"}
+              <div className="field">
+                <label htmlFor="clone-end">Voting closes (EAT)</label>
+                <input
+                  id="clone-end"
+                  className="in"
+                  type="datetime-local"
+                  value={cloneForm.ends_at}
+                  onChange={(event) => setCloneForm({ ...cloneForm, ends_at: event.target.value })}
+                />
+              </div>
+              <button className="btn sm" type="submit" disabled={cloneBusy}>
+                <Icon name="copy" size="s" />
+                {cloneBusy ? "Copying…" : "Copy as a new draft"}
               </button>
             </form>
-            {roles.length === 0 ? (
-              <span className="hint">No temporary roles assigned.</span>
-            ) : (
-              <div className="stack">
-                {roles.map((role) => (
-                  <div className="row-between" key={role.user_id + role.role}>
-                    <span>
-                      <b>{role.full_name || role.email || role.user_id}</b>
-                      <span className="hint" style={{ display: "block" }}>
-                        {role.email} · {role.role.replaceAll("_", " ").toLowerCase()}
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      className="btn sm danger-o"
-                      disabled={roleBusy}
-                      onClick={() => removeRole(role.user_id, role.role)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="panel stack">
@@ -977,7 +1207,7 @@ function Manage({ id }: { id: string }) {
 export default function ManageElectionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <Manage id={id} />
     </RequireAuth>
   );

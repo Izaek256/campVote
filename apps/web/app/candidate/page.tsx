@@ -119,6 +119,7 @@ function MyCandidacy() {
   > | null>(null);
   const [votesFor, setVotesFor] = useState<MyCandidate | null>(null);
   const [reason, setReason] = useState("");
+  const [withdrawDoc, setWithdrawDoc] = useState("");
   const [photoBusy, setPhotoBusy] = useState("");
   const [manifestoBusy, setManifestoBusy] = useState("");
   const [removingFor, setRemovingFor] = useState<MyCandidate["candidate"] | null>(null);
@@ -144,16 +145,20 @@ function MyCandidacy() {
 
   async function withdraw() {
     if (!withdrawing) return;
-    if (!reason.trim()) {
-      toast.error("Add a reason before withdrawing.");
+    if (!reason.trim() && !withdrawDoc) {
+      toast.error("Type a reason or attach a signed letter before withdrawing.");
       return;
     }
     setBusy(true);
     try {
-      await candidates.withdraw(withdrawing.candidate.id, reason.trim());
+      await candidates.withdraw(withdrawing.candidate.id, {
+        reason: reason.trim(),
+        documentUrl: withdrawDoc || undefined,
+      });
       toast.success("Your application has been withdrawn.");
       setWithdrawing(null);
       setReason("");
+      setWithdrawDoc("");
       await load();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "The withdrawal was refused.");
@@ -290,8 +295,7 @@ function MyCandidacy() {
             const canWithdraw =
               !votingOpen &&
               candidate.approval_status !== "WITHDRAWN" &&
-              candidate.approval_status !== "REJECTED" &&
-              candidate.approval_status !== "APPROVED";
+              candidate.approval_status !== "REJECTED";
             const approved = candidate.approval_status === "APPROVED";
             const canEdit = approved && !votingOpen;
             return (
@@ -402,8 +406,8 @@ function MyCandidacy() {
                   >
                     <span className="lbl">Ballot photo</span>
                     <p className="hint" style={{ margin: 0 }}>
-                      Approved candidates cannot withdraw. You may replace the image shown on the
-                      ballot until voting opens — otherwise your passport photo is used.
+                      You may replace the image shown on the ballot until voting opens — otherwise
+                      your passport photo is used. You can also withdraw before voting opens.
                     </p>
                     <div className="row" style={{ alignItems: "center", gap: 12 }}>
                       {candidate.ballot_photo_url ? (
@@ -519,6 +523,14 @@ function MyCandidacy() {
             placeholder="Why are you withdrawing?"
           />
         </div>
+        <FilePicker
+          accepts="pdf"
+          maxSize={5 * 1024 * 1024}
+          value={withdrawDoc}
+          onChange={setWithdrawDoc}
+          label="Signed withdrawal letter (optional)"
+          hint="Use this instead of typing a reason, or alongside it."
+        />
       </ConfirmDialog>
 
       <ConfirmDialog

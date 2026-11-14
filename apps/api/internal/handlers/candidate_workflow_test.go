@@ -48,6 +48,7 @@ func candidateEngine(t *testing.T, db *gorm.DB) *gin.Engine {
 	staff.Use(policy.Guard(db))
 	staff.POST("/api/v1/elections/:id/candidates/:candidate_id/approve", h.Approve)
 	staff.POST("/api/v1/elections/:id/candidates/:candidate_id/reject", h.Reject)
+	staff.POST("/api/v1/elections/:id/candidates/:candidate_id/withdraw", h.Withdraw)
 	return r
 }
 
@@ -173,6 +174,99 @@ func TestCandidateApprovalNotifiesAndAssignsBallotNumber(t *testing.T) {
 		"/api/v1/elections/e-cand/candidates/"+created.ID+"/reject",
 		map[string]any{"reason": "Too late"},
 	).AssertConflict()
+}
+
+func TestApprovedCandidateCanWithdrawOnlyBeforeTheElectionOpens(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Now().UTC()
+	election, position := candidateElection(t, db, models.ElectionStatusDraft, now.Add(24*time.Hour))
+	voter := testkit.User(t, db, "2023bed002@std.mast.ac.ug", models.RoleStudentVoter)
+	listed(t, db, election.ID, "22/U/0105", voter.Email)
+	client := testkit.New(t, candidateEngine(t, db))
+	voterToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), voter)
+
+	// Applications only open with the poll, so an approved candidate is seeded
+	// directly to test the withdrawal window.
+	created := models.Candidate{
+		ElectionID: election.ID, PositionID: position.ID, FullName: "Synthetic Applicant",
+		NominatedBy: voter.ID, ApprovalStatus: models.CandidateStatusApproved,
+	}
+	if err := db.Create(&created).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// A reason or a signed letter is required.
+	client.As(voterToken).Post("/api/v1/candidates/my/"+created.ID+"/withdraw",
+		map[string]any{}).AssertBadRequest()
+	client.As(voterToken).Post("/api/v1/candidates/my/"+created.ID+"/withdraw",
+		map[string]any{"document_url": "/uploads/withdrawal-letter.pdf"}).AssertOK()
+
+	var withdrawn models.Candidate
+	db.Where("id = ?", created.ID).First(&withdrawn)
+	if withdrawn.ApprovalStatus != models.CandidateStatusWithdrawn ||
+		withdrawn.WithdrawalDocumentURL != "/uploads/withdrawal-letter.pdf" {
+		t.Fatalf("withdrawn = %+v", withdrawn)
+	}
+	var audited int64
+	db.Model(&models.ElectionAuditLog{}).
+		Where("election_id = ? AND action = ?", election.ID, models.AuditActionCandidateWithdrawn).
+		Count(&audited)
+	if audited != 1 {
+		t.Fatalf("withdrawal audit rows = %d, want 1", audited)
+	}
+
+	// Once the poll opens the ballot is fixed.
+	if err := db.Model(&models.Election{}).Where("id = ?", election.ID).
+		Update("status", models.ElectionStatusOpen).Error; err != nil {
+		t.Fatal(err)
+	}
+	late := models.Candidate{
+		ElectionID: election.ID, PositionID: position.ID, FullName: "Late Applicant",
+		NominatedBy: voter.ID, ApprovalStatus: models.CandidateStatusApproved,
+	}
+	if err := db.Create(&late).Error; err != nil {
+		t.Fatal(err)
+	}
+	client.As(voterToken).Post("/api/v1/candidates/my/"+late.ID+"/withdraw",
+		map[string]any{"reason": "Changed my mind"}).AssertConflict()
+}
+
+func TestAdministratorConfirmsAWithdrawalBeforeTheElectionOpens(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Now().UTC()
+	election, position := candidateElection(t, db, models.ElectionStatusDraft, now.Add(24*time.Hour))
+	admin := rbacUser(t, db, "candidate-admin@must.ac.ug", models.RoleAdmin)
+	voter := testkit.User(t, db, "2023bed003@std.mast.ac.ug", models.RoleStudentVoter)
+	listed(t, db, election.ID, "22/U/0106", voter.Email)
+	client := testkit.New(t, candidateEngine(t, db))
+	adminToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), admin)
+
+	created := models.Candidate{
+		ElectionID: election.ID, PositionID: position.ID, FullName: "Synthetic Applicant",
+		NominatedBy: voter.ID, ApprovalStatus: models.CandidateStatusNominated,
+	}
+	if err := db.Create(&created).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	client.As(adminToken).Post("/api/v1/elections/e-cand/candidates/"+created.ID+"/withdraw",
+		map[string]any{}).AssertBadRequest()
+	client.As(adminToken).Post("/api/v1/elections/e-cand/candidates/"+created.ID+"/withdraw",
+		map[string]any{"reason": "Signed letter received"}).AssertOK()
+
+	if err := db.Model(&models.Election{}).Where("id = ?", election.ID).
+		Update("status", models.ElectionStatusOpen).Error; err != nil {
+		t.Fatal(err)
+	}
+	late := models.Candidate{
+		ElectionID: election.ID, PositionID: position.ID, FullName: "Late Applicant",
+		NominatedBy: voter.ID, ApprovalStatus: models.CandidateStatusNominated,
+	}
+	if err := db.Create(&late).Error; err != nil {
+		t.Fatal(err)
+	}
+	client.As(adminToken).Post("/api/v1/elections/e-cand/candidates/"+late.ID+"/withdraw",
+		map[string]any{"reason": "Late"}).AssertConflict()
 }
 
 func TestCandidateWithdrawalIsOwnedByApplicant(t *testing.T) {
