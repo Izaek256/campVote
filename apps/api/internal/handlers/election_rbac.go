@@ -113,6 +113,13 @@ func (h *ElectionRBACHandler) AssignRole(c *gin.Context) {
 	if !ok {
 		return
 	}
+	// An assigned election admin runs their election but cannot hand that
+	// authority to anyone else; only the creator or a global admin can.
+	if !mayAssignRoles(c, authority) {
+		policy.LogDenial(h.DB, c, "role assignment is reserved to the creator or a global admin", authority.Election.ID)
+		respond.Forbidden(c, "Only the election creator or a system administrator can assign election admins")
+		return
+	}
 
 	var in assignElectionRoleRequest
 	if err := c.ShouldBindJSON(&in); err != nil {
@@ -177,6 +184,11 @@ func (h *ElectionRBACHandler) RemoveRole(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !mayAssignRoles(c, authority) {
+		policy.LogDenial(h.DB, c, "role removal is reserved to the creator or a global admin", authority.Election.ID)
+		respond.Forbidden(c, "Only the election creator or a system administrator can remove election admins")
+		return
+	}
 	role := c.Param("role")
 	if !policy.ValidElectionRole(role) {
 		respond.BadRequest(c, "Unknown election role")
@@ -217,6 +229,13 @@ func (h *ElectionRBACHandler) authority(c *gin.Context, permission string) (*pol
 		return nil, false
 	}
 	return authority, true
+}
+
+// mayAssignRoles reports whether the caller may change this election's
+// assignments: the election creator or an actor whose authority is global.
+func mayAssignRoles(c *gin.Context, authority *policy.Authority) bool {
+	actor := policy.ActorFrom(c)
+	return authority.Global || (actor.UserID != "" && actor.UserID == authority.Election.CreatedByID)
 }
 
 func (h *ElectionRBACHandler) audit(c *gin.Context, electionID, action, summary string) {

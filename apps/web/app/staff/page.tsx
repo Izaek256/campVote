@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icon";
+import { isAdmin, useAuth } from "@/components/auth-provider";
 import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
@@ -56,6 +57,8 @@ const durationPresets = [
 function StaffHome() {
   const router = useRouter();
   const toast = useToast();
+  const { user } = useAuth();
+  const admin = isAdmin(user);
   const [items, setItems] = useState<Election[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -75,18 +78,25 @@ function StaffHome() {
   const [inviteBusy, setInviteBusy] = useState(false);
   const inviteFormRef = useRef<HTMLFormElement>(null);
 
-  function load() {
+  const managedIds = useMemo(
+    () => new Set((user?.election_roles ?? []).map((role) => role.election_id)),
+    [user?.election_roles]
+  );
+
+  const load = useCallback(() => {
     elections
       .list()
-      .then(setItems)
+      // The API returns every election this account can see, including ones it
+      // only votes in. A scoped admin manages what they were assigned to.
+      .then((list) => setItems(admin ? list : list.filter((item) => managedIds.has(item.id))))
       .catch((err) => {
         const message = err instanceof ApiError ? err.message : "Elections could not be loaded.";
         setLoadError(message);
         toast.error(message);
       });
-  }
+  }, [admin, managedIds, toast.error]);
 
-  useEffect(load, [toast.error]);
+  useEffect(load, [load]);
 
   // Quick action from the sidebar: /staff?new=1 opens the create form.
   useEffect(() => {
@@ -159,8 +169,9 @@ function StaffHome() {
           <span className="lbl">Officials</span>
           <h1>Elections</h1>
           <p>
-            Create an election with a title and its voting window, then add positions, candidates
-            and eligibility. Drafts stay private to you.
+            {admin
+              ? "Create an election with a title and its voting window, then add positions, candidates and eligibility. Drafts stay private to you."
+              : "The elections you have been assigned to administer. Positions, candidates and eligibility for each are on its own page."}
           </p>
         </div>
         <div className="row">
@@ -168,22 +179,30 @@ function StaffHome() {
             <Icon name="hist" size="s" />
             Refresh
           </button>
-          <button type="button" className="btn" onClick={() => setShowInviteForm((open) => !open)}>
-            <Icon name="user" size="s" />
-            Invite admin
-          </button>
-          <button
-            type="button"
-            className="btn primary"
-            onClick={() => setShowForm((open) => !open)}
-          >
-            <Icon name="plus" />
-            New election
-          </button>
+          {admin ? (
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setShowInviteForm((open) => !open)}
+              >
+                <Icon name="user" size="s" />
+                Invite admin
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => setShowForm((open) => !open)}
+              >
+                <Icon name="plus" />
+                New election
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
 
-      {showForm ? (
+      {showForm && admin ? (
         <form
           ref={createFormRef}
           className="panel stack scroll-target"
@@ -266,7 +285,7 @@ function StaffHome() {
         </form>
       ) : null}
 
-      {showInviteForm ? (
+      {showInviteForm && admin ? (
         <form
           ref={inviteFormRef}
           className="panel stack scroll-target"
@@ -372,7 +391,11 @@ function StaffHome() {
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>No elections yet. Create the first draft.</td>
+                  <td colSpan={6}>
+                    {admin
+                      ? "No elections yet. Create the first draft."
+                      : "You have not been assigned to an election yet. An election creator or system administrator can add you."}
+                  </td>
                 </tr>
               ) : (
                 items.map((election) => (
@@ -416,7 +439,7 @@ function StaffHome() {
 
 export default function StaffPage() {
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <StaffHome />
     </RequireAuth>
   );

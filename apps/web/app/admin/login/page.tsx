@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
-import { useAuth } from "@/components/auth-provider";
+import { isAdmin, isStaff, useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icon";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ApiError } from "@/lib/api";
@@ -47,7 +47,7 @@ export default function AdminLoginPage() {
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
-    if (!loading && user) router.replace(user.role === "ADMIN" ? "/staff" : "/elections");
+    if (!loading && user) router.replace(isAdmin(user) || isStaff(user) ? "/staff" : "/elections");
   }, [loading, user, router]);
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
