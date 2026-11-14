@@ -243,8 +243,10 @@ func TestCertifiedSnapshotIsNotEditableOrDeletable(t *testing.T) {
 	}
 }
 
-// Separation of duties: the election's own creator cannot certify it.
-func TestElectionCreatorCannotCertifyTheirOwnElection(t *testing.T) {
+// The creator may certify its own election: a small poll may have no second
+// official. The certifier and the timestamp are stored, and every results view
+// then reads the CERTIFIED snapshot.
+func TestElectionCreatorCertifiesAndEveryViewReadsTheCertifiedSnapshot(t *testing.T) {
 	db := rbacDB(t)
 	fixture := resultsFixtureFor(t, db, "e-sod", models.ElectionStatusClosed, models.ResultPolicyAfterClose)
 	castBallot(t, db, fixture.electionID, fixture.adaID)
@@ -264,7 +266,33 @@ func TestElectionCreatorCannotCertifyTheirOwnElection(t *testing.T) {
 
 	client.As(creatorToken).Post("/api/v1/elections/e-sod/results/certify", map[string]string{
 		"snapshot_id": snapshot["id"].(string), "reason": "I counted it",
-	}).AssertForbidden()
+	}).AssertOK()
+
+	var stored models.ResultSnapshot
+	if err := db.Where("id = ?", snapshot["id"]).First(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != models.ResultStatusCertified || stored.CertifiedByID != creator.ID ||
+		stored.CertifiedAt.IsZero() {
+		t.Fatalf("certified snapshot = %+v, want CERTIFIED with the certifier and time", stored)
+	}
+
+	// The officer view and the voter view read the same certified snapshot.
+	voter := rbacUser(t, db, "2022bse007@std.mast.ac.ug", models.RoleStudentVoter)
+	voterToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), voter)
+	for _, token := range []string{creatorToken, voterToken} {
+		var body struct {
+			Label    string `json:"label"`
+			Snapshot struct {
+				Status        string `json:"status"`
+				CertifiedByID string `json:"certified_by_id"`
+			} `json:"snapshot"`
+		}
+		client.As(token).Get("/api/v1/elections/e-sod/results").AssertOK().BindData(&body)
+		if body.Label != models.ResultStatusCertified || body.Snapshot.Status != models.ResultStatusCertified {
+			t.Errorf("results view for %q = %q/%q, want CERTIFIED", token, body.Label, body.Snapshot.Status)
+		}
+	}
 }
 
 // A recount reproduces the count and leaves the ballots alone.

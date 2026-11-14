@@ -104,7 +104,6 @@ function snapshot(
     id: "snap-1",
     version: 1,
     status,
-    content_hash: "9f3c1e7a4b02d85c6e91f0a3b7d24cf8e5a69f03d1b8c47e2a05f6931c8da71e",
     computed_at: "2026-10-29T07:52:00Z",
     computed_by_id: "user-1",
     eligible_voters: 5860,

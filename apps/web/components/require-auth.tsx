@@ -2,19 +2,26 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { isAdmin, useAuth } from "./auth-provider";
+import { isAdmin, isStaff, useAuth } from "./auth-provider";
 
 export function RequireAuth({
   children,
   adminOnly = false,
+  staffOnly = false,
 }: {
   children: React.ReactNode;
   /** Only ADMIN accounts may view this page; everyone else is sent to their elections. */
   adminOnly?: boolean;
+  /** System admins and election-assigned staff may view this page. */
+  staffOnly?: boolean;
 }) {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const denied = adminOnly && !!user && !isAdmin(user);
+  // A scoped staff admin reaches only the pages of the election they run; the
+  // server enforces the same scope on every request.
+  const allowed =
+    !adminOnly && !staffOnly ? true : adminOnly ? isAdmin(user) : isAdmin(user) || isStaff(user);
+  const denied = (adminOnly || staffOnly) && !!user && !allowed;
 
   useEffect(() => {
     if (loading) return;
@@ -22,8 +29,8 @@ export function RequireAuth({
       router.replace("/login");
       return;
     }
-    if (adminOnly && !isAdmin(user)) router.replace("/elections");
-  }, [loading, user, adminOnly, router]);
+    if (!allowed) router.replace("/elections");
+  }, [loading, user, allowed, router]);
 
   if (loading) {
     return (

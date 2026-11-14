@@ -9,7 +9,7 @@ import { LoadError } from "@/components/load-error";
 import { RequireAuth } from "@/components/require-auth";
 import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
-import { ApiError, documents, elections } from "@/lib/api";
+import { ApiError, elections } from "@/lib/api";
 import { formatShortEAT } from "@/lib/format";
 import type { Election } from "@/lib/types";
 
@@ -24,7 +24,6 @@ function ResultsView() {
   const toast = useToast();
   const [items, setItems] = useState<Election[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [downloading, setDownloading] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -42,19 +41,6 @@ function ResultsView() {
       });
     return () => controller.abort();
   }, [toast]);
-
-  async function download(election: Election) {
-    setDownloading(election.id);
-    try {
-      await documents.resultsPdf(election.id);
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : "The results document could not be downloaded."
-      );
-    } finally {
-      setDownloading("");
-    }
-  }
 
   // A student waits on the elections they voted in that have not closed yet.
   const pending = useMemo(
@@ -169,15 +155,6 @@ function ResultsView() {
                     <Link className="btn block primary" href={`/elections/${election.id}/results`}>
                       View results
                     </Link>
-                    <button
-                      type="button"
-                      className="btn block"
-                      disabled={downloading === election.id}
-                      onClick={() => download(election)}
-                    >
-                      <Icon name="dl" size="s" />
-                      {downloading === election.id ? "Preparing…" : "Download PDF"}
-                    </button>
                   </div>
                 </div>
               </article>

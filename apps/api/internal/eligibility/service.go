@@ -57,7 +57,18 @@ func CheckElection(db *gorm.DB, election *models.Election, user *models.User, at
 	if !election.IsOpen(at) {
 		return Decision{Reason: "Voting is not open for this election"}, nil
 	}
-	return CheckRoster(db, election, user)
+	decision, err := CheckRoster(db, election, user)
+	if err != nil || !decision.Eligible {
+		return decision, err
+	}
+	// Voting also needs the campus profile. The web app opens the profile form;
+	// this is the server-side half, so a hidden button is never the only
+	// control. CheckRoster is left alone because candidate applications do not
+	// need the profile.
+	if missing := user.MissingProfileFields(); len(missing) > 0 {
+		return Decision{Reason: "Complete your profile (" + strings.Join(missing, ", ") + ") before voting"}, nil
+	}
+	return decision, nil
 }
 
 // CheckRoster answers whether this account may participate in the election,
@@ -68,7 +79,8 @@ func CheckElection(db *gorm.DB, election *models.Election, user *models.User, at
 //  1. Email must be verified.
 //  2. ParseEmail must succeed and RuleAllows must return true for the election.
 //  3. If a roster row exists with a non-ELIGIBLE status, access is denied
-//     (explicit exclusion). No row means allowed (inclusion by rule).
+//     (explicit exclusion). No row means allowed (inclusion by rule) unless
+//     the election requires a roster, in which case the row is required.
 func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Decision, error) {
 	if election == nil {
 		return Decision{Reason: "Election not found"}, nil
@@ -104,13 +116,17 @@ func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Dec
 
 	// Check for an explicit roster exclusion. A non-ELIGIBLE status (e.g.
 	// SUSPENDED, GRADUATED, INELIGIBLE) denies even when the rule matches.
-	// No roster row → allowed by rule.
+	// A restricted election is the opposite: the roster is the whole
+	// electorate, so no row means no access.
 	var entry models.ElectionRoster
 	err := db.Where("election_id = ? AND LOWER(email) = ?", election.ID,
 		strings.ToLower(strings.TrimSpace(user.Email))).
 		First(&entry).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return Decision{}, err
+	}
+	if err != nil && election.RequireRoster {
+		return Decision{Reason: "This election is limited to the voters on its list"}, nil
 	}
 	if err == nil {
 		// Row found — check its status.

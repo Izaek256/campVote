@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
+import { ProfileGate } from "@/components/profile-gate";
 import { ToastProvider } from "@/components/toast";
 import { CAMPUS_NAME } from "@/lib/config";
 
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AuthProvider>
           <ToastProvider>{children}</ToastProvider>
+          <ProfileGate />
         </AuthProvider>
       </body>
     </html>

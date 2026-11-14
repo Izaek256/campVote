@@ -705,9 +705,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Refuse non-admin accounts before checking their password. Keep the same
-	// generic response and comparison cost as an unknown email.
-	if user.Role != models.RoleAdmin {
+	// Password sign-in is for system administrators and for staff who have
+	// been assigned to administer an election. A staff voter with no assignment
+	// gets the same generic refusal as an unknown address.
+	if !h.canUsePasswordSignIn(user) {
 		spendPasswordCheck(req.Password)
 		services.LogLoginFailed(h.DB, c, req.Email)
 		invalidCredentials(c)
@@ -779,6 +780,25 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		},
 		"message": "Logged in successfully",
 	})
+}
+
+// canUsePasswordSignIn reports whether the account may sign in with a
+// password: a global administrator, or a staff account holding an election
+// administrator assignment. The assignment is what keeps a non-ADMIN staff
+// member scoped to the election they were assigned to.
+func (h *AuthHandler) canUsePasswordSignIn(user *models.User) bool {
+	if user.Role == models.RoleAdmin {
+		return true
+	}
+	var count int64
+	if err := h.DB.Model(&models.ElectionRole{}).
+		Where("user_id = ? AND role IN ?", user.ID,
+			[]string{models.RoleChiefElectionAdmin, models.RoleElectionOfficial}).
+		Count(&count).Error; err != nil {
+		log.Printf("auth: failed to read election assignments for %s: %v", user.ID, err)
+		return false
+	}
+	return count > 0
 }
 
 // Refresh generates a new access token from a refresh token. The token is
@@ -905,6 +925,16 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	if !exists {
 		respond.Fail(c, respond.CodeUnauthorized, "Not authenticated")
 		return
+	}
+
+	// The client uses these assignments to offer the staff area for exactly the
+	// elections this account administers. A read failure hides that offer
+	// rather than failing the session.
+	if current, ok := user.(models.User); ok {
+		if err := current.LoadElectionRoles(h.DB); err != nil {
+			log.Printf("auth: failed to load election roles for %s: %v", current.ID, err)
+		}
+		user = current
 	}
 
 	c.JSON(http.StatusOK, gin.H{

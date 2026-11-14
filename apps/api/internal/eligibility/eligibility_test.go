@@ -60,10 +60,12 @@ func rosterEntry(t *testing.T, db *gorm.DB, electionID, student, email string) *
 	return entry
 }
 
-// account returns a verified user with a registration-number email.
+// account returns a verified user with a registration-number email and a
+// complete voting profile.
 func account(email string) *models.User {
 	now := time.Now().UTC()
-	return &models.User{Email: email, EmailVerifiedAt: &now}
+	return &models.User{Email: email, EmailVerifiedAt: &now,
+		Age: models.Ptr(20), Sex: models.SexMale, ResidenceAreaID: models.Ptr("area-1")}
 }
 
 // studentEmail returns a valid std.mast.ac.ug registration-number email.
@@ -103,6 +105,86 @@ func TestRuleMatchingStudentIsEligibleWithoutRosterEntry(t *testing.T) {
 	}
 	if !decision.Eligible {
 		t.Fatalf("a rule-matching student should be eligible without a roster entry: %s", decision.Reason)
+	}
+}
+
+func TestVotingNeedsACompleteProfile(t *testing.T) {
+	db := testDB(t)
+	now := time.Now().UTC()
+	openElection(t, db, "e-profile", now.Add(-time.Hour), now.Add(time.Hour))
+
+	user := account(studentEmail("2022", "bse", "099"))
+	user.Age = nil
+	decision, err := eligibility.Check(db, "e-profile", user, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Eligible || !strings.Contains(decision.Reason, "profile") {
+		t.Fatalf("an incomplete profile was allowed: eligible=%v reason=%q", decision.Eligible, decision.Reason)
+	}
+
+	// The roster check used by candidate applications does not need it.
+	roster, err := eligibility.CheckRoster(db, &models.Election{ID: "e-profile", AllowedDomain: "std.mast.ac.ug"}, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !roster.Eligible {
+		t.Fatalf("CheckRoster refused the same account: %s", roster.Reason)
+	}
+}
+
+func TestRestrictedElectionNeedsARosterEntry(t *testing.T) {
+	db := testDB(t)
+	now := time.Now().UTC()
+	election := openElection(t, db, "e-restricted", now.Add(-time.Hour), now.Add(time.Hour))
+	if err := db.Model(election).Update("require_roster", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	election.RequireRoster = true
+
+	studentAddr := studentEmail("2022", "bse", "001")
+	decision, err := eligibility.Check(db, election.ID, account(studentAddr), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Eligible {
+		t.Fatal("a student who is not on the restricted list must not be eligible")
+	}
+
+	rosterEntry(t, db, election.ID, "22/U/0001", studentAddr)
+	decision, err = eligibility.Check(db, election.ID, account(studentAddr), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !decision.Eligible {
+		t.Fatalf("a listed student must be eligible: %s", decision.Reason)
+	}
+}
+
+func TestRestrictedRosterCanChangeUntilClose(t *testing.T) {
+	db := testDB(t)
+	now := time.Now().UTC()
+	election := openElection(t, db, "e-restricted", now.Add(-time.Hour), now.Add(time.Hour))
+	if err := db.Model(election).Update("require_roster", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	election.RequireRoster = true
+	if _, err := eligibility.Freeze(db, election.ID, "officer", now); err != nil {
+		t.Fatal(err)
+	}
+
+	// The freeze keeps a rule-based electorate fixed. A restricted election is
+	// defined by its list, so the officer must be able to add names while the
+	// poll is open.
+	csv := "student_number,email,full_name\n22/U/0002,late@std.mast.ac.ug,Late Arrival\n"
+	if _, _, err := eligibility.Import(db, election.ID, "officer", models.RosterSourceCSVImport,
+		"late.csv", strings.NewReader(csv), now); err != nil {
+		t.Fatalf("adding a listed voter while open: %v", err)
+	}
+
+	if _, _, err := eligibility.Import(db, election.ID, "officer", models.RosterSourceCSVImport,
+		"late.csv", strings.NewReader(csv), election.EndsAt.Add(time.Minute)); !errors.Is(err, eligibility.ErrElectionClosed) {
+		t.Fatalf("post-close import error = %v, want ErrElectionClosed", err)
 	}
 }
 

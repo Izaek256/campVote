@@ -44,20 +44,29 @@ A failure at any step rolls back all of them. There is no partial state.
 - The `VoterParticipation` model has a unique index on
   `(election_id, user_id)`. The database refuses a second ballot even if the
   application logic were bypassed.
-- A second unique index on `(election_id, idempotency_key)` makes the idempotency
-  replay a database fact, not a lookup table. The key is random-generated in
-  `BeforeCreate` when a client does not send one.
+- A second unique index on `(election_id, user_id, idempotency_key)` makes the
+  idempotency replay a database fact, not a lookup table. Scoping it to the
+  voter matters because keys are client-generated: two voters may choose the
+  same key, and one must never receive the other's confirmation token.
+- `BallotSelection` has a unique index on `(ballot_id, position_id, choice)`, so
+  a multi-choice position can never store the same answer twice.
 
 ### Idempotency
 
-The client generates one idempotency key per attempt set and reuses it for
-manual retries (see `apps/web/app/elections/[id]/ballot/page.tsx`). The rule:
+The client generates one idempotency key per election and keeps it in
+`sessionStorage` (`apps/web/lib/vote-attempt.ts`), so a reload retries the same
+attempt. The key is **required**; a missing or blank key is `400`. The rule:
 
 - Same key, same voter, same election → the first outcome is replayed with
   `200 OK` and the original confirmation token. No second ballot is written.
 - New key after a successful ballot → `409 Conflict` ("you have already voted").
 - Stale `ballot_version_id` (the ballot was re-published mid-flow) →
   `409 Conflict` with the stale-ballot message. Nothing is recorded.
+
+The pre-check reads only the calling voter's participation. A concurrent
+submission can still lose the insert race; that path answers from the winning
+row read *outside* the aborted transaction, because Postgres refuses further
+statements on a transaction after a unique violation.
 
 ### Closing-time race rule
 
@@ -107,7 +116,7 @@ at zero for a refused submission.
 |---|---|---|---|
 | GET | `/api/v1/elections/:id/ballot` | authenticated, eligible | Ballot content + `ballot_version_id` |
 | POST | `/api/v1/elections/:id/ballot/start` | authenticated, eligible | `409` if already voted; returns `ballot_version_id` |
-| POST | `/api/v1/elections/:id/ballot/submit` | authenticated, eligible | Atomic, idempotent; `201` new, `200` replay, `409` closed/already-voted/stale, `400` bad selections |
+| POST | `/api/v1/elections/:id/ballot/submit` | authenticated, eligible | Atomic, idempotent; `201` new, `200` replay, `409` closed/already-voted/stale, `400` missing key/bad selections |
 | GET | `/api/v1/elections/:id/my-vote-status` | authenticated | Participation only |
 
 The election list (`GET /api/v1/elections`) also includes a coarse
@@ -123,17 +132,18 @@ without one request per card.
 | `/elections/:id/ballot` | Fill in → review step → confirm checkbox → submit. Breadcrumbs, per-position min/max counters, blank (abstain) option where allowed, radio/checkbox groups |
 | `/elections/:id/status` | Voted / not voted / election closed / session expired. No re-vote path is offered for a recorded vote |
 
-Selections live only in component state. Nothing is written to storage, the URL
-or history. A failed submit clears nothing until the voter leaves, and the
-in-memory idempotency key is reused for a manual retry.
+Selections live only in component state. Nothing about a choice is written to
+storage, the URL or history. The attempt key is the only stored value: one per
+election in `sessionStorage`, reused by the retry loop and by a reload, cleared
+after a definite final state (accepted, or already voted).
 
 ### Unknown outcome
 
-If the submit request fails without a server answer (network drop), the ballot
-page renders the "We could not confirm your vote" banner with a **Check status**
-link and warns against re-submitting. The status page is the authority: it says
-whether a ballot exists. It never offers a second submission when one is
-recorded.
+If the submit request fails without a server answer after the retries, the
+ballot page renders the "We could not confirm your vote" banner with a **Check
+status** link and warns against re-submitting. The key stays in `sessionStorage`,
+so reloading and submitting again is the same attempt and cannot become a second
+ballot. The status page remains the authority.
 
 ### Stale ballot
 
@@ -148,12 +158,21 @@ reload. The voter re-selects against the new version.
 - `TestVoteSubmissionIsIdempotentAndRecordsOneBallot` — stale version refused,
   same key replays the same token, new key refused, one participation and one
   ballot at the end, audit row carries no choice, status shape.
+- `TestSubmissionRequiresIdempotencyKey` — missing and blank keys are `400` and
+  write nothing.
+- `TestIdempotencyKeyIsScopedToTheVoter` — two voters in one election can use the
+  same key, are both accepted, and get different confirmation tokens.
 - `TestParallelSubmissionsByOneVoterRecordExactlyOneBallot` — 8 parallel
   submissions with distinct keys, exactly one `201`, counts reconcile to 1/1.
+- `TestDuplicateSelectionIsRejectedByTheDatabase` — the
+  `(ballot, position, choice)` index refuses a duplicate write.
 - `TestRejectedBallotWritesNothing` — invalid selections write nothing.
 - `TestSubmissionRefusedWhenServerClockCrossesCloseDuringRequest` — the
   closing-time race rule.
 - `TestVoteStatusBeforeVotingIsFalseAndCarriesNoChoiceField` — privacy shape.
+
+`apps/web/__tests__/vote-attempt.test.ts` covers the key's stability per
+election, its clearing, and the retry policy (network and 5xx retried, 4xx not).
 
 Run locally with:
 
@@ -172,9 +191,11 @@ CI runs the whole suite with CGO and Postgres-compatible drivers.
   crash. Worth adding a Postgres-side test with a forced constraint violation.
 - Multi-tab double voting is prevented server-side, but the second tab only
   learns about it on its next request; there is no cross-tab push.
-- The client reuses one idempotency key per page load. A page reload after an
-  unknown outcome generates a new key; recovery is via the status page, not the
-  same key.
+- `sessionStorage` is per tab. A reload or a new tab retries the same election
+  key only in the tab that created it; another tab falls back to the status
+  page, which cannot create a second ballot either.
+- Rate limiting, request timeouts/backpressure, caching and load tests are the
+  10.2–10.6 follow-ups and are not in this change.
 - Browser/E2E evidence (video, screenshots, storage inspection) is deferred:
   no Playwright suite exists in this repository yet, and no local Docker or
   browser-run environment was available for this change. The API-level tests

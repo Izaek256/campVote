@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { isAdmin, useAuth } from "@/components/auth-provider";
+import { isAdmin, isStaff, useAuth } from "@/components/auth-provider";
 
 /**
  * A signed-in visitor belongs in their dashboard, not on the shop window.
@@ -16,7 +16,7 @@ export function LandingSignedInRedirect() {
 
   useEffect(() => {
     if (loading || !user) return;
-    router.replace(isAdmin(user) ? "/staff" : "/elections");
+    router.replace(isAdmin(user) || isStaff(user) ? "/staff" : "/elections");
   }, [loading, user, router]);
 
   return null;

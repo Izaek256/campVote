@@ -35,7 +35,7 @@ func positionEngine(t *testing.T, db *gorm.DB) *gin.Engine {
 
 	staff := r.Group("")
 	staff.Use(middleware.APIKeyOrAuth(db, middleware.Auth(db, auth)))
-	staff.Use(middleware.RequireStaff())
+	staff.Use(middleware.RequireStaff(db))
 	staff.Use(policy.Guard(db))
 	staff.GET("/api/v1/positions", h.ListAll)
 	staff.POST("/api/v1/positions", h.CreateStandalone)

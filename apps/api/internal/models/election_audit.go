@@ -11,6 +11,7 @@ import (
 // Significant administrative audit actions (FR-AUDIT-01, ISSUE-06)
 const (
 	AuditActionElectionCreated     = "ELECTION_CREATED"
+	AuditActionElectionCloned      = "ELECTION_CLONED"
 	AuditActionElectionUpdated     = "ELECTION_UPDATED"
 	AuditActionElectionOpened      = "ELECTION_OPENED"
 	AuditActionElectionClosed      = "ELECTION_CLOSED"

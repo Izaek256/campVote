@@ -16,6 +16,7 @@ import (
 // internal/authz/permissions.go.
 const (
 	PermElectionView    = "elections.view"
+	PermElectionCreate  = "elections.create"
 	PermElectionEdit    = "elections.edit"
 	PermElectionPublish = "elections.publish"
 	PermElectionRoles   = "elections.roles"
@@ -141,6 +142,14 @@ func AuthorityFor(db *gorm.DB, actor Actor, electionID string) (*Authority, erro
 		}
 	}
 
+	// The creator owns this election and administers it even without a scoped
+	// assignment. The grants are those of a chief admin of this election; the
+	// Global flag stays false, so nothing reaches any other election.
+	creator := actor.UserID != "" && actor.UserID == election.CreatedByID
+	if creator {
+		authority.Grants = append(authority.Grants, roleGrants(models.RoleChiefElectionAdmin)...)
+	}
+
 	// Scoped campus roles never become global by holding a grant. A custom role
 	// with elections.view is global, because only a global role can be assigned
 	// outside an election. The global role name alone is enough to know that an
@@ -160,7 +169,7 @@ func AuthorityFor(db *gorm.DB, actor Actor, electionID string) (*Authority, erro
 		authority.Global = true
 	}
 
-	if !authority.Global && len(authority.Roles) == 0 {
+	if !authority.Global && len(authority.Roles) == 0 && !creator {
 		return nil, ErrNotVisible
 	}
 	return authority, nil
@@ -271,38 +280,32 @@ func ValidElectionRole(role string) bool {
 // holds elections.certify, is not the election's creator, and is not the only
 // election official. The last part is the separation-of-duties requirement
 // that one person does not both run and certify the count.
+// CertifyDecision answers whether this actor may certify the election's
+// current snapshot. The creator may certify its own election: a class or club
+// poll may have no separately assigned staff, and it still has to be able to
+// close its record. The minimum is one official account — the creator, an
+// assigned official or a system administrator — and voting must have closed.
 func CertifyDecision(db *gorm.DB, a *Authority, actor Actor) (bool, string) {
 	if !a.Can(PermElectionCertify) {
 		return false, "You are not authorised to certify results"
-	}
-	if actor.UserID != "" && actor.UserID == a.Election.CreatedByID {
-		return false, "the election creator cannot certify its results"
 	}
 	switch a.Election.Status {
 	case models.ElectionStatusClosed:
 	default:
 		return false, "results can be certified only after voting has closed"
 	}
-
-	var officials []string
+	if a.Global || (actor.UserID != "" && actor.UserID == a.Election.CreatedByID) {
+		return true, ""
+	}
+	var assigned int64
 	if err := db.Model(&models.ElectionRole{}).
-		Where("election_id = ? AND role IN ?", a.Election.ID,
+		Where("election_id = ? AND user_id = ? AND role IN ?", a.Election.ID, actor.UserID,
 			[]string{models.RoleElectionOfficial, models.RoleChiefElectionAdmin}).
-		Distinct().Pluck("user_id", &officials).Error; err != nil {
+		Count(&assigned).Error; err != nil {
 		return false, "the election officials could not be checked"
 	}
-	if len(officials) < 2 {
-		return false, "a second election official must be assigned before results can be certified"
-	}
-
-	isOfficial := false
-	for _, id := range officials {
-		if id == actor.UserID {
-			isOfficial = true
-		}
-	}
-	if !isOfficial && !a.Global {
-		return false, "only an assigned election official may certify"
+	if assigned == 0 {
+		return false, "only the creator or an assigned election official may certify"
 	}
 	return true, ""
 }

@@ -43,6 +43,13 @@
 - [`features/positions-first-workflow.md`](features/positions-first-workflow.md) — Phase 2 positions-first workflow: standalone positions, position eligibility, max candidates, admin/student views.
 - [`features/responsive-ui-usability.md`](features/responsive-ui-usability.md) — Mobile header/layout improvements, clearer ballot position settings, scroll behavior, and viewport audit status.
 - [`features/landing-page.md`](features/landing-page.md) — ISSUE-31 public landing page with admin CMS, draft/publish separation, upcoming elections, SEO and social previews.
+- [`features/voter-profile.md`](features/voter-profile.md) — issue #37 voter profile (age, sex, residence), administrator-managed residence areas, and the server-side ballot gate.
+- [`features/restricted-elections.md`](features/restricted-elections.md) — issue #37 restricted elections: an imported roster as the whole electorate, visibility, and roster changes until close.
+- [`features/election-clone.md`](features/election-clone.md) — issue #37 copying an election: what is copied, what is left behind, and who may do it.
+- [`features/candidate-withdrawal.md`](features/candidate-withdrawal.md) — issue #37 withdrawal after approval, before the poll opens, with typed or uploaded evidence.
+- [`features/live-election-edits.md`](features/live-election-edits.md) — issue #37 the title, description and end-time edits an open election accepts, and their audit.
+- [`features/results-view-only.md`](features/results-view-only.md) — issue #37 voters read results on screen; downloadable ledgers stay with staff.
+- [`features/certification.md`](features/certification.md) — issue #37 the creator and assigned admins certify, the stored certifier/timestamp, and the CERTIFIED snapshot every view reads.
 
 ## 6. Audit & Traceability
 

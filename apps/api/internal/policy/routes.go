@@ -45,7 +45,7 @@ func init() {
 		"/api/v1/uploads/:id/download", "/api/v1/sync/pull", "/api/v1/sync/policy",
 		"/api/v1/settings", "/api/v1/notifications", "/api/v1/dashboard-layout",
 		"/api/v1/tickets", "/api/v1/tickets/:id", "/api/v1/imports/:id",
-		"/api/v1/profile")
+		"/api/v1/profile", "/api/v1/residence-areas")
 	authenticated("POST", "/api/v1/auth/logout", "/api/v1/auth/totp/setup",
 		"/api/v1/auth/totp/enable", "/api/v1/auth/totp/email/send",
 		"/api/v1/auth/totp/email/enable", "/api/v1/auth/totp/disable",
@@ -76,6 +76,9 @@ func init() {
 	adminOr("users.view", "GET", "/api/v1/users", "/api/v1/users/:id")
 	adminOr("users.create", "POST", "/api/v1/users")
 	adminOr("users.edit", "PUT", "/api/v1/users/:id", "/api/v1/users/:id/roles")
+	adminOr("users.edit", "PUT", "/api/v1/residence-assignments")
+	adminOr("users.edit", "POST", "/api/v1/residence-areas")
+	adminOr("users.edit", "DELETE", "/api/v1/residence-areas/:id")
 	adminOr("users.edit", "POST", "/api/v1/users/:id/unlock")
 	// Administrator invitation. The route is registered without a policy in
 	// the staff group, which the default-deny guard refuses; declaring it here
@@ -132,7 +135,8 @@ func init() {
 	// narrows it per caller — a draft to the students it will admit, a closed
 	// election to every student so the outcome is transparent.
 	authenticated("GET", "/api/v1/elections")
-	permitted("elections.create", "POST", "/api/v1/elections")
+	permitted("elections.create", "POST", "/api/v1/elections",
+		"/api/v1/elections/:id/clone")
 	permitted("elections.view", "GET", "/api/v1/elections/:id")
 	permitted("elections.edit", "PUT", "/api/v1/elections/:id")
 	permitted("elections.edit", "DELETE", "/api/v1/elections/:id")
@@ -215,7 +219,8 @@ func init() {
 		"/api/v1/elections/:id/roster/import")
 	permitted("rosters.edit", "POST", "/api/v1/elections/:id/roster/:rosterId/status",
 		"/api/v1/elections/:id/eligibility/freeze")
-	permitted("rosters.view", "GET", "/api/v1/elections/:id/eligibility/report")
+	permitted("rosters.view", "GET", "/api/v1/elections/:id/eligibility/report",
+		"/api/v1/elections/:id/roster")
 
 	// ── ADMIN only ────────────────────────────────────────────────────────
 	adminOnly("POST", "/api/v1/admin/activity/reseal", "/api/v1/admin/webhooks/:id/replay",

@@ -231,6 +231,11 @@ func User(tb testing.TB, db *gorm.DB, email, role string) *models.User {
 		Role:            role,
 		Active:          true,
 		EmailVerifiedAt: &now,
+		// The ballot gate refuses an incomplete campus profile. A test voter is
+		// ready to vote unless the test says otherwise.
+		Age:             models.Ptr(20),
+		Sex:             models.SexMale,
+		ResidenceAreaID: models.Ptr("test-residence"),
 	}
 	if err := db.Create(user).Error; err != nil {
 		tb.Fatalf("creating %s: %v", email, err)

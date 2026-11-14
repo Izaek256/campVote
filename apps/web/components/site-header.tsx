@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useAuth, isAdmin } from "./auth-provider";
+import { useAuth, isAdmin, isStaff } from "./auth-provider";
 import { Icon } from "./icon";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -56,7 +56,7 @@ export function SiteHeader() {
           >
             Elections
           </Link>
-          {isAdmin(user) ? (
+          {isAdmin(user) || isStaff(user) ? (
             <Link href="/staff" onClick={() => setMenuOpen(false)}>
               Admin panel
             </Link>

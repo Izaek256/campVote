@@ -7,6 +7,8 @@ import type { User } from "@/lib/types";
 interface AuthState {
   user: User | null;
   loading: boolean;
+  /** Re-read the current user, e.g. after the profile form is saved. */
+  refresh: () => Promise<void>;
   signInAdmin: (email: string, password: string) => Promise<AdminSignInResult>;
   verifyAdminSecondFactor: (
     pendingToken: string,
@@ -48,6 +50,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const refresh = useCallback(async () => {
+    setUser(await auth.me());
+  }, []);
+
   const signInAdmin = useCallback(async (email: string, password: string) => {
     const payload = await auth.adminLogin(email, password);
     if ("totp_required" in payload && payload.totp_required) {
@@ -60,29 +66,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!("user" in payload)) {
       throw new Error("The sign-in response was incomplete. Please try again.");
     }
-    if (payload.user.role !== "ADMIN") {
+    // The sign-in payload has no per-election assignments; /auth/me does.
+    const me = await auth.me();
+    setUser(me);
+    if (!isAdmin(me) && !isStaff(me)) {
       throw new Error("This account is not an administrator.");
     }
-    setUser(payload.user);
     return { requiresSecondFactor: false as const };
   }, []);
 
   const verifyAdminSecondFactor = useCallback(
     async (pendingToken: string, code: string, useBackupCode = false) => {
-      const payload = useBackupCode
+      useBackupCode
         ? await auth.verifyBackupCode(pendingToken, code)
         : await auth.verifyTOTP(pendingToken, code);
-      if (payload.user.role !== "ADMIN") {
+      const me = await auth.me();
+      setUser(me);
+      if (!isAdmin(me) && !isStaff(me)) {
         throw new Error("This account is not an administrator.");
       }
-      setUser(payload.user);
     },
     []
   );
 
   const signInWithGoogle = useCallback(async (idToken: string) => {
-    const payload = await auth.googleSignIn(idToken);
-    setUser(payload.user);
+    await auth.googleSignIn(idToken);
+    // The sign-in payload has no per-election assignments; /auth/me does.
+    setUser(await auth.me());
   }, []);
 
   const signOut = useCallback(async () => {
@@ -97,12 +107,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       loading,
+      refresh,
       signInAdmin,
       verifyAdminSecondFactor,
       signInWithGoogle,
       signOut,
     }),
-    [user, loading, signInAdmin, verifyAdminSecondFactor, signInWithGoogle, signOut]
+    [user, loading, refresh, signInAdmin, verifyAdminSecondFactor, signInWithGoogle, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -117,4 +128,12 @@ export function useAuth(): AuthState {
 export function isAdmin(user: User | null): boolean {
   if (!user) return false;
   return user.role === "ADMIN";
+}
+
+/**
+ * An account assigned to administer at least one election. The assignment is
+ * scoped: it opens the staff area for that election and nothing else.
+ */
+export function isStaff(user: User | null): boolean {
+  return !!user && (user.election_roles?.length ?? 0) > 0;
 }

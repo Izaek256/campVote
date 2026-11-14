@@ -20,6 +20,9 @@ import type {
   ResultSnapshot,
   Results,
   ResultsHistory,
+  ResidenceArea,
+  RosterEntry,
+  RosterPreview,
   SubmitOptions,
   SubmitResult,
   UploadRef,
@@ -235,8 +238,26 @@ export const auth = {
     }),
 };
 
-/** Multipart upload. The API sniffs the real type and enforces accepts/max_size. */
-export async function upload(
+/** The caller's own campus profile and the administrator-managed residences. */
+export const account = {
+  update: (body: { age?: number; sex?: "MALE" | "FEMALE"; residence_area_id?: string }) =>
+    api<User>("/profile", { method: "PUT", body }),
+};
+
+export const residences = {
+  list: () => api<ResidenceArea[]>("/residence-areas"),
+  create: (name: string) =>
+    api<ResidenceArea>("/residence-areas", { method: "POST", body: { name } }),
+  remove: (id: string) => api<unknown>(`/residence-areas/${id}`, { method: "DELETE" }),
+  /** The one profile correction an administrator makes. */
+  correct: (email: string, residenceAreaId: string | null) =>
+    api<unknown>("/residence-assignments", {
+      method: "PUT",
+      body: { email, residence_area_id: residenceAreaId },
+    }),
+};
+
+/** Multipart upload. The API sniffs the real type and enforces accepts/max_size. */ export async function upload(
   file: File,
   options: { accepts?: string; maxSize?: number } = {}
 ): Promise<UploadRef> {
@@ -275,10 +296,19 @@ export const candidates = {
       body,
     }),
   mine: () => api<{ candidates: MyCandidate[] }>("/candidates/my"),
-  withdraw: (candidateId: string, reason: string) =>
-    api<Candidate>(`/candidates/my/${candidateId}/withdraw`, {
+  /** An officer records a withdrawal on the candidate's behalf, before the poll opens. */
+  adminWithdraw: (electionId: string, candidateId: string, reason: string) =>
+    api<Candidate>(`/elections/${electionId}/candidates/${candidateId}/withdraw`, {
       method: "POST",
       body: { reason },
+    }),
+  withdraw: (candidateId: string, evidence: { reason?: string; documentUrl?: string }) =>
+    api<Candidate>(`/candidates/my/${candidateId}/withdraw`, {
+      method: "POST",
+      body: {
+        reason: evidence.reason || undefined,
+        document_url: evidence.documentUrl || undefined,
+      },
     }),
   /**
    * Replace the image shown on the ballot (approved candidates only, before
@@ -406,7 +436,6 @@ export const staff = {
       versions: Array<{
         id: string;
         version: number;
-        content_hash: string;
         status: string;
         published_by: string;
         published_at: string;
@@ -420,7 +449,6 @@ export const staff = {
       v1: {
         id: string;
         version: number;
-        content_hash: string;
         status: string;
         published_by: string;
         published_at: string;
@@ -428,14 +456,13 @@ export const staff = {
       v2: {
         id: string;
         version: number;
-        content_hash: string;
         status: string;
         published_by: string;
         published_at: string;
       };
     }>(`/elections/${electionId}/ballot/versions/compare?v1=${v1}&v2=${v2}`),
   publish: (electionId: string) =>
-    api<{ version: number; content_hash: string }>(`/elections/${electionId}/ballot/publish`, {
+    api<{ version: number }>(`/elections/${electionId}/ballot/publish`, {
       method: "POST",
     }),
 };
@@ -460,12 +487,45 @@ export const documents = {
   },
 };
 
+/**
+ * Roster upload. The API takes the CSV as multipart/form-data, so this cannot
+ * use the JSON helper.
+ */
+async function rosterFile<T>(id: string, action: "preview" | "import", file: File): Promise<T> {
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = { Accept: "application/json" };
+  const token = csrfToken();
+  if (token) headers["X-CSRF-Token"] = token;
+  const response = await fetch(`${API}/api/v1/elections/${id}/roster/${action}`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: form,
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      payload?.error?.message ?? `Roster upload failed (${response.status})`,
+      response.status,
+      {
+        fields: payload?.error?.details?.fields,
+        code: payload?.error?.code,
+        requestId: response.headers.get("X-Request-ID") ?? undefined,
+      }
+    );
+  }
+  return (payload?.data ?? payload) as T;
+}
+
 export const elections = {
   list: () => api<Election[]>("/elections"),
   get: (id: string) => api<Election>(`/elections/${id}`),
   create: (body: Record<string, unknown>) => api<Election>("/elections", { method: "POST", body }),
   update: (id: string, body: Record<string, unknown>) =>
     api<Election>(`/elections/${id}`, { method: "PUT", body }),
+  clone: (id: string, body: Record<string, unknown>) =>
+    api<Election>(`/elections/${id}/clone`, { method: "POST", body }),
   /**
    * Delete an election that has not yet collected a ballot. The server refuses
    * with 409 once voting has started; close it instead.
@@ -503,6 +563,18 @@ export const elections = {
   },
   eligibility: (id: string) => api<EligibilityDecision>(`/elections/${id}/eligibility`),
   report: (id: string) => api<EligibilityReport>(`/elections/${id}/eligibility/report`),
+  roster: {
+    list: (id: string) => api<RosterEntry[]>(`/elections/${id}/roster`),
+    preview: (id: string, file: File) =>
+      rosterFile<{ preview: RosterPreview }>(id, "preview", file),
+    import: (id: string, file: File) => rosterFile<{ preview: RosterPreview }>(id, "import", file),
+    /** Revoking keeps the row for history; it does not delete it. */
+    revoke: (id: string, rosterId: string, reason: string) =>
+      api<RosterEntry>(`/elections/${id}/roster/${rosterId}/status`, {
+        method: "POST",
+        body: { status: "INELIGIBLE", reason },
+      }),
+  },
   freeze: (id: string) =>
     api<{ frozen_at: string; frozen_count: number }>(`/elections/${id}/eligibility/freeze`, {
       method: "POST",
