@@ -176,7 +176,7 @@ function StaffHome() {
         </div>
         <div className="row">
           <button type="button" className="btn" onClick={refresh}>
-            <Icon name="hist" size="s" />
+            <Icon name="refresh" size="s" />
             Refresh
           </button>
           {admin ? (

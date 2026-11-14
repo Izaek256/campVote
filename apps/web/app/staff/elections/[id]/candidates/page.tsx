@@ -263,7 +263,7 @@ function Review({ id }: { id: string }) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <Icon name="file" size="s" />
+                    <Icon name="file-pdf" size="s" />
                     Partial transcript (PDF)
                   </a>
                 ) : null}

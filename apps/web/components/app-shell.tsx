@@ -31,11 +31,11 @@ const ELECTION_STEPS: {
   hash?: string;
 }[] = [
   { key: "", label: "Details", icon: "file" },
-  { key: "positions", label: "Positions", icon: "ballot" },
+  { key: "positions", label: "Positions", icon: "ranked" },
   { key: "candidates", label: "Candidates", icon: "users" },
   { key: "monitor", label: "Monitor", icon: "eye" },
   { key: "results", label: "Results", icon: "chart" },
-  { key: "turnout", label: "Turnout", icon: "users" },
+  { key: "turnout", label: "Turnout", icon: "turnout" },
 ];
 
 const ADMIN_SECTIONS: NavSection[] = [
@@ -45,7 +45,7 @@ const ADMIN_SECTIONS: NavSection[] = [
       { href: "/staff", label: "Dashboard", icon: "chart", exact: true },
       { href: "/elections", label: "All elections", icon: "ballot" },
       { href: "/staff/landing", label: "Landing page", icon: "file" },
-      { href: "/staff/areas", label: "Residence areas", icon: "file" },
+      { href: "/staff/areas", label: "Residence areas", icon: "home" },
     ],
   },
   {
@@ -77,7 +77,7 @@ const STUDENT_SECTIONS: NavSection[] = [
       { href: "/elections", label: "Elections", icon: "ballot" },
       { href: "/results", label: "Results", icon: "chart" },
       { href: "/positions", label: "Run for a position", icon: "user" },
-      { href: "/candidate", label: "My candidacy", icon: "file" },
+      { href: "/candidate", label: "My candidacy", icon: "candidate-id" },
       { href: "/account", label: "Account", icon: "shield" },
     ],
   },
