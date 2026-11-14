@@ -58,6 +58,10 @@ func (h *EligibilityHandler) Preview(c *gin.Context) {
 		respond.NotFound(c, "Election not found")
 		return
 	}
+	if errors.Is(err, eligibility.ErrElectionClosed) {
+		respond.Conflict(c, "Eligibility can no longer be changed after voting closes")
+		return
+	}
 	if err != nil {
 		respond.BadRequest(c, err.Error())
 		return
@@ -97,6 +101,10 @@ func (h *EligibilityHandler) Import(c *gin.Context) {
 		respond.NotFound(c, "Election not found")
 		return
 	}
+	if errors.Is(err, eligibility.ErrElectionClosed) {
+		respond.Conflict(c, "Eligibility can no longer be changed after voting closes")
+		return
+	}
 	if err != nil {
 		respond.Internal(c, err)
 		return
@@ -109,6 +117,22 @@ func (h *EligibilityHandler) Import(c *gin.Context) {
 type rosterStatusRequest struct {
 	Status string `json:"status"`
 	Reason string `json:"reason"`
+}
+
+// List returns the roster rows for an election. It is eligibility evidence for
+// staff: it never joins to a ballot, so no choice is exposed.
+func (h *EligibilityHandler) List(c *gin.Context) {
+	authority, ok := h.authority(c, policy.PermRosterView)
+	if !ok {
+		return
+	}
+	var entries []models.ElectionRoster
+	if err := h.DB.Where("election_id = ?", authority.Election.ID).
+		Order("email").Limit(2000).Find(&entries).Error; err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	respond.OK(c, entries)
 }
 
 // SetStatus revokes or restores one roster entry. A reason is mandatory and the
