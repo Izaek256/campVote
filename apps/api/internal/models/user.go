@@ -58,6 +58,13 @@ type User struct {
 	GithubID        string     `gorm:"size:255" json:"-"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at"`
 
+	// Campus profile. Supplied once by the student, then locked: age and sex
+	// cannot be changed here, and a wrong residence is corrected by an election
+	// administrator. Voting is refused until all three are present.
+	Age             *int    `gorm:"check:age IS NULL OR (age >= 16 AND age <= 100)" json:"age,omitempty"`
+	Sex             string  `gorm:"size:10;check:sex = '' OR sex IN ('MALE','FEMALE')" json:"sex,omitempty"`
+	ResidenceAreaID *string `gorm:"size:36;index" json:"residence_area_id,omitempty"`
+
 	// Per-account brute-force protection. Sentinel rate-limits by IP, which
 	// does nothing against attempts spread across many addresses at one
 	// account — the shape of every credential-stuffing run. FailedLoginCount
@@ -70,6 +77,17 @@ type User struct {
 	CreatedAt        time.Time      `gorm:"index" json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// ElectionRoles is the caller's per-election assignments. It is filled for
+	// the current-user payload only (never persisted), so a student assigned to
+	// administer one election can be shown that election's staff area without
+	// holding a system-wide role.
+	ElectionRoles []ElectionRole `gorm:"-" json:"election_roles,omitempty"`
+}
+
+// LoadElectionRoles fills the user's per-election assignments.
+func (u *User) LoadElectionRoles(db *gorm.DB) error {
+	return db.Where("user_id = ?", u.ID).Order("election_id, role").Find(&u.ElectionRoles).Error
 }
 
 // BeforeCreate generates a UUID and hashes the password before saving.
@@ -182,6 +200,7 @@ func Models() []interface{} {
 		&ElectionRoster{},
 		&EligibilityImportBatch{},
 		&ElectionRole{},
+		&ResidenceArea{},
 		&VoterParticipation{},
 		&AnonymousBallot{},
 		&BallotSelection{},
@@ -308,6 +327,10 @@ func Migrate(db *gorm.DB) error {
 
 	if err := migrations.AddLandingIndexes(db); err != nil {
 		return fmt.Errorf("adding landing page indexes: %w", err)
+	}
+
+	if err := migrations.ScopeParticipationIdempotencyKey(db); err != nil {
+		return fmt.Errorf("scoping participation idempotency key: %w", err)
 	}
 
 	log.Println(separator)
