@@ -46,6 +46,30 @@ The three Grit scaffold roles (`ADMIN`, `EDITOR`, `USER`) remain because existin
 
 An actor is treated as global when they are `ADMIN`, are `CHIEF_ELECTION_ADMIN`, or hold a global grant for `elections.view` through a non-scoped role. Holding `ELECTION_OFFICIAL` / `CANDIDATE` / `ELECTION_AUDITOR` never makes an actor global, even if the matching global role row also carries `elections.view`.
 
+### Election-scoped administration (issue #37)
+
+An assigned `CHIEF_ELECTION_ADMIN` runs one election with chief powers and
+nothing else. The assignment may belong to a student (`@std.must.ac.ug`) or a
+staff (`@must.ac.ug`) account; the campus domain decides eligibility to vote,
+not authority to administer.
+
+- **Scope.** The assignment grants the election's administration routes only for
+  that election. `policy.Guard` falls back to the object policy for
+  `/api/v1/elections/:id` and below, and the handler re-resolves the same
+  authority. Every other election stays `404`. System settings, the landing page
+  and election creation need a global grant the assignment does not provide.
+- **Creator.** Whoever created an election administers it, even without an
+  assignment. The creator's grants are those of a chief admin of that election
+  only; `Authority.Global` stays false.
+- **Assigning.** Only the election creator or a global administrator may assign
+  or remove roles on an election. An assigned admin cannot pass their authority
+  on.
+- **Sign-in.** A staff account with an election administrator assignment may use
+  the password form; the same account with no assignment is refused like an
+  unknown address. `/auth/me` returns the caller's `election_roles`, which the
+  web app uses to offer the staff area for exactly those elections.
+
+
 ## Role × operation matrix
 
 `E` = allowed for the assigned election. `G` = allowed for every election. `–` = refused.

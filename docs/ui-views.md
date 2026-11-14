@@ -11,8 +11,8 @@ This document tracks all UI views in the campVote application, their routes, rol
 | Candidate Editor | `/staff/elections/:id/candidates/:candidate_id` | Officer; owning Candidate | `PUT /api/v1/staff/elections/:id/candidates/:candidate_id` | Name, position, manifesto, photo upload with type/size hints and preview | Upload rejected (type/size/content); unsaved-changes guard | Render manifesto with output encoding; no raw HTML injection | ISSUE-06 |
 | My Candidacy | `/candidate` | Candidate | `GET /api/v1/protected/candidates/my` | Status timeline; withdraw button with consequence text | Not-nominated empty state; withdrawal-after-publish warning per documented policy | Never shows other candidates' private review notes | ISSUE-06 |
 | Ballot Builder | `/staff/elections/:id/ballot` | Officer | `POST /api/v1/staff/elections/:id/ballot/publish` | Position sections with candidate list and ordering rule; validation panel listing every rule violation | Cannot publish while validation panel is non-empty | Only approved candidates selectable | ISSUE-06 |
-| Publish Ballot Dialog | (modal) | Officer | `POST /api/v1/staff/elections/:id/ballot/publish` | Summary of positions/candidates, resulting version number and content hash, irreversible-action warning, reason field | Publish failure keeps draft intact | Shows hash after publish for later comparison | ISSUE-06 |
-| Ballot Versions | `/staff/elections/:id/ballot/versions` | Officer, Auditor | `GET /api/v1/staff/elections/:id/ballot/versions` | Version list (number, hash, publisher, timestamp, status); side-by-side diff | Old versions remain viewable and read-only | Edits after publish route the user to "create new version" flow, never in-place edit | ISSUE-06 |
+| Publish Ballot Dialog | (modal) | Officer | `POST /api/v1/staff/elections/:id/ballot/publish` | Summary of positions/candidates, resulting version number, irreversible-action warning, reason field | Publish failure keeps draft intact | No content hash is shown; integrity is checked by the backend | ISSUE-06 |
+| Ballot Versions | `/staff/elections/:id/ballot/versions` | Officer, Auditor | `GET /api/v1/staff/elections/:id/ballot/versions` | Version list (number, publisher, timestamp, status); side-by-side diff | Old versions remain viewable and read-only | Edits after publish route the user to "create new version" flow, never in-place edit | ISSUE-06 |
 | Ballot Preview | `/staff/elections/:id/ballot/preview` | Officer | `GET /api/v1/staff/elections/:id/ballot/versions/:version_id` | Shared BallotView component in preview mode; persistent banner "Preview — no vote or participation is recorded"; submit disabled | n/a | Must not call any vote or participation endpoint | ISSUE-06 |
 
 ## ISSUE-07 Views
@@ -34,6 +34,15 @@ This document tracks all UI views in the campVote application, their routes, rol
 | Confirmation | (state inside `/elections/:id/ballot`) | Voter who voted | submit response | `VoteRecordedNotice`, participation reference, links to status and elections list | n/a | No choice echo, no print/share | ISSUE-08 |
 | Vote status | `/elections/:id/status` | Voter | `GET /api/v1/elections/:id/my-vote-status` | Voted (coarse time, what it proves); no vote (open → `Open ballot`, closed → explanation); results link when the phase allows | Load error; session expired | Reached from every error state of the vote flow; no re-vote path for a recorded vote | ISSUE-08 |
 | My Results | `/results` | Voter | `GET /api/v1/elections` (filtered to `my_vote_status.voted`), then `GET /api/v1/elections/:id/results` | Two sections: elections voted in that are still running (pending — "vote recorded", closing time) and closed elections with a `View results` link | Empty ("nothing to show yet") when the voter has not voted | Only elections the voter took part in appear; the results page applies the election's publication policy | Phase 3 |
+
+## Election-scoped staff access (issue #37)
+
+| View / Route | Roles | Data / API | Key Elements | States | Notes |
+|---|---|---|---|---|---|
+| Staff Dashboard | `/staff` | `ADMIN` (global), assigned election admin (scoped) | `GET /api/v1/elections` | Election table; Refresh; create/invite buttons only for `ADMIN` | Scoped admins see only the elections in their `election_roles`; empty state explains that an assignment is needed | The API already scopes visibility; the page narrows the list to elections the account administers |
+| Election admin pages | `/staff/elections/:id/...` | Global admin or assigned election admin | Same endpoints as before | Same as ISSUE-04/06/08/09 | The gate is `RequireAuth staffOnly`; the server resolves the election's authority per request | A scoped admin gets `404` for any election they are not assigned to |
+| Landing page settings | `/staff/landing` | `ADMIN` only | Landing admin endpoints | n/a | Still `adminOnly` | System-wide content, not election content |
+| Election roles panel | inside `/staff/elections/:id` | Creator or `ADMIN` | `GET/PUT/DELETE /api/v1/elections/:id/roles` | Email lookup, role select (defaults to chief election admin), assigned-role list | Hidden for an assigned admin | Assigning is restricted server-side; the UI does not offer what the server refuses |
 
 ## Pre-ISSUE-06 Views
 
