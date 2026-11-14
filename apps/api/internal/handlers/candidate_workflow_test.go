@@ -44,7 +44,7 @@ func candidateEngine(t *testing.T, db *gorm.DB) *gin.Engine {
 
 	staff := r.Group("")
 	staff.Use(middleware.APIKeyOrAuth(db, middleware.Auth(db, auth)))
-	staff.Use(middleware.RequireStaff())
+	staff.Use(middleware.RequireStaff(db))
 	staff.Use(policy.Guard(db))
 	staff.POST("/api/v1/elections/:id/candidates/:candidate_id/approve", h.Approve)
 	staff.POST("/api/v1/elections/:id/candidates/:candidate_id/reject", h.Reject)

@@ -1470,7 +1470,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	// RequireStaff reads the grants, or the answer is 403 for somebody who is
 	// staff of the organization they are acting in.
 	// grit:middleware:staff
-	staff.Use(middleware.RequireStaff())
+	staff.Use(middleware.RequireStaff(db))
 	{
 		staff.GET("/users", middleware.RequireRole("ADMIN", "perm:users.view"), userHandler.List)
 		// Reading a user takes the same grant as listing them. Your own record is
