@@ -17,7 +17,6 @@ import type { BallotContent, Election } from "@/lib/types";
 type Version = {
   id: string;
   version: number;
-  content_hash: string;
   status: string;
   published_by: string;
   published_at: string;
@@ -187,8 +186,6 @@ function Builder({ id }: { id: string }) {
             </div>
             {selected ? (
               <div className="panel stack">
-                <span className="lbl">Content hash</span>
-                <span className="hash">{selected.content_hash}</span>
                 <span className="hint">Published by {selected.published_by}</span>
               </div>
             ) : null}
@@ -216,7 +213,7 @@ function Builder({ id }: { id: string }) {
 export default function BallotBuilderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <Builder id={id} />
     </RequireAuth>
   );

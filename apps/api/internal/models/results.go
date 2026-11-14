@@ -31,7 +31,10 @@ type ResultSnapshot struct {
 
 	// ContentHash pins the exact tally content. Certification records it, and
 	// a recount recomputes it, so tampering shows up as a hash mismatch.
-	ContentHash string `gorm:"size:64;not null" json:"content_hash"`
+	// ContentHash is an internal integrity value. It is never returned to a
+	// client: hashes are not part of the interface (not shown in screens or
+	// reports), but the DB keeps them so a snapshot can be re-verified.
+	ContentHash string `gorm:"size:64;not null" json:"-"`
 	// ContentJSON is the full tally result, the same shape the public result
 	// view renders. It carries no voter identity by construction.
 	ContentJSON string `gorm:"type:text" json:"content_json"`
@@ -78,7 +81,8 @@ type ResultRecount struct {
 	ComparedSnapshotID string `gorm:"size:36;index" json:"compared_snapshot_id"`
 	// RecomputedHash is the hash of the recount's own tally; if it equals the
 	// compared snapshot's ContentHash the count reproduced exactly.
-	RecomputedHash string    `gorm:"size:64;not null" json:"recomputed_hash"`
+	// RecomputedHash is an internal integrity value; see ResultSnapshot.
+	RecomputedHash string    `gorm:"size:64;not null" json:"-"`
 	Identical      bool      `gorm:"not null;default:false" json:"identical"`
 	Differences    string    `gorm:"type:text" json:"differences,omitempty"`
 	Reason         string    `gorm:"size:500" json:"reason"`

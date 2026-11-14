@@ -14,7 +14,6 @@ import { formatEAT } from "@/lib/format";
 type Version = {
   id: string;
   version: number;
-  content_hash: string;
   status: string;
   published_by: string;
   published_at: string;
@@ -76,7 +75,7 @@ function Versions({ id }: { id: string }) {
         <div>
           <span className="lbl">Ballot history</span>
           <h1>Ballot versions</h1>
-          <p>Every publish creates an immutable version with a content hash.</p>
+          <p>Every publish creates an immutable version. Old versions stay readable.</p>
         </div>
         <Link className="btn" href={`/staff/elections/${id}/ballot`}>
           Back to ballot
@@ -159,15 +158,7 @@ function Versions({ id }: { id: string }) {
               <div>
                 <b>{comparison.same_hash ? "Identical content" : "Content differs"}</b>
                 Version {comparison.v1.version} and version {comparison.v2.version}{" "}
-                {comparison.same_hash
-                  ? "have the same content hash."
-                  : "have different content hashes."}
-                <div className="mono" style={{ marginTop: 8 }}>
-                  v{comparison.v1.version}: {comparison.v1.content_hash}
-                </div>
-                <div className="mono">
-                  v{comparison.v2.version}: {comparison.v2.content_hash}
-                </div>
+                {comparison.same_hash ? "have identical content." : "have different content."}
               </div>
             </div>
           ) : null}
@@ -179,7 +170,6 @@ function Versions({ id }: { id: string }) {
                   <th>Version</th>
                   <th>Status</th>
                   <th>Published</th>
-                  <th>Hash</th>
                 </tr>
               </thead>
               <tbody>
@@ -193,7 +183,6 @@ function Versions({ id }: { id: string }) {
                       {formatEAT(version.published_at)}
                       <span className="candidate-meta">{version.published_by}</span>
                     </td>
-                    <td className="mono">{version.content_hash.slice(0, 16)}…</td>
                   </tr>
                 ))}
               </tbody>
@@ -208,7 +197,7 @@ function Versions({ id }: { id: string }) {
 export default function BallotVersionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <Versions id={id} />
     </RequireAuth>
   );

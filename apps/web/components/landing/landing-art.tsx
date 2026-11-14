@@ -259,7 +259,7 @@ export function SecurityArt({ index }: { index: number }) {
     <svg
       viewBox="0 0 320 170"
       role="img"
-      aria-label="Linked ballot hashes; editing one breaks every later hash"
+      aria-label="Linked audit records; editing one breaks every later record"
     >
       <g className="lp-hb" style={{ "--i": 0 } as React.CSSProperties}>
         <rect x="10" y="50" width="62" height="70" className="lp-f-s lp-s-i" strokeWidth={1.5} />

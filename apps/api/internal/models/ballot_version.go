@@ -19,10 +19,11 @@ import (
 //  3. Post-publication edits create new versions; old versions remain retrievable for audit.
 //  4. Status tracks whether this is the current published version or historical.
 type BallotVersion struct {
-	ID          string `gorm:"primarykey;size:36" json:"id"`
-	ElectionID  string `gorm:"size:36;not null;index" json:"election_id"`
-	Version     int    `gorm:"not null;index" json:"version"`
-	ContentHash string `gorm:"size:64;not null;index" json:"content_hash"`
+	ID         string `gorm:"primarykey;size:36" json:"id"`
+	ElectionID string `gorm:"size:36;not null;index" json:"election_id"`
+	Version    int    `gorm:"not null;index" json:"version"`
+	// ContentHash is an internal integrity value; the API does not expose it.
+	ContentHash string `gorm:"size:64;not null;index" json:"-"`
 
 	// Serialized ballot structure (positions, candidates, selection rules)
 	// This is the canonical definition used to render ballots and validate votes.

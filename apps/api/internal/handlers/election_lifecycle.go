@@ -75,6 +75,9 @@ type createElectionRequest struct {
 	AllowedDomain  string `json:"allowed_domain"`
 	AllowedYears   string `json:"allowed_years"`
 	AllowedCourses string `json:"allowed_courses"`
+	// RequireRoster makes the roster the whole electorate: only listed emails
+	// may see or vote in the election.
+	RequireRoster bool `json:"require_roster"`
 	// PublicListing opts the election into the public landing page's upcoming
 	// list. Off by default: a draft is private until an administrator says
 	// otherwise.
@@ -111,6 +114,7 @@ func (h *ElectionLifecycleHandler) Create(c *gin.Context) {
 		AllowedDomain:  strings.ToLower(strings.TrimPrefix(strings.TrimSpace(in.AllowedDomain), "@")),
 		AllowedYears:   strings.TrimSpace(in.AllowedYears),
 		AllowedCourses: strings.ToLower(strings.TrimSpace(in.AllowedCourses)),
+		RequireRoster:  in.RequireRoster,
 		PublicListing:  in.PublicListing,
 		CreatedByID:    c.GetString("user_id"),
 	}
@@ -217,7 +221,36 @@ func electionVisibleTo(
 	db *gorm.DB, election *models.Election, userID string,
 	callerID eligibility.Identity, callerParsed bool,
 ) bool {
+	// A restricted election is listed only to the people it names, plus the
+	// accounts that administer it. The roster is checked by email because that
+	// is what the list holds.
+	if election.RequireRoster {
+		if election.CreatedByID != "" && election.CreatedByID == userID {
+			return true
+		}
+		var roleCount int64
+		db.Model(&models.ElectionRole{}).
+			Where("election_id = ? AND user_id = ?", election.ID, userID).
+			Count(&roleCount)
+		if roleCount > 0 {
+			return true
+		}
+		var email string
+		db.Model(&models.User{}).Where("id = ?", userID).Pluck("email", &email)
+		if strings.TrimSpace(email) == "" {
+			return false
+		}
+		var listed int64
+		db.Model(&models.ElectionRoster{}).
+			Where("election_id = ? AND LOWER(email) = ?", election.ID,
+				strings.ToLower(strings.TrimSpace(email))).
+			Count(&listed)
+		return listed > 0
+	}
 	if election.Status == models.ElectionStatusClosed {
+		return true
+	}
+	if election.CreatedByID != "" && election.CreatedByID == userID {
 		return true
 	}
 	var roleCount int64
@@ -392,6 +425,7 @@ type updateElectionRequest struct {
 	AllowedDomain  *string `json:"allowed_domain"`
 	AllowedYears   *string `json:"allowed_years"`
 	AllowedCourses *string `json:"allowed_courses"`
+	RequireRoster  *bool   `json:"require_roster"`
 	PublicListing  *bool   `json:"public_listing"`
 	Reason         string  `json:"reason"`
 }
@@ -443,6 +477,9 @@ func (h *ElectionLifecycleHandler) Update(c *gin.Context) {
 	if in.PublicListing != nil {
 		updated.PublicListing = *in.PublicListing
 	}
+	if in.RequireRoster != nil {
+		updated.RequireRoster = *in.RequireRoster
+	}
 	if in.StartsAt != nil {
 		startsAt, ok := scheduleField(c, "starts_at", *in.StartsAt)
 		if !ok {
@@ -483,47 +520,75 @@ func (h *ElectionLifecycleHandler) Update(c *gin.Context) {
 	h.respondUpdated(c, current.ID, now)
 }
 
+// updateFrozen applies the small set of edits a live election allows: its
+// title and description, and an extension of the end time. Everything that
+// changes who votes, what they vote on or when voting stops is locked, and each
+// accepted edit is audited.
 func (h *ElectionLifecycleHandler) updateFrozen(c *gin.Context, authority *policy.Authority, current, updated *models.Election, changed []string, reason string, now time.Time) {
 	if current.Status != models.ElectionStatusOpen {
 		respond.Conflict(c, "Election configuration is frozen and this state cannot be edited")
 		return
 	}
-	onlyEndsAt := len(changed) == 1 && changed[0] == "ends_at"
-	extension := onlyEndsAt && updated.EndsAt.After(current.EndsAt)
-	if !onlyEndsAt {
-		respond.Conflict(c, "Election configuration is frozen after voting opens")
-		return
+	extension := false
+	for _, field := range changed {
+		switch field {
+		case "title", "description":
+		case "ends_at":
+			if !updated.EndsAt.After(current.EndsAt) {
+				respond.Conflict(c, "An open election can only be extended; close it to stop voting")
+				return
+			}
+			extension = true
+		default:
+			respond.Conflict(c, "Election configuration is frozen after voting opens")
+			return
+		}
 	}
-	if !extension {
-		respond.Conflict(c, "An open election can only be extended; close it to stop voting")
-		return
+	if extension {
+		if reason == "" {
+			respond.BadRequest(c, "A reason is required for a schedule change after voting opens")
+			return
+		}
+		if !authority.Can(policy.PermElectionPublish) {
+			policy.LogDenial(h.DB, c, "requires "+policy.PermElectionPublish+" for a post-opening extension", current.ID)
+			respond.Forbidden(c, "Only an authorised publisher may extend an open election")
+			return
+		}
+		if !updated.EndsAt.After(now) || !updated.StartsAt.Before(updated.EndsAt) ||
+			updated.EndsAt.Sub(updated.StartsAt) < lifecycle.MinimumDuration {
+			respond.Validation(c, "The new end time is not a valid schedule", map[string]string{
+				"ends_at": "must be after the start time, at least one hour later, and in the future",
+			})
+			return
+		}
 	}
-	if reason == "" {
-		respond.BadRequest(c, "A reason is required for a schedule change after voting opens")
-		return
-	}
-	if !authority.Can(policy.PermElectionPublish) {
-		policy.LogDenial(h.DB, c, "requires "+policy.PermElectionPublish+" for a post-opening extension", current.ID)
-		respond.Forbidden(c, "Only an authorised publisher may extend an open election")
-		return
-	}
-	if !updated.EndsAt.After(now) || !updated.StartsAt.Before(updated.EndsAt) ||
-		updated.EndsAt.Sub(updated.StartsAt) < lifecycle.MinimumDuration {
-		respond.Validation(c, "The new end time is not a valid schedule", map[string]string{
-			"ends_at": "must be after the start time, at least one hour later, and in the future",
-		})
+	if err := lifecycle.ValidateBasics(updated, now, false); err != nil {
+		respond.WriteError(c, err, "Election configuration is invalid")
 		return
 	}
 
-	values := map[string]interface{}{"ends_at": updated.EndsAt.UTC()}
+	values := map[string]interface{}{}
+	action := models.AuditActionElectionUpdated
+	for _, field := range changed {
+		switch field {
+		case "title":
+			values["title"] = updated.Title
+		case "description":
+			values["description"] = updated.Description
+		case "ends_at":
+			values["ends_at"] = updated.EndsAt.UTC()
+			action = models.AuditActionElectionExtended
+		}
+	}
 	details, _ := json.Marshal(map[string]interface{}{
 		"changed_fields": changed,
 		"reason":         reason,
 		"old_ends_at":    current.EndsAt.UTC().Format(time.RFC3339),
 		"new_ends_at":    updated.EndsAt.UTC().Format(time.RFC3339),
 		"exception":      true,
+		"live_edit":      true,
 	})
-	if err := h.persistUpdate(c, current, values, models.AuditActionElectionExtended, string(details), now); err != nil {
+	if err := h.persistUpdate(c, current, values, action, string(details), now); err != nil {
 		h.writeUpdateError(c, err)
 		return
 	}
@@ -700,6 +765,9 @@ func changedElectionFields(before, after models.Election) []string {
 	if before.PublicListing != after.PublicListing {
 		changed = append(changed, "public_listing")
 	}
+	if before.RequireRoster != after.RequireRoster {
+		changed = append(changed, "require_roster")
+	}
 	return changed
 }
 
@@ -715,6 +783,7 @@ func electionUpdateValues(e *models.Election) map[string]interface{} {
 		"allowed_domain":  e.AllowedDomain,
 		"allowed_years":   e.AllowedYears,
 		"allowed_courses": e.AllowedCourses,
+		"require_roster":  e.RequireRoster,
 		"public_listing":  e.PublicListing,
 	}
 }

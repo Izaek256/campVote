@@ -18,7 +18,6 @@ import {
   clockOnly,
   dayStamp,
   INK,
-  INK_2,
   INK_3,
   LINE,
   MARGIN_X,
@@ -166,16 +165,6 @@ const styles = StyleSheet.create({
   colFaculty: { flex: 3 },
   colNumber: { flex: 1.6, textAlign: "right" },
   colSpan: { flex: 4.8, textAlign: "right", paddingLeft: 8 },
-
-  hashBox: {
-    marginTop: 22,
-    borderWidth: 1,
-    borderColor: LINE,
-    backgroundColor: SUNKEN,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-  },
-  hashText: { fontSize: 6.5, color: INK_2, fontFamily: "Courier" },
 
   signatures: { flexDirection: "row", marginTop: 26 },
   signature: { flex: 1, paddingRight: 24 },
@@ -380,10 +369,6 @@ export function ResultsLedgerDocument({ election, snapshot, faculties = [] }: Pr
               </View>
             </>
           ) : null}
-
-          <View style={styles.hashBox} wrap={false}>
-            <Text style={styles.hashText}>Ballot snapshot SHA-256 • {snapshot.content_hash}</Text>
-          </View>
 
           <View style={styles.signatures} wrap={false}>
             <View style={styles.signature}>

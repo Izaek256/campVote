@@ -14,6 +14,7 @@ import { useToast } from "@/components/toast";
 import { VoteSuccess } from "@/components/vote-success";
 import { ApiError, elections, fileUrl } from "@/lib/api";
 import { formatEAT } from "@/lib/format";
+import { clearVoteAttemptKey, submitWithRetry, voteAttemptKey } from "@/lib/vote-attempt";
 import {
   ABSTAIN,
   blankAllowed,
@@ -47,13 +48,9 @@ function BallotForm({ id }: { id: string }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<SubmitResult | null>(null);
-  // One key per attempt set. A manual retry reuses it; nothing rotates it on
-  // its own, so a lost response can never become a second ballot.
-  const attemptKey = useRef<string>(
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `attempt-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  );
+  // One key per election set, kept in sessionStorage so a reload retries the
+  // same attempt. It is cleared only after a definite final state.
+  const attemptKey = useRef<string>("");
 
   useEffect(() => {
     let active = true;
@@ -79,6 +76,8 @@ function BallotForm({ id }: { id: string }) {
       })
       .catch((err) => {
         if (active && err instanceof ApiError && err.status === 409) {
+          // A definite final state; a retry key would only be noise now.
+          clearVoteAttemptKey(id);
           setAlreadyVoted(true);
           toast.success("You have already voted");
         }
@@ -144,15 +143,16 @@ function BallotForm({ id }: { id: string }) {
     if (!ballot) return;
     setBusy(true);
     setUnknownOutcome(false);
+    const key = attemptKey.current || voteAttemptKey(ballot.election_id);
+    attemptKey.current = key;
     try {
-      const result = await elections.submitBallot(
-        ballot.election_id,
-        buildSelections(ballot, selections),
-        {
+      const result = await submitWithRetry(() =>
+        elections.submitBallot(ballot.election_id, buildSelections(ballot, selections), {
           ballotVersionId: ballot.ballot_version_id,
-          idempotencyKey: attemptKey.current,
-        }
+          idempotencyKey: key,
+        })
       );
+      clearVoteAttemptKey(ballot.election_id);
       setSelections({});
       setConfirming(false);
       setReceipt(result);
@@ -163,13 +163,15 @@ function BallotForm({ id }: { id: string }) {
           setStale(true);
           toast.warn("The ballot changed while you were filling it in");
         } else if (err.status === 409) {
+          clearVoteAttemptKey(ballot.election_id);
           setAlreadyVoted(true);
           toast.success("You have already voted");
         } else {
           toast.error(err.message);
         }
       } else {
-        // The request may have committed before the response was lost.
+        // The request may have committed before the response was lost. The key
+        // stays in sessionStorage, so a reload retries this same attempt.
         setUnknownOutcome(true);
         toast.error("We could not confirm your vote. Check your status before trying again.");
       }

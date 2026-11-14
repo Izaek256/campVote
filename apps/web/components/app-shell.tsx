@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { isAdmin, useAuth } from "./auth-provider";
+import { isAdmin, isStaff, useAuth } from "./auth-provider";
 import { Icon, type IconName } from "./icon";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -31,11 +31,11 @@ const ELECTION_STEPS: {
   hash?: string;
 }[] = [
   { key: "", label: "Details", icon: "file" },
-  { key: "positions", label: "Positions", icon: "ballot" },
+  { key: "positions", label: "Positions", icon: "ranked" },
   { key: "candidates", label: "Candidates", icon: "users" },
   { key: "monitor", label: "Monitor", icon: "eye" },
   { key: "results", label: "Results", icon: "chart" },
-  { key: "turnout", label: "Turnout", icon: "users" },
+  { key: "turnout", label: "Turnout", icon: "turnout" },
 ];
 
 const ADMIN_SECTIONS: NavSection[] = [
@@ -45,6 +45,23 @@ const ADMIN_SECTIONS: NavSection[] = [
       { href: "/staff", label: "Dashboard", icon: "chart", exact: true },
       { href: "/elections", label: "All elections", icon: "ballot" },
       { href: "/staff/landing", label: "Landing page", icon: "file" },
+      { href: "/staff/areas", label: "Residence areas", icon: "home" },
+    ],
+  },
+  {
+    heading: "My activity",
+    items: [{ href: "/account", label: "Account", icon: "shield" }],
+  },
+];
+
+// Assigned election admins run one election: no landing-page settings and no
+// global election creation.
+const STAFF_SECTIONS: NavSection[] = [
+  {
+    heading: "Elections",
+    items: [
+      { href: "/staff", label: "Dashboard", icon: "chart", exact: true },
+      { href: "/elections", label: "All elections", icon: "ballot" },
     ],
   },
   {
@@ -60,7 +77,7 @@ const STUDENT_SECTIONS: NavSection[] = [
       { href: "/elections", label: "Elections", icon: "ballot" },
       { href: "/results", label: "Results", icon: "chart" },
       { href: "/positions", label: "Run for a position", icon: "user" },
-      { href: "/candidate", label: "My candidacy", icon: "file" },
+      { href: "/candidate", label: "My candidacy", icon: "candidate-id" },
       { href: "/account", label: "Account", icon: "shield" },
     ],
   },
@@ -94,6 +111,9 @@ export function AppShell({
   const burgerRef = useRef<HTMLButtonElement>(null);
 
   const admin = isAdmin(user);
+  // Assigned election staff share the staff area but not the system-wide tools.
+  const staffUser = isStaff(user);
+  const staffArea = admin || staffUser;
   // Auto-detect the election from the URL so pages do not have to pass it.
   const activeElectionId = electionId ?? pathname.match(/^\/staff\/elections\/([^/]+)/)?.[1] ?? "";
   const base = activeElectionId ? `/staff/elections/${activeElectionId}` : "";
@@ -128,7 +148,10 @@ export function AppShell({
     router.push("/login");
   }
 
-  const sections = useMemo(() => (admin ? ADMIN_SECTIONS : STUDENT_SECTIONS), [admin]);
+  const sections = useMemo(
+    () => (admin ? ADMIN_SECTIONS : staffUser ? STAFF_SECTIONS : STUDENT_SECTIONS),
+    [admin, staffUser]
+  );
 
   function itemActive(item: NavItem): boolean {
     if (item.exact) return pathname === item.href;
@@ -148,7 +171,7 @@ export function AppShell({
 
       <aside className={`admin-side${open ? " open" : ""}`}>
         <div style={{ display: "flex", alignItems: "center" }}>
-          <Link className="b" href={admin ? "/staff" : "/elections"} onClick={close}>
+          <Link className="b" href={staffArea ? "/staff" : "/elections"} onClick={close}>
             <Icon name="ballot" />
             CampVote
           </Link>
@@ -164,7 +187,7 @@ export function AppShell({
           </Link>
         ) : null}
 
-        {admin && activeElectionId ? (
+        {staffArea && activeElectionId ? (
           <>
             <span className="h">This election</span>
             {ELECTION_STEPS.map((step) => {
@@ -235,10 +258,12 @@ export function AppShell({
           >
             <Icon name="menu" />
           </button>
-          <b>{title ?? (admin ? "Admin" : "CampVote")}</b>
+          <b>{title ?? (staffArea ? "Admin" : "CampVote")}</b>
           <span className="row" style={{ marginLeft: "auto" }}>
             <ThemeToggle />
-            <span className="chip draft">{admin ? "Admin" : "Student voter"}</span>
+            <span className="chip draft">
+              {admin ? "Admin" : staffUser ? "Election staff" : "Student voter"}
+            </span>
           </span>
         </div>
         <main className="admin-body">{children}</main>

@@ -86,6 +86,11 @@ func Preview(db *gorm.DB, electionID string, r io.Reader, now time.Time) (*Plan,
 // BuildPlan validates every row, detects duplicate identities in the file and
 // against the existing roster, and records what a commit would change.
 func BuildPlan(db *gorm.DB, election *models.Election, r io.Reader, now time.Time) (*Plan, error) {
+	// The roster is the electorate's evidence. Once voting has closed it is
+	// history, so neither an import nor a preview may change it.
+	if election.Status == models.ElectionStatusClosed || !now.Before(election.EndsAt) {
+		return nil, ErrElectionClosed
+	}
 	raw, err := io.ReadAll(io.LimitReader(r, MaxImportBytes+1))
 	if err != nil {
 		return nil, err
@@ -149,7 +154,7 @@ func BuildPlan(db *gorm.DB, election *models.Election, r io.Reader, now time.Tim
 					Reason: "duplicate identity: this email already belongs to another student number in this election"})
 				continue
 			}
-			if election.EligibilityFrozenAt != nil {
+			if election.EligibilityFrozenAt != nil && !election.RequireRoster {
 				plan.Errors = append(plan.Errors, RowError{Line: line, StudentNumber: row.StudentNumber, Email: row.Email,
 					Reason: "roster is frozen; new entries are not accepted after voting opens"})
 				continue
@@ -167,7 +172,7 @@ func BuildPlan(db *gorm.DB, election *models.Election, r io.Reader, now time.Tim
 				Reason: "duplicate identity: this email already belongs to another student number in this election"})
 			continue
 		}
-		if election.EligibilityFrozenAt != nil {
+		if election.EligibilityFrozenAt != nil && !election.RequireRoster {
 			if !sameIdentity(*current, row) {
 				plan.Errors = append(plan.Errors, RowError{Line: line, StudentNumber: row.StudentNumber, Email: row.Email,
 					Reason: "roster is frozen; only a status change is accepted after voting opens"})

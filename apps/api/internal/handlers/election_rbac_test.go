@@ -37,7 +37,8 @@ func rbacDB(t *testing.T) *gorm.DB {
 
 func rbacUser(t *testing.T, db *gorm.DB, email, role string) *models.User {
 	t.Helper()
-	u := &models.User{FirstName: "Test", LastName: "User", Email: email, Password: testkit.Password, Role: role, Active: true}
+	u := &models.User{FirstName: "Test", LastName: "User", Email: email, Password: testkit.Password, Role: role, Active: true,
+		Age: models.Ptr(20), Sex: models.SexMale, ResidenceAreaID: models.Ptr("test-residence")}
 	if err := db.Create(u).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -206,8 +207,11 @@ func TestRoutePolicyMatrixForElectionEndpoints(t *testing.T) {
 	if certified.Label != "CERTIFIED" {
 		t.Errorf("certified results label = %q, want CERTIFIED", certified.Label)
 	}
-	if certified.Snapshot.Status != models.ResultStatusCertified || certified.Snapshot.ContentHash == "" {
-		t.Errorf("certified snapshot = %+v, want CERTIFIED status with a content hash", certified.Snapshot)
+	if certified.Snapshot.Status != models.ResultStatusCertified {
+		t.Errorf("certified snapshot = %+v, want CERTIFIED status", certified.Snapshot)
+	}
+	if certified.Snapshot.ContentHash != "" {
+		t.Error("results responses must not expose content hashes")
 	}
 
 	// Denials are auditable, with the actor and the route, never a ballot.

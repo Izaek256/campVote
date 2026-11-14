@@ -382,6 +382,72 @@ type UpdateProfileRequest struct {
 
 	// Required to change the email or the password.
 	CurrentPassword string `json:"current_password"`
+
+	// Campus profile, supplied once. Age is 16–100, sex is MALE or FEMALE, and
+	// the residence must be an active administrator-managed area.
+	Age             *int    `json:"age"`
+	Sex             string  `json:"sex"`
+	ResidenceAreaID *string `json:"residence_area_id"`
+}
+
+// campusProfileUpdates validates the one-time campus profile fields and returns
+// only the writes that are allowed.
+//
+// Age and sex are recorded once and not edited afterwards; a wrong residence is
+// corrected by an election administrator, not by re-saving the profile. The
+// rules are repeated in the database as CHECK constraints.
+func (h *UserHandler) campusProfileUpdates(c *gin.Context, user *models.User, req UpdateProfileRequest) (map[string]interface{}, bool) {
+	updates := map[string]interface{}{}
+
+	if req.Age != nil {
+		if *req.Age < 16 || *req.Age > 100 {
+			respond.Fail(c, respond.CodeValidationError, "Age must be between 16 and 100")
+			return nil, false
+		}
+		if user.Age != nil && *user.Age != *req.Age {
+			respond.Fail(c, respond.CodeValidationError, "Your age cannot be changed after it is saved. Contact an election administrator.")
+			return nil, false
+		}
+		if user.Age == nil {
+			updates["age"] = *req.Age
+		}
+	}
+
+	if sex := strings.ToUpper(strings.TrimSpace(req.Sex)); sex != "" {
+		if sex != models.SexMale && sex != models.SexFemale {
+			respond.Fail(c, respond.CodeValidationError, "Sex must be MALE or FEMALE")
+			return nil, false
+		}
+		if user.Sex != "" && user.Sex != sex {
+			respond.Fail(c, respond.CodeValidationError, "Your sex cannot be changed after it is saved. Contact an election administrator.")
+			return nil, false
+		}
+		if user.Sex == "" {
+			updates["sex"] = sex
+		}
+	}
+
+	if req.ResidenceAreaID != nil {
+		id := strings.TrimSpace(*req.ResidenceAreaID)
+		if id == "" {
+			respond.Fail(c, respond.CodeValidationError, "Choose a residence area")
+			return nil, false
+		}
+		var area models.ResidenceArea
+		if err := h.DB.Where("id = ? AND active = ?", id, true).First(&area).Error; err != nil {
+			respond.Fail(c, respond.CodeValidationError, "That residence area is not available")
+			return nil, false
+		}
+		if user.ResidenceAreaID != nil && *user.ResidenceAreaID != area.ID {
+			respond.Fail(c, respond.CodeValidationError, "Your residence cannot be changed here. Ask an election administrator to correct it.")
+			return nil, false
+		}
+		if user.ResidenceAreaID == nil {
+			updates["residence_area_id"] = area.ID
+		}
+	}
+
+	return updates, true
 }
 
 // UpdateProfile updates the currently authenticated user's profile.
@@ -448,6 +514,13 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	updates := map[string]interface{}{}
+	campusProfile, ok := h.campusProfileUpdates(c, user, req)
+	if !ok {
+		return
+	}
+	for key, value := range campusProfile {
+		updates[key] = value
+	}
 	passwordChanged := false
 	if req.FirstName != "" {
 		updates["first_name"] = req.FirstName

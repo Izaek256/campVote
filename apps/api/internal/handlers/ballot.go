@@ -12,6 +12,7 @@ import (
 	"campvote/apps/api/internal/models"
 	"campvote/apps/api/internal/policy"
 	"campvote/apps/api/internal/respond"
+	"campvote/apps/api/internal/services"
 )
 
 // BallotHandler is the voter-facing side of ISSUE-04: viewing, starting and
@@ -174,6 +175,10 @@ type submitBallotRequest struct {
 // status, the version and the single-participation rule are rechecked inside
 // it. Participation and the anonymous ballot are written together or not at
 // all (ISSUE-08).
+//
+// A client-generated idempotency key is required. A retry with the same key
+// replays the first outcome, so a lost response can never become a second
+// ballot (issue #37).
 func (h *BallotHandler) Submit(c *gin.Context) {
 	election, ok := h.gate(c)
 	if !ok {
@@ -183,6 +188,42 @@ func (h *BallotHandler) Submit(c *gin.Context) {
 	var in submitBallotRequest
 	if err := c.ShouldBindJSON(&in); err != nil {
 		respond.BadRequest(c, "A ballot with selections is required")
+		return
+	}
+
+	key := strings.TrimSpace(in.IdempotencyKey)
+	if key == "" {
+		respond.BadRequest(c, "An idempotency key is required")
+		return
+	}
+	// The column is varchar(64); refuse rather than let the driver truncate a
+	// key that would then not match the voter's retry.
+	if len(key) > 64 {
+		respond.BadRequest(c, "The idempotency key is too long")
+		return
+	}
+
+	userID := c.GetString("user_id")
+
+	// Answer a retry before validating the ballot again: the first outcome is
+	// already final, and the retry must not depend on the ballot still looking
+	// the way it did when it was accepted.
+	var existing models.VoterParticipation
+	switch err := h.DB.Where("election_id = ? AND user_id = ?", election.ID, userID).
+		First(&existing).Error; {
+	case err == nil:
+		if existing.IdempotencyKey == key {
+			respond.OK(c, gin.H{
+				"election_id":        election.ID,
+				"confirmation_token": existing.ConfirmationToken,
+				"message":            "This ballot was already accepted",
+			}, "This ballot was already accepted")
+		} else {
+			respond.Conflict(c, errAlreadyVoted.Error())
+		}
+		return
+	case !errors.Is(err, gorm.ErrRecordNotFound):
+		respond.Internal(c, err)
 		return
 	}
 
@@ -220,8 +261,6 @@ func (h *BallotHandler) Submit(c *gin.Context) {
 		return
 	}
 
-	key := strings.TrimSpace(in.IdempotencyKey)
-
 	var token string
 	var replay bool
 	err = h.DB.Transaction(func(tx *gorm.DB) error {
@@ -244,22 +283,9 @@ func (h *BallotHandler) Submit(c *gin.Context) {
 		}
 
 		participation := models.VoterParticipation{
-			ElectionID: current.ID, UserID: c.GetString("user_id"), IdempotencyKey: key,
+			ElectionID: current.ID, UserID: userID, IdempotencyKey: key,
 		}
 		if err := tx.Create(&participation).Error; err != nil {
-			// Either the single-participation constraint or the idempotency
-			// index fired. Read what won and answer consistently.
-			var existing models.VoterParticipation
-			found := tx.Where("election_id = ? AND user_id = ?", current.ID, c.GetString("user_id")).
-				First(&existing).Error == nil
-			if found && key != "" && existing.IdempotencyKey == key {
-				token = existing.ConfirmationToken
-				replay = true
-				return nil
-			}
-			if found {
-				return errAlreadyVoted
-			}
 			return err
 		}
 		token = participation.ConfirmationToken
@@ -274,13 +300,29 @@ func (h *BallotHandler) Submit(c *gin.Context) {
 		// choice, and this row carries none.
 		return tx.Create(&models.ElectionAuditLog{
 			ElectionID: current.ID,
-			ActorID:    c.GetString("user_id"),
+			ActorID:    userID,
 			Action:     models.AuditActionVoteCast,
 			Details:    "Participation " + participation.ID + " recorded",
 			IPAddress:  c.ClientIP(),
 			CreatedAt:  h.now(),
 		}).Error
 	})
+
+	// A concurrent submission won the race. The failed transaction is aborted
+	// (Postgres refuses further statements on it), so read the winner outside
+	// it and answer with the same rule as the pre-check.
+	if err != nil && services.IsDuplicateKey(err) {
+		var winner models.VoterParticipation
+		if qerr := h.DB.Where("election_id = ? AND user_id = ?", election.ID, userID).
+			First(&winner).Error; qerr == nil {
+			if winner.IdempotencyKey == key {
+				token, replay, err = winner.ConfirmationToken, true, nil
+			} else {
+				err = errAlreadyVoted
+			}
+		}
+	}
+
 	switch {
 	case errors.Is(err, errAlreadyVoted):
 		respond.Conflict(c, errAlreadyVoted.Error())

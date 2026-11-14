@@ -35,10 +35,10 @@ type AnonymousBallot struct {
 // BallotSelection represents a single choice made on a ballot for a position or question.
 type BallotSelection struct {
 	ID          string    `gorm:"primarykey;size:36" json:"id"`
-	BallotID    string    `gorm:"size:36;not null;index" json:"ballot_id"`
-	PositionID  string    `gorm:"size:36;not null;index" json:"position_id"`
+	BallotID    string    `gorm:"size:36;not null;index;index:idx_ballot_selection_choice,unique,priority:1" json:"ballot_id"`
+	PositionID  string    `gorm:"size:36;not null;index;index:idx_ballot_selection_choice,unique,priority:2" json:"position_id"`
 	CandidateID *string   `gorm:"size:36;index" json:"candidate_id,omitempty"`
-	Choice      string    `gorm:"size:100;not null" json:"choice"` // "YES", "NO", "ABSTAIN", or candidate ID
+	Choice      string    `gorm:"size:100;not null;index:idx_ballot_selection_choice,unique,priority:3" json:"choice"` // "YES", "NO", "ABSTAIN", or candidate ID
 	CreatedAt   time.Time `gorm:"index" json:"created_at"`
 }
 

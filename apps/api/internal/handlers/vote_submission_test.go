@@ -207,7 +207,8 @@ func TestRejectedBallotWritesNothing(t *testing.T) {
 	client := testkit.New(t, voteEngine(t, db))
 
 	client.As(token).Post("/api/v1/elections/e-reject/ballot/submit", map[string]any{
-		"selections": []map[string]string{{"position_id": fixture.position.ID}},
+		"selections":      []map[string]string{{"position_id": fixture.position.ID}},
+		"idempotency_key": "reject-key",
 	}).AssertBadRequest()
 
 	if p, b := voteCounts(t, db, fixture.election.ID); p != 0 || b != 0 {
@@ -242,6 +243,7 @@ func TestSubmissionRefusedWhenServerClockCrossesCloseDuringRequest(t *testing.T)
 
 	response := client.As(token).Post("/api/v1/elections/e-close-race/ballot/submit", map[string]any{
 		"ballot_version_id": version.ID,
+		"idempotency_key":   "close-race-key",
 		"selections": []map[string]string{{
 			"position_id": fixture.position.ID, "candidate_id": fixture.candidate.ID,
 		}},
@@ -275,4 +277,101 @@ func TestVoteStatusBeforeVotingIsFalseAndCarriesNoChoiceField(t *testing.T) {
 
 func containsChoice(details, candidateID string) bool {
 	return candidateID != "" && strings.Contains(details, candidateID)
+}
+
+// The key is part of the protocol, not an optional nicety: without one a lost
+// response has no safe retry.
+func TestSubmissionRequiresIdempotencyKey(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Now().UTC()
+	fixture := ballotElection(t, db, "e-nokey", now.Add(-time.Hour), now.Add(time.Hour))
+	voter := testkit.User(t, db, "2022bse010@std.mast.ac.ug", models.RoleStudentVoter)
+	listed(t, db, fixture.election.ID, "22/U/0110", voter.Email)
+	client := testkit.New(t, voteEngine(t, db))
+	token := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), voter)
+
+	client.As(token).Post("/api/v1/elections/e-nokey/ballot/submit", map[string]any{
+		"selections": []map[string]string{{
+			"position_id": fixture.position.ID, "candidate_id": fixture.candidate.ID,
+		}},
+	}).AssertBadRequest()
+	client.As(token).Post("/api/v1/elections/e-nokey/ballot/submit", map[string]any{
+		"selections":      []map[string]string{{"position_id": fixture.position.ID, "candidate_id": fixture.candidate.ID}},
+		"idempotency_key": "   ",
+	}).AssertBadRequest()
+
+	if p, b := voteCounts(t, db, fixture.election.ID); p != 0 || b != 0 {
+		t.Fatalf("keyless submission wrote participation=%d ballots=%d", p, b)
+	}
+}
+
+// Keys are client-generated, so two voters can coincide. The index is scoped to
+// the voter: neither is refused and neither receives the other's receipt.
+func TestIdempotencyKeyIsScopedToTheVoter(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Now().UTC()
+	fixture := ballotElection(t, db, "e-shared-key", now.Add(-time.Hour), now.Add(time.Hour))
+	version := publishVersion(t, db, fixture.election.ID,
+		testkit.User(t, db, "shared-officer@must.ac.ug", models.RoleElectionOfficial).ID)
+
+	auth := testkit.Auth(testkit.Config(), db)
+	client := testkit.New(t, voteEngine(t, db))
+	payload := map[string]any{
+		"ballot_version_id": version.ID,
+		"idempotency_key":   "same-key-both",
+		"selections": []map[string]string{{
+			"position_id": fixture.position.ID, "candidate_id": fixture.candidate.ID,
+		}},
+	}
+
+	tokens := make([]string, 0, 2)
+	for index, details := range []struct{ email, student string }{
+		{"2022bse011@std.mast.ac.ug", "22/U/0111"},
+		{"2022bse012@std.mast.ac.ug", "22/U/0112"},
+	} {
+		voter := testkit.User(t, db, details.email, models.RoleStudentVoter)
+		listed(t, db, fixture.election.ID, details.student, voter.Email)
+		token := testkit.SignIn(t, db, auth, voter)
+		var accepted struct {
+			ConfirmationToken string `json:"confirmation_token"`
+		}
+		client.As(token).Post("/api/v1/elections/e-shared-key/ballot/submit", payload).
+			AssertCreated().BindData(&accepted)
+		if accepted.ConfirmationToken == "" {
+			t.Fatalf("voter %d accepted without a confirmation token", index)
+		}
+		tokens = append(tokens, accepted.ConfirmationToken)
+	}
+
+	if tokens[0] == tokens[1] {
+		t.Fatal("two voters with the same key received the same confirmation token")
+	}
+	if p, b := voteCounts(t, db, fixture.election.ID); p != 2 || b != 2 {
+		t.Fatalf("participation=%d ballots=%d, want 2/2", p, b)
+	}
+}
+
+// The (ballot, position, choice) index is the database-level half of the
+// duplicate-choice rule, so a bad write cannot create two answers for one
+// position and choice even if application validation were bypassed.
+func TestDuplicateSelectionIsRejectedByTheDatabase(t *testing.T) {
+	db := rbacDB(t)
+	fixture := ballotElection(t, db, "e-selection-index", time.Now().UTC().Add(-time.Hour), time.Now().UTC().Add(time.Hour))
+
+	ballot := models.AnonymousBallot{ElectionID: fixture.election.ID}
+	if err := db.Create(&ballot).Error; err != nil {
+		t.Fatal(err)
+	}
+	selection := models.BallotSelection{
+		BallotID: ballot.ID, PositionID: fixture.position.ID, Choice: fixture.candidate.ID,
+	}
+	if err := db.Create(&selection).Error; err != nil {
+		t.Fatalf("first selection was refused: %v", err)
+	}
+	duplicate := models.BallotSelection{
+		BallotID: ballot.ID, PositionID: fixture.position.ID, Choice: fixture.candidate.ID,
+	}
+	if err := db.Create(&duplicate).Error; err == nil {
+		t.Fatal("a duplicate (ballot, position, choice) selection was accepted")
+	}
 }

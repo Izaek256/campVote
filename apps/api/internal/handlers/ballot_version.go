@@ -240,7 +240,6 @@ func (h *BallotVersionHandler) Publish(c *gin.Context) {
 	respond.Created(c, gin.H{
 		"id":           version.ID,
 		"version":      version.Version,
-		"content_hash": version.ContentHash,
 		"published_at": version.PublishedAt,
 		"published_by": version.PublishedBy,
 	}, "Ballot version published")
@@ -288,9 +287,8 @@ func (h *BallotVersionHandler) GetVersion(c *gin.Context) {
 	}
 
 	respond.OK(c, gin.H{
-		"version":      version,
-		"content":      content,
-		"content_hash": version.ContentHash,
+		"version": version,
+		"content": content,
 	})
 }
 

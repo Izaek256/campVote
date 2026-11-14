@@ -18,8 +18,8 @@ import type { ResultSnapshot, Results, ResultsHistory } from "@/lib/types";
  * Results workspace — ISSUE-09.
  *
  * Officers run a tally, read the snapshot it produced, recount against it and
- * certify it. Everything on this page is a server figure: the hash, the shares,
- * the outcome per position. Nothing here edits a snapshot; a correction is a
+ * certify it. Everything on this page is a server figure: the shares and the
+ * outcome per position. Nothing here edits a snapshot; a correction is a
  * new tally that supersedes the certified one and keeps it visible.
  */
 function Workspace({ id }: { id: string }) {
@@ -226,8 +226,7 @@ function Workspace({ id }: { id: string }) {
               {snapshot ? (
                 <p>
                   Current snapshot <b>v{snapshot.version}</b>, computed{" "}
-                  {formatEAT(snapshot.computed_at)}, hash{" "}
-                  <code className="mono">{snapshot.content_hash.slice(0, 16)}…</code>
+                  {formatEAT(snapshot.computed_at)}
                 </p>
               ) : (
                 <p className="hint">No tally has been run for this election yet.</p>
@@ -269,17 +268,12 @@ function Workspace({ id }: { id: string }) {
                   <dd>{formatEAT(snapshot.certified_at ?? "")}</dd>
                   <dt>Reason</dt>
                   <dd>{snapshot.certify_reason || "—"}</dd>
-                  <dt>Hash</dt>
-                  <dd>
-                    <code className="mono">{snapshot.content_hash}</code>
-                  </dd>
                 </dl>
               ) : (
                 <>
                   <p className="hint" style={{ marginTop: 0 }}>
-                    Certification pins this snapshot&apos;s hash and is irreversible. The election
-                    creator cannot certify; the change is written to the audit trail. A reason is
-                    required.
+                    Certification pins this snapshot and is irreversible. The change is written to
+                    the audit trail, and a reason is required.
                   </p>
                   <button
                     type="button"
@@ -369,7 +363,6 @@ function Workspace({ id }: { id: string }) {
                     <ResultStatusBadge status={item.status} />
                     <span className="hint">{formatEAT(item.certified_at ?? item.computed_at)}</span>
                   </div>
-                  <code className="hash">{item.content_hash}</code>
                 </div>
               ))}
             </div>
@@ -435,9 +428,8 @@ function Workspace({ id }: { id: string }) {
         onConfirm={runCertify}
       >
         <p>
-          Certification is irreversible. Snapshot v{certifyFor?.version} with hash{" "}
-          <code className="mono">{certifyFor?.content_hash.slice(0, 24)}…</code> will be pinned to
-          this election. The election creator cannot certify, and a reason is required.
+          Certification is irreversible. Snapshot v{certifyFor?.version} will be pinned to this
+          election, and a reason is required.
         </p>
         <div className="field">
           <label htmlFor="certify-reason">Reason</label>
@@ -456,7 +448,7 @@ function Workspace({ id }: { id: string }) {
 export default function ResultsWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <Workspace id={id} />
     </RequireAuth>
   );

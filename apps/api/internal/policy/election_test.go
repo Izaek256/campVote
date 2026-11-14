@@ -202,37 +202,34 @@ func TestRoleChangeAppliesToNextRequest(t *testing.T) {
 	}
 }
 
-func TestCertifyRequiresTwoOfficialsAndADifferentActor(t *testing.T) {
+func TestCertifyIsOpenToTheCreatorAndAnyAssignedOfficial(t *testing.T) {
 	db := testDB(t)
 	user(t, db, "creator", models.RoleChiefElectionAdmin)
 	user(t, db, "one", models.RoleElectionOfficial)
 	user(t, db, "two", models.RoleElectionOfficial)
 	election(t, db, "e-a", models.ElectionStatusClosed, models.ResultPolicyAfterClose, "creator")
 	assign(t, db, "e-a", "one", models.RoleChiefElectionAdmin)
-	assign(t, db, "e-a", "two", models.RoleElectionOfficial)
 
 	a, err := policy.AuthorityFor(db, actor(t, db, "one"), "e-a")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ok, reason := policy.CertifyDecision(db, a, actor(t, db, "one")); !ok {
-		t.Errorf("assigned non-creator official should certify: %s", reason)
+		t.Errorf("assigned official should certify: %s", reason)
 	}
 
-	if err := db.Where("election_id = ? AND user_id = ?", "e-a", "two").
-		Delete(&models.ElectionRole{}).Error; err != nil {
-		t.Fatal(err)
-	}
-	if ok, _ := policy.CertifyDecision(db, a, actor(t, db, "one")); ok {
-		t.Error("one official alone must not certify")
-	}
-
-	assign(t, db, "e-a", "two", models.RoleElectionOfficial)
+	// A small election may have no second official; the single assigned
+	// official still certifies it.
 	creatorAuthority, err := policy.AuthorityFor(db, actor(t, db, "creator"), "e-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ok, _ := policy.CertifyDecision(db, creatorAuthority, actor(t, db, "creator")); ok {
-		t.Error("the election creator must not certify its own result")
+	if ok, reason := policy.CertifyDecision(db, creatorAuthority, actor(t, db, "creator")); !ok {
+		t.Errorf("the election creator should certify its own result: %s", reason)
+	}
+
+	// An account with no relationship to the election cannot certify.
+	if _, err := policy.AuthorityFor(db, actor(t, db, "two"), "e-a"); !errors.Is(err, policy.ErrNotVisible) {
+		t.Errorf("unassigned official authority = %v, want ErrNotVisible", err)
 	}
 }

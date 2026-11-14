@@ -220,10 +220,11 @@ func RequireRole(rolesOrPerms ...string) gin.HandlerFunc {
 }
 
 // RequireStaff admits anyone who can do something in the admin: the ADMIN
-// role, or any permission at all. It is a gate, not a guard. Every route behind
-// it names the permission it needs, and routes that name none stay in the ADMIN
-// group, so one that forgets fails closed.
-func RequireStaff() gin.HandlerFunc {
+// role, any permission at all, or an assignment to administer one election. It
+// is a gate, not a guard. Every route behind it names the permission it needs,
+// and routes that name none stay in the ADMIN group, so one that forgets fails
+// closed.
+func RequireStaff(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if role, _ := c.Get("user_role"); role == models.RoleAdmin {
 			c.Next()
@@ -231,6 +232,17 @@ func RequireStaff() gin.HandlerFunc {
 		}
 		if grants, ok := c.Get("user_grants"); ok {
 			if list, ok := grants.([]string); ok && len(list) > 0 {
+				c.Next()
+				return
+			}
+		}
+		// An election-scoped admin holds no global grant: the assignment is
+		// what admits them to this group. policy.Guard still checks the route
+		// permission, and only routes naming that election let them through.
+		if userID := c.GetString("user_id"); userID != "" {
+			var count int64
+			if err := db.Model(&models.ElectionRole{}).Where("user_id = ?", userID).
+				Count(&count).Error; err == nil && count > 0 {
 				c.Next()
 				return
 			}

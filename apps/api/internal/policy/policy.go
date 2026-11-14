@@ -14,6 +14,7 @@ package policy
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -154,7 +155,8 @@ func Guard(db *gorm.DB) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		if req.Permission != "" && hasPermission(c, req.Permission) {
+		if req.Permission != "" &&
+			(hasPermission(c, req.Permission) || hasScopedElectionPermission(db, c, req.Permission)) {
 			c.Next()
 			return
 		}
@@ -177,6 +179,23 @@ func hasPermission(c *gin.Context, permission string) bool {
 	}
 	grants, ok := value.([]string)
 	return ok && authz.Granted(grants, permission)
+}
+
+// hasScopedElectionPermission lets an election-scoped admin through a route
+// whose :id names their election, without granting them anything globally.
+// The handler re-resolves the same authority before acting, so this widens the
+// gate only to the election the caller was assigned to.
+func hasScopedElectionPermission(db *gorm.DB, c *gin.Context, permission string) bool {
+	full := c.FullPath()
+	if full != "/api/v1/elections/:id" && !strings.HasPrefix(full, "/api/v1/elections/:id/") {
+		return false
+	}
+	id := c.Param("id")
+	if id == "" {
+		return false
+	}
+	authority, err := AuthorityFor(db, ActorFrom(c), id)
+	return err == nil && authority.Can(permission)
 }
 
 // deny writes the 403 and records who was refused and what they asked for. It

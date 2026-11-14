@@ -11,7 +11,7 @@ const CARDS = [
   },
   {
     title: "A tamper-evident audit trail",
-    text: "Admin actions and ballot snapshots are hash-chained, so changes after the fact are visible to auditors.",
+    text: "Admin actions and ballot snapshots form a tamper-evident audit trail, so changes after the fact are visible to auditors.",
   },
 ];
 

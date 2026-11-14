@@ -111,10 +111,6 @@ function History({ id }: { id: string }) {
               <dl className="kv">
                 <dt>Computed</dt>
                 <dd>{formatEAT(snapshot.computed_at)}</dd>
-                <dt>Hash</dt>
-                <dd>
-                  <code className="mono">{snapshot.content_hash}</code>
-                </dd>
                 <dt>Turnout</dt>
                 <dd>
                   {snapshot.turnout_percent.toFixed(1)}% of {snapshot.eligible_voters} eligible (
@@ -204,7 +200,7 @@ function History({ id }: { id: string }) {
 export default function ResultHistoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <History id={id} />
     </RequireAuth>
   );

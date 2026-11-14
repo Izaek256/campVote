@@ -112,12 +112,14 @@ func TestEligibilityGateOnBallotViewStartAndSubmit(t *testing.T) {
 
 	// Tamper: a candidate from another election is not on this ballot.
 	client.As(voterToken).Post("/api/v1/elections/e-a/ballot/submit", map[string]any{
-		"selections": []map[string]string{{"position_id": a.position.ID, "candidate_id": b.candidate.ID}},
+		"selections":      []map[string]string{{"position_id": a.position.ID, "candidate_id": b.candidate.ID}},
+		"idempotency_key": "eligibility-tamper",
 	}).AssertBadRequest()
 
 	// A valid submission records participation and an anonymous ballot.
 	client.As(voterToken).Post("/api/v1/elections/e-a/ballot/submit", map[string]any{
-		"selections": []map[string]string{{"position_id": a.position.ID, "candidate_id": a.candidate.ID}},
+		"selections":      []map[string]string{{"position_id": a.position.ID, "candidate_id": a.candidate.ID}},
+		"idempotency_key": "eligibility-accepted",
 	}).AssertCreated()
 	// Cannot start a second ballot (already voted).
 	client.As(voterToken).Post("/api/v1/elections/e-a/ballot/start", nil).AssertConflict()
@@ -227,7 +229,7 @@ func TestMultiChoiceBallotAcceptsDistinctChoicesAndRejectsDuplicates(t *testing.
 		t.Fatal(err)
 	}
 	var picks []*models.Candidate
-	for i, name := range []string{"First", "Second"} {
+	for i, name := range []string{"First", "Second", "Third"} {
 		candidate := &models.Candidate{
 			ElectionID: a.election.ID, PositionID: multi.ID, FullName: name,
 			ApprovalStatus: models.CandidateStatusApproved, BallotNumber: i + 1,
@@ -252,6 +254,18 @@ func TestMultiChoiceBallotAcceptsDistinctChoicesAndRejectsDuplicates(t *testing.
 			{"position_id": multi.ID, "candidate_id": picks[0].ID},
 			{"position_id": multi.ID, "candidate_id": picks[0].ID},
 		},
+		"idempotency_key": "duplicate-choice",
+	}).AssertBadRequest()
+
+	// More than MaxSelections is refused even when every choice is distinct.
+	client.As(token).Post("/api/v1/elections/e-a/ballot/submit", map[string]any{
+		"selections": []map[string]string{
+			{"position_id": a.position.ID, "candidate_id": a.candidate.ID},
+			{"position_id": multi.ID, "candidate_id": picks[0].ID},
+			{"position_id": multi.ID, "candidate_id": picks[1].ID},
+			{"position_id": multi.ID, "candidate_id": picks[2].ID},
+		},
+		"idempotency_key": "over-selection",
 	}).AssertBadRequest()
 
 	// Two distinct choices are one valid multi-choice answer.
@@ -261,6 +275,7 @@ func TestMultiChoiceBallotAcceptsDistinctChoicesAndRejectsDuplicates(t *testing.
 			{"position_id": multi.ID, "candidate_id": picks[0].ID},
 			{"position_id": multi.ID, "candidate_id": picks[1].ID},
 		},
+		"idempotency_key": "distinct-choices",
 	}).AssertCreated()
 }
 

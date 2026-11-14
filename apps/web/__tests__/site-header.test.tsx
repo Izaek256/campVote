@@ -10,6 +10,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/auth-provider", () => ({
   isAdmin: () => false,
+  isStaff: () => false,
   useAuth: () => ({
     user: { first_name: "Student", last_name: "Voter" },
     signOut: vi.fn(),
