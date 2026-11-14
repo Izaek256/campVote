@@ -444,7 +444,7 @@ function Manage({ id }: { id: string }) {
 export default function PositionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <Manage id={id} />
     </RequireAuth>
   );

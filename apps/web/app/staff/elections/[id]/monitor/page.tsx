@@ -210,7 +210,7 @@ function Monitor({ id }: { id: string }) {
 export default function ElectionMonitorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <Monitor id={id} />
     </RequireAuth>
   );

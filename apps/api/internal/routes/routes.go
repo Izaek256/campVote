@@ -947,6 +947,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	backupHandler := &handlers.BackupHandler{DB: db, Storage: svc.Storage}
 	roleHandler := handlers.NewRoleHandler(db)
 	electionRBACHandler := handlers.NewElectionRBACHandler(db)
+	residenceHandler := handlers.NewResidenceHandler(db)
 	electionLifecycleHandler := handlers.NewElectionLifecycleHandler(db)
 	eligibilityHandler := handlers.NewEligibilityHandler(db)
 	ballotHandler := handlers.NewBallotHandler(db)
@@ -1445,6 +1446,10 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		profile.DELETE("", userHandler.DeleteProfile)
 	}
 
+	// The residence list the profile form offers. Maintained by administrators
+	// under the staff group; the table starts empty and is never seeded.
+	protected.GET("/residence-areas", residenceHandler.List)
+
 	// Staff routes: anyone who holds a permission reaches this group, and each
 	// route names the one it needs. Before v3.220.0 all of these sat behind the
 	// ADMIN role, so a custom role granted users.view was refused by every admin
@@ -1475,6 +1480,9 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.PUT("/users/:id", middleware.RequireRole("ADMIN", "perm:users.edit"), userHandler.Update)
 		staff.DELETE("/users/:id", middleware.RequireRole("ADMIN", "perm:users.delete"), userHandler.Delete)
 		staff.PUT("/users/:id/roles", middleware.RequireRole("ADMIN", "perm:users.edit"), roleHandler.AssignUserRoles)
+		staff.PUT("/residence-assignments", middleware.RequireRole("ADMIN", "perm:users.edit"), residenceHandler.CorrectResidence)
+		staff.POST("/residence-areas", middleware.RequireRole("ADMIN", "perm:users.edit"), residenceHandler.Create)
+		staff.DELETE("/residence-areas/:id", middleware.RequireRole("ADMIN", "perm:users.edit"), residenceHandler.Deactivate)
 		staff.POST("/users/:id/unlock", middleware.RequireRole("ADMIN", "perm:users.edit"), userHandler.Unlock)
 
 		// Administrator invitation: creates an admin without a password and emails
@@ -1577,6 +1585,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		// Election configuration and lifecycle. Opening and closing by clock
 		// is done by internal/lifecycle, not by these routes.
 		staff.POST("/elections", electionLifecycleHandler.Create)
+		staff.POST("/elections/:id/clone", electionLifecycleHandler.Clone)
 		staff.GET("/elections/:id", electionLifecycleHandler.Get)
 		staff.PUT("/elections/:id", electionLifecycleHandler.Update)
 		staff.DELETE("/elections/:id", electionLifecycleHandler.Delete)
@@ -1597,6 +1606,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		// all-or-nothing.
 		staff.POST("/elections/:id/roster/preview", eligibilityHandler.Preview)
 		staff.POST("/elections/:id/roster/import", eligibilityHandler.Import)
+		staff.GET("/elections/:id/roster", eligibilityHandler.List)
 		staff.POST("/elections/:id/roster/:rosterId/status", eligibilityHandler.SetStatus)
 		staff.POST("/elections/:id/eligibility/freeze", eligibilityHandler.Freeze)
 		staff.GET("/elections/:id/eligibility/report", eligibilityHandler.Report)

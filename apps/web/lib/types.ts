@@ -8,7 +8,21 @@ export interface User {
   role: Role | string;
   active: boolean;
   email_verified_at?: string | null;
+  /** Campus profile. All three are required before a ballot is offered. */
+  age?: number | null;
+  sex?: "MALE" | "FEMALE";
+  residence_area_id?: string | null;
   created_at: string;
+  /** Present on the current-user payload: the elections this account administers. */
+  election_roles?: ElectionRole[];
+}
+
+export interface ResidenceArea {
+  id: string;
+  name: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AuthPayload {
@@ -44,6 +58,8 @@ export interface Election {
   allowed_domain: string;
   allowed_years?: string;
   allowed_courses?: string;
+  /** Only emails on the election's roster may see or vote in it. */
+  require_roster?: boolean;
   eligibility_frozen_at?: string | null;
   eligibility_frozen_count: number;
   created_by_id: string;
@@ -60,7 +76,35 @@ export interface Election {
   my_vote_status?: VoteStatus;
 }
 
+/** One row of an election's voter roster. Eligibility evidence, never a ballot. */
+export interface RosterEntry {
+  id: string;
+  election_id: string;
+  student_number: string;
+  reg_number?: string;
+  email: string;
+  full_name: string;
+  faculty?: string;
+  department?: string;
+  programme?: string;
+  study_year?: number;
+  status: string;
+  status_reason?: string;
+  status_changed_at?: string | null;
+  created_at: string;
+}
+
+export interface RosterPreview {
+  creates: number;
+  updates: number;
+  unchanged: number;
+  revokes: number;
+  errors: Array<{ line: number; student_number?: string; email?: string; reason: string }>;
+  content_hash: string;
+}
+
 export interface ElectionRole {
+  election_id: string;
   user_id: string;
   email?: string;
   full_name?: string;
@@ -188,7 +232,6 @@ export interface ResultSnapshot {
   id: string;
   version: number;
   status: ResultStatus;
-  content_hash: string;
   computed_at: string;
   computed_by_id: string;
   certified_by_id?: string;

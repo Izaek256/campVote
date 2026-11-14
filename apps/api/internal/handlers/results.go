@@ -45,7 +45,6 @@ type snapshotView struct {
 	ID             string                 `json:"id"`
 	Version        int                    `json:"version"`
 	Status         string                 `json:"status"`
-	ContentHash    string                 `json:"content_hash"`
 	ComputedAt     time.Time              `json:"computed_at"`
 	ComputedByID   string                 `json:"computed_by_id"`
 	CertifiedByID  string                 `json:"certified_by_id,omitempty"`
@@ -70,7 +69,6 @@ func viewOf(snapshot models.ResultSnapshot) (snapshotView, bool) {
 		ID:             snapshot.ID,
 		Version:        snapshot.Version,
 		Status:         snapshot.Status,
-		ContentHash:    snapshot.ContentHash,
 		ComputedAt:     snapshot.ComputedAt,
 		ComputedByID:   snapshot.ComputedByID,
 		CertifiedByID:  snapshot.CertifiedByID,
@@ -608,7 +606,7 @@ func mustView(snapshot models.ResultSnapshot, result tally.Result) snapshotView 
 	}
 	return snapshotView{
 		ID: snapshot.ID, Version: snapshot.Version, Status: snapshot.Status,
-		ContentHash: snapshot.ContentHash, ComputedAt: snapshot.ComputedAt,
+		ComputedAt:     snapshot.ComputedAt,
 		EligibleVoters: result.Turnout.EligibleVoters, BallotsCast: result.Turnout.BallotsCast,
 		TurnoutPercent: result.Turnout.Percent, Turnout: result.Turnout,
 		Positions: result.Positions, BallotsSpoiled: result.BallotsSpoiled,

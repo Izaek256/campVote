@@ -91,7 +91,7 @@ function Preview({ id }: { id: string }) {
 export default function BallotPreviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <Preview id={id} />
     </RequireAuth>
   );
