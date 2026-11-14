@@ -20,13 +20,17 @@ import (
 type VoterParticipation struct {
 	ID                string    `gorm:"primarykey;size:36" json:"id"`
 	ElectionID        string    `gorm:"size:36;not null;index:idx_participation_election_user,unique;index:idx_participation_idempotency,unique,priority:1;index" json:"election_id"`
-	UserID            string    `gorm:"size:36;not null;index:idx_participation_election_user,unique;index" json:"user_id"`
+	UserID            string    `gorm:"size:36;not null;index:idx_participation_election_user,unique;index:idx_participation_idempotency,unique,priority:2;index" json:"user_id"`
 	ConfirmationToken string    `gorm:"size:64;not null;index" json:"confirmation_token"`
 	VotedAt           time.Time `gorm:"not null;index" json:"voted_at"`
 	// IdempotencyKey is the client-generated key for the submission attempt.
 	// A retry with the same key returns the original outcome instead of a
 	// second ballot. It carries no choice data (ISSUE-08).
-	IdempotencyKey string `gorm:"size:64;not null;index:idx_participation_idempotency,unique,priority:2" json:"-"`
+	//
+	// The key is scoped to the election and the voter: two voters who happen to
+	// choose the same key must not collide, and one voter must never be handed
+	// another voter's confirmation token (issue #37).
+	IdempotencyKey string `gorm:"size:64;not null;index:idx_participation_idempotency,unique,priority:3" json:"-"`
 }
 
 // BeforeCreate assigns a UUID, generation of random confirmation token, and timestamp.
