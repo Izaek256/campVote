@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, account, residences } from "@/lib/api";
 import type { ResidenceArea } from "@/lib/types";
-import { isAdmin, isStaff, useAuth } from "./auth-provider";
+import { isAdmin, useAuth } from "./auth-provider";
 
 /**
  * The voting profile every student fills once: age, sex and campus residence.
@@ -27,12 +27,8 @@ export function ProfileGate() {
   const missingAge = !!user && user.age == null;
   const missingSex = !!user && !user.sex;
   const missingResidence = !!user && !user.residence_area_id;
-  const incomplete =
-    !!user &&
-    !isAdmin(user) &&
-    !isStaff(user) &&
-    (missingAge || missingSex || missingResidence) &&
-    !dismissed;
+  const profileMissing = !!user && !isAdmin(user) && (missingAge || missingSex || missingResidence);
+  const incomplete = profileMissing && !dismissed;
 
   useEffect(() => {
     if (!incomplete) return;
@@ -40,13 +36,35 @@ export function ProfileGate() {
     if (dialog && !dialog.open) dialog.showModal();
   }, [incomplete]);
 
+  // Residence areas are maintained by an administrator while the student may
+  // already be signed in. Re-read them while the profile is missing and when
+  // the tab regains focus, and drop an earlier "Later" as soon as the form can
+  // be completed: the profile must be captured, not skipped once.
   useEffect(() => {
-    if (!incomplete || areas) return;
-    residences
-      .list()
-      .then(setAreas)
-      .catch(() => setAreas([]));
-  }, [incomplete, areas]);
+    if (!profileMissing) return;
+    function load() {
+      residences
+        .list()
+        .then((list) => {
+          setAreas(list);
+          if (list.length > 0) setDismissed(false);
+        })
+        .catch(() => setAreas([]));
+    }
+    load();
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
+  }, [profileMissing]);
+
+  // A different account starts with a clean form.
+  const seenUser = useRef<string | null>(null);
+  useEffect(() => {
+    const id = user?.id ?? null;
+    if (id === seenUser.current) return;
+    seenUser.current = id;
+    setDismissed(false);
+    setAreas(null);
+  }, [user?.id]);
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
