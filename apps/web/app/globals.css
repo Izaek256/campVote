@@ -3354,57 +3354,17 @@ body {
 .field > label .hint {
   font-weight: 400;
 }
-/* Residence multi-select: selected areas stay visible as removable pills. */
+/* Residence multi-select: the UI kit's tag input holds the removable pills. */
 .pill-field {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.pill-list {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 7px 10px;
-  border: 1.5px solid var(--line-strong);
-  border-radius: var(--r);
-  background: var(--surface);
+.tagin .hint {
+  padding: 6px 4px;
 }
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 4px 3px 10px;
-  border: 1px solid var(--primary-line);
-  border-radius: 999px;
-  background: var(--primary-soft);
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 600;
-}
-.pill-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-2);
-  cursor: pointer;
-  font: inherit;
-  line-height: 1;
-}
-.pill-x:hover {
-  background: var(--danger-soft);
+.tagin .t button:hover {
   color: var(--danger);
-}
-.pill-x:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 1px;
 }
 /* Voter list: the two ways to add names sit side by side. */
 .roster-add-grid {

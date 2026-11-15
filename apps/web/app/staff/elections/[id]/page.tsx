@@ -116,6 +116,9 @@ function Manage({ id }: { id: string }) {
   const [rosterList, setRosterList] = useState<RosterEntry[] | null>(null);
   const [rosterEmails, setRosterEmails] = useState("");
   const [rosterBusy, setRosterBusy] = useState(false);
+  const [rosterFile, setRosterFile] = useState<File | null>(null);
+  const [rosterFileError, setRosterFileError] = useState("");
+  const [rosterDragActive, setRosterDragActive] = useState(false);
   const [residenceAreas, setResidenceAreas] = useState<ResidenceArea[]>([]);
   const rosterFileRef = useRef<HTMLInputElement>(null);
   const [readiness, setReadiness] = useState<{
@@ -298,24 +301,60 @@ function Manage({ id }: { id: string }) {
     }
   }
 
+  // Matches eligibility.MaxImportBytes on the server.
+  const rosterMaxBytes = 8 * 1024 * 1024;
+
+  function pickRosterFile(file: File | null) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setRosterFileError("Choose a CSV file. Save an Excel sheet as CSV first.");
+      if (rosterFileRef.current) rosterFileRef.current.value = "";
+      return;
+    }
+    if (file.size > rosterMaxBytes) {
+      setRosterFileError("The file is larger than 8 MB.");
+      if (rosterFileRef.current) rosterFileRef.current.value = "";
+      return;
+    }
+    setRosterFileError("");
+    setRosterFile(file);
+  }
+
+  function clearRosterFile() {
+    setRosterFile(null);
+    setRosterFileError("");
+    if (rosterFileRef.current) rosterFileRef.current.value = "";
+  }
+
+  function handleRosterDrop(event: React.DragEvent) {
+    event.preventDefault();
+    setRosterDragActive(false);
+    if (rosterBusy) return;
+    pickRosterFile(event.dataTransfer.files?.[0] ?? null);
+  }
+
+  function handleRosterDrag(event: React.DragEvent) {
+    event.preventDefault();
+    setRosterDragActive(event.type === "dragenter" || event.type === "dragover");
+  }
+
   async function importRoster(event: React.FormEvent) {
     event.preventDefault();
-    const file = rosterFileRef.current?.files?.[0];
-    if (!file) {
+    if (!rosterFile) {
       toast.error("Choose a roster CSV file.");
       return;
     }
     setRosterBusy(true);
     try {
-      const { preview } = await elections.roster.preview(id, file);
+      const { preview } = await elections.roster.preview(id, rosterFile);
       if (preview.errors.length > 0) {
         toast.error(`${preview.errors.length} row(s) are invalid: ${preview.errors[0].reason}`);
         return;
       }
-      await elections.roster.import(id, file);
+      await elections.roster.import(id, rosterFile);
       toast.success(`Roster imported: ${preview.creates} added, ${preview.updates} updated.`);
       setRosterList(await elections.roster.list(id));
-      if (rosterFileRef.current) rosterFileRef.current.value = "";
+      clearRosterFile();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "The roster could not be imported.");
     } finally {
@@ -691,20 +730,19 @@ function Manage({ id }: { id: string }) {
                 Residence areas <span className="hint">(blank = any)</span>
               </label>
               <div className="pill-field">
-                <div className="pill-list">
+                <div className="tagin">
                   {selectedResidences.length === 0 ? (
                     <span className="hint">Any residence</span>
                   ) : (
                     selectedResidences.map((name) => (
-                      <span className="pill" key={name}>
+                      <span className="t" key={name}>
                         {name}
                         <button
                           type="button"
-                          className="pill-x"
                           aria-label={`Remove ${name}`}
                           onClick={() => removeResidence(name)}
                         >
-                          ×
+                          <Icon name="x" size="s" />
                         </button>
                       </span>
                     ))
@@ -855,11 +893,94 @@ function Manage({ id }: { id: string }) {
                     Download CSV template
                   </button>
                 </div>
-                <form className="row" onSubmit={importRoster}>
-                  <input ref={rosterFileRef} type="file" accept=".csv,text/csv" className="in" />
-                  <button className="btn primary" type="submit" disabled={rosterBusy}>
-                    {rosterBusy ? "Working…" : "Import CSV"}
-                  </button>
+                <form className="form-stack" onSubmit={importRoster}>
+                  <div
+                    className={`file-picker ${rosterFileError ? "bad" : ""} ${
+                      rosterDragActive ? "drag-active" : ""
+                    }`}
+                    onDragEnter={handleRosterDrag}
+                    onDragLeave={handleRosterDrag}
+                    onDragOver={handleRosterDrag}
+                    onDrop={handleRosterDrop}
+                  >
+                    <input
+                      ref={rosterFileRef}
+                      id="roster-file"
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="file-picker-input"
+                      onChange={(event) => pickRosterFile(event.target.files?.[0] ?? null)}
+                      disabled={rosterBusy}
+                      aria-hidden="true"
+                      tabIndex={-1}
+                    />
+                    {rosterFile ? (
+                      <div className="file-picker-filled">
+                        <div className="file-picker-preview-wrapper">
+                          <div className="file-picker-preview file-picker-preview-pdf">
+                            <Icon name="file" size="s" />
+                          </div>
+                        </div>
+                        <div className="file-picker-filename">
+                          <span className="lbl">Selected file</span>
+                          <span className="hint">{rosterFile.name}</span>
+                        </div>
+                        <div className="row" style={{ gap: 8 }}>
+                          <button
+                            type="button"
+                            className="btn sm ghost"
+                            onClick={() => rosterFileRef.current?.click()}
+                            disabled={rosterBusy}
+                          >
+                            <Icon name="refresh" size="s" />
+                            <span>Replace</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn sm danger-o"
+                            onClick={clearRosterFile}
+                            disabled={rosterBusy}
+                            title="Remove file"
+                          >
+                            <Icon name="x" size="s" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="file-picker-empty">
+                        <div className={`file-picker-icon ${rosterDragActive ? "drag" : ""}`}>
+                          <Icon name="file" size="l" />
+                        </div>
+                        <div className="file-picker-text">
+                          <span className="file-picker-label">
+                            {rosterDragActive ? "Drop the CSV here" : "Select a CSV file"}
+                          </span>
+                          <span className="hint">CSV only · max 8 MB</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn primary sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (!rosterBusy) rosterFileRef.current?.click();
+                          }}
+                          disabled={rosterBusy}
+                        >
+                          Browse
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {rosterFileError ? <span className="error-text">{rosterFileError}</span> : null}
+                  <div>
+                    <button
+                      className="btn primary"
+                      type="submit"
+                      disabled={rosterBusy || !rosterFile}
+                    >
+                      {rosterBusy ? "Working…" : "Import CSV"}
+                    </button>
+                  </div>
                 </form>
               </div>
             </div>
