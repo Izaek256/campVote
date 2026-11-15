@@ -464,3 +464,140 @@ func TestRevocationAfterVotingLeavesTheBallotStanding(t *testing.T) {
 		t.Fatalf("the participation record disappeared: %v", err)
 	}
 }
+
+func TestSexAndResidenceRestrictions(t *testing.T) {
+	db := testDB(t)
+	now := time.Now().UTC()
+	if err := db.Create(&models.ResidenceArea{ID: "area-1", Name: "Hall 3"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	election := openElection(t, db, "e-ladies", now.Add(-time.Hour), now.Add(time.Hour))
+	if err := db.Model(election).Updates(map[string]any{
+		"allowed_sexes": "FEMALE", "allowed_residences": "Hall 3",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	election.AllowedSexes, election.AllowedResidences = "FEMALE", "Hall 3"
+
+	female := account(studentEmail("2022", "bse", "001"))
+	female.Sex = models.SexFemale
+	decision, err := eligibility.Check(db, election.ID, female, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !decision.Eligible {
+		t.Fatalf("a female resident of the listed hall should be eligible: %s", decision.Reason)
+	}
+
+	male := account(studentEmail("2022", "bse", "002"))
+	decision, err = eligibility.Check(db, election.ID, male, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.Eligible {
+		t.Fatal("a male student must not be eligible for a female election")
+	}
+	if !strings.Contains(decision.Reason, "female") {
+		t.Errorf("reason = %q, want it to name the sex restriction", decision.Reason)
+	}
+
+	// A blank residence list means any residence; a blank sex list any sex.
+	election.AllowedSexes, election.AllowedResidences = "", ""
+	if allowed, err := eligibility.ProfileAllows(db, election, male); err != nil || !allowed {
+		t.Fatalf("blank restrictions should admit everyone: allowed=%v err=%v", allowed, err)
+	}
+
+	// A set residence list does not match a profile with no residence.
+	noHome := account(studentEmail("2022", "bse", "003"))
+	noHome.ResidenceAreaID = nil
+	if allowed, _ := eligibility.ProfileAllows(db, &models.Election{AllowedResidences: "Hall 3"}, noHome); allowed {
+		t.Fatal("a student with no residence must not match a residence list")
+	}
+}
+
+func TestManualRosterAddAndEdit(t *testing.T) {
+	db := testDB(t)
+	now := time.Now().UTC()
+	election := openElection(t, db, "e-restricted", now.Add(-time.Hour), now.Add(time.Hour))
+	if err := db.Model(election).Update("require_roster", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	election.RequireRoster = true
+
+	added, err := eligibility.AddEmails(db, election.ID, "officer",
+		" 2024BSE088@STD.MUST.AC.UG , 2024bse089@std.must.ac.ug\n2024bse088@std.must.ac.ug", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(added) != 2 {
+		t.Fatalf("added = %d, want 2 (duplicates dropped)", len(added))
+	}
+	if added[0].Email != "2024bse088@std.must.ac.ug" || added[0].StudentNumber != "2024BSE088" {
+		t.Errorf("normalized row = %+v", added[0])
+	}
+
+	// A malformed address refuses the whole paste.
+	if _, err := eligibility.AddEmails(db, election.ID, "officer", "ok@std.must.ac.ug, not-an-email", now); err == nil {
+		t.Fatal("a malformed address must be refused")
+	}
+	var count int64
+	db.Model(&models.ElectionRoster{}).Where("election_id = ?", election.ID).Count(&count)
+	if count != 2 {
+		t.Fatalf("a refused paste wrote %d row(s)", count-2)
+	}
+
+	// Correcting the address keeps the row and its identity key.
+	corrected := "2024bse090@std.mast.ac.ug"
+	entry, err := eligibility.UpdateEntry(db, election.ID, added[0].ID, "officer",
+		eligibility.EntryUpdate{Email: &corrected}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.Email != corrected {
+		t.Fatalf("email = %q, want %q", entry.Email, corrected)
+	}
+	decision, err := eligibility.Check(db, election.ID, account(corrected), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !decision.Eligible {
+		t.Fatalf("the corrected address should be eligible: %s", decision.Reason)
+	}
+}
+
+func TestRestrictedVoterAddedAfterFreezeCanVote(t *testing.T) {
+	db := testDB(t)
+	now := time.Now().UTC()
+	election := openElection(t, db, "e-restricted", now.Add(-time.Hour), now.Add(time.Hour))
+	if err := db.Model(election).Update("require_roster", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	election.RequireRoster = true
+	if _, err := eligibility.Freeze(db, election.ID, "officer", now); err != nil {
+		t.Fatal(err)
+	}
+
+	email := studentEmail("2022", "bse", "077")
+	if _, err := eligibility.AddEmails(db, election.ID, "officer", email, now); err != nil {
+		t.Fatal(err)
+	}
+	decision, err := eligibility.Check(db, election.ID, account(email), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !decision.Eligible {
+		t.Fatalf("a restricted election's late addition must be able to vote: %s", decision.Reason)
+	}
+}
+
+func TestFrozenRuleBasedRosterRefusesManualAdd(t *testing.T) {
+	db := testDB(t)
+	now := time.Now().UTC()
+	election := openElection(t, db, "e-frozen", now.Add(-time.Hour), now.Add(time.Hour))
+	if _, err := eligibility.Freeze(db, election.ID, "officer", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := eligibility.AddEmails(db, election.ID, "officer", studentEmail("2022", "bse", "078"), now); !errors.Is(err, eligibility.ErrRosterFrozen) {
+		t.Fatalf("error = %v, want ErrRosterFrozen", err)
+	}
+}

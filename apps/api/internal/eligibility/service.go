@@ -114,12 +114,22 @@ func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Dec
 		return Decision{Reason: reason}, nil
 	}
 
+	// Sex and residence are profile facts, not email facts, so they are
+	// checked separately and only when the election restricts them.
+	profileAllowed, err := ProfileAllows(db, election, user)
+	if err != nil {
+		return Decision{}, err
+	}
+	if !profileAllowed {
+		return Decision{Reason: RuleForElection(election).ProfileReason()}, nil
+	}
+
 	// Check for an explicit roster exclusion. A non-ELIGIBLE status (e.g.
 	// SUSPENDED, GRADUATED, INELIGIBLE) denies even when the rule matches.
 	// A restricted election is the opposite: the roster is the whole
 	// electorate, so no row means no access.
 	var entry models.ElectionRoster
-	err := db.Where("election_id = ? AND LOWER(email) = ?", election.ID,
+	err = db.Where("election_id = ? AND LOWER(email) = ?", election.ID,
 		strings.ToLower(strings.TrimSpace(user.Email))).
 		First(&entry).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -133,7 +143,9 @@ func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Dec
 		if !models.IsEligibleStatus(entry.Status) {
 			return Decision{Reason: "Your eligibility for this election is " + strings.ToLower(entry.Status)}, nil
 		}
-		if election.EligibilityFrozenAt != nil && entry.CreatedAt.After(*election.EligibilityFrozenAt) {
+		// A restricted election's list is its electorate, so an officer may add
+		// a name while polls are open. The rule-based freeze still applies.
+		if election.EligibilityFrozenAt != nil && !election.RequireRoster && entry.CreatedAt.After(*election.EligibilityFrozenAt) {
 			return Decision{Reason: "Your eligibility evidence was added after voting opened"}, nil
 		}
 		return Decision{Eligible: true, RosterID: entry.ID}, nil
@@ -141,6 +153,29 @@ func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Dec
 
 	// No roster row and rule allows → eligible.
 	return Decision{Eligible: true}, nil
+}
+
+// ProfileAllows applies an election's sex and residence restrictions to a
+// signed-in account. A blank rule admits everyone without a query; otherwise
+// the residence area name is resolved from the account's residence_area_id.
+func ProfileAllows(db *gorm.DB, election *models.Election, user *models.User) (bool, error) {
+	rule := RuleForElection(election)
+	if rule.AllowedSexes == "" && rule.AllowedResidences == "" {
+		return true, nil
+	}
+	if user == nil {
+		return false, nil
+	}
+	residence := ""
+	if user.ResidenceAreaID != nil && *user.ResidenceAreaID != "" {
+		var area models.ResidenceArea
+		err := db.Where("id = ?", *user.ResidenceAreaID).First(&area).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, err
+		}
+		residence = area.Name
+	}
+	return rule.AllowsProfile(user.Sex, residence), nil
 }
 
 // Freeze snapshots the eligible count when an election opens. After it, new
@@ -288,9 +323,17 @@ func EligibleCounts(db *gorm.DB, election *models.Election) (total, eligible int
 	if err := db.Where("email_verified_at IS NOT NULL").Find(&users).Error; err != nil {
 		return 0, 0, err
 	}
+	residences, err := residenceNames(db)
+	if err != nil {
+		return 0, 0, err
+	}
+	rule := RuleForElection(election)
 	for _, u := range users {
 		id, ok := ParseEmail(u.Email)
-		if !ok || !RuleAllows(election, id) {
+		if !ok || !rule.Allows(id) {
+			continue
+		}
+		if !rule.AllowsProfile(u.Sex, residences[userResidence(u)]) {
 			continue
 		}
 		total++
@@ -300,6 +343,28 @@ func EligibleCounts(db *gorm.DB, election *models.Election) (total, eligible int
 		eligible++
 	}
 	return total, eligible, nil
+}
+
+// residenceNames maps residence_area_id to its display name. The table is
+// small and administrator-maintained, so one query is cheaper than a join per
+// account.
+func residenceNames(db *gorm.DB) (map[string]string, error) {
+	var areas []models.ResidenceArea
+	if err := db.Find(&areas).Error; err != nil {
+		return nil, err
+	}
+	names := make(map[string]string, len(areas))
+	for _, area := range areas {
+		names[area.ID] = area.Name
+	}
+	return names, nil
+}
+
+func userResidence(u models.User) string {
+	if u.ResidenceAreaID == nil {
+		return ""
+	}
+	return *u.ResidenceAreaID
 }
 
 // Report is the officer-facing eligibility summary. Counts only: it has no

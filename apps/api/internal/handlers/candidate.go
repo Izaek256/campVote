@@ -517,6 +517,9 @@ func (h *CandidateHandler) CandidatesForVoters(c *gin.Context) {
 	allowed := false
 	if identity, parsed := eligibility.ParseEmail(user.Email); parsed {
 		allowed = eligibility.RuleAllows(&election, identity)
+		if allowed {
+			allowed, _ = eligibility.ProfileAllows(h.DB, &election, user)
+		}
 	}
 	if !allowed {
 		var roleCount int64

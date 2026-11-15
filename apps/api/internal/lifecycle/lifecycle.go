@@ -154,6 +154,9 @@ func ValidateBasics(e *models.Election, at time.Time, scheduling bool) error {
 	if !validDomains(e.AllowedDomain) {
 		fields["allowed_domain"] = "use a single institutional domain such as std.mast.ac.ug"
 	}
+	if !validSexes(e.AllowedSexes) {
+		fields["allowed_sexes"] = "use MALE, FEMALE, both, or leave it blank for any sex"
+	}
 	switch {
 	case e.StartsAt.IsZero() || e.EndsAt.IsZero():
 		fields["starts_at"] = "starts_at and ends_at are required"
@@ -443,6 +446,21 @@ func validDomains(value string) bool {
 	for _, domain := range strings.Split(value, ",") {
 		domain = strings.TrimSpace(strings.TrimPrefix(domain, "@"))
 		if domain == "" || strings.ContainsAny(domain, " @,") {
+			return false
+		}
+	}
+	return true
+}
+
+// validSexes accepts an empty list (any sex) or the profile values the user
+// table allows.
+func validSexes(value string) bool {
+	for _, sex := range strings.Split(value, ",") {
+		sex = strings.ToUpper(strings.TrimSpace(sex))
+		if sex == "" {
+			continue
+		}
+		if sex != models.SexMale && sex != models.SexFemale {
 			return false
 		}
 	}

@@ -108,9 +108,12 @@ function Manage({ id }: { id: string }) {
     allowed_domain: "",
     allowed_years: "",
     allowed_courses: "",
+    allowed_sexes: "",
+    allowed_residences: "",
     require_roster: false,
   });
   const [rosterList, setRosterList] = useState<RosterEntry[] | null>(null);
+  const [rosterEmails, setRosterEmails] = useState("");
   const [rosterBusy, setRosterBusy] = useState(false);
   const rosterFileRef = useRef<HTMLInputElement>(null);
   const [readiness, setReadiness] = useState<{
@@ -145,6 +148,8 @@ function Manage({ id }: { id: string }) {
         allowed_domain: current.allowed_domain ?? "",
         allowed_years: current.allowed_years ?? "",
         allowed_courses: current.allowed_courses ?? "",
+        allowed_sexes: current.allowed_sexes ?? "",
+        allowed_residences: current.allowed_residences ?? "",
         require_roster: current.require_roster ?? false,
       });
       setRosterList(
@@ -259,6 +264,8 @@ function Manage({ id }: { id: string }) {
           allowed_domain: eligibility.allowed_domain.trim(),
           allowed_years: eligibility.allowed_years.trim(),
           allowed_courses: eligibility.allowed_courses.trim(),
+          allowed_sexes: eligibility.allowed_sexes.trim(),
+          allowed_residences: eligibility.allowed_residences.trim(),
           require_roster: eligibility.require_roster,
           reason: form.reason,
         }),
@@ -324,6 +331,55 @@ function Manage({ id }: { id: string }) {
       toast.success("Voter removed from the list.");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "The voter could not be removed.");
+    } finally {
+      setRosterBusy(false);
+    }
+  }
+
+  async function addRosterEmails(event: React.FormEvent) {
+    event.preventDefault();
+    if (!rosterEmails.trim()) {
+      toast.error("Paste at least one email address.");
+      return;
+    }
+    setRosterBusy(true);
+    try {
+      const added = await elections.roster.add(id, rosterEmails);
+      setRosterList(await elections.roster.list(id));
+      setRosterEmails("");
+      toast.success(`${added.length} voter${added.length === 1 ? "" : "s"} added to the list.`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The addresses could not be added.");
+    } finally {
+      setRosterBusy(false);
+    }
+  }
+
+  async function editRoster(entry: RosterEntry) {
+    const email = window.prompt(`Correct the email for ${entry.full_name}:`, entry.email);
+    if (!email?.trim() || email.trim() === entry.email) return;
+    setRosterBusy(true);
+    try {
+      await elections.roster.update(id, entry.id, { email: email.trim() });
+      setRosterList(await elections.roster.list(id));
+      toast.success("Voter email corrected.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The voter could not be updated.");
+    } finally {
+      setRosterBusy(false);
+    }
+  }
+
+  async function restoreRoster(entry: RosterEntry) {
+    const reason = window.prompt(`Why should ${entry.email} be eligible again?`);
+    if (!reason?.trim()) return;
+    setRosterBusy(true);
+    try {
+      await elections.roster.restore(id, entry.id, reason.trim());
+      setRosterList(await elections.roster.list(id));
+      toast.success("Voter restored to the list.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The voter could not be restored.");
     } finally {
       setRosterBusy(false);
     }
@@ -555,6 +611,45 @@ function Manage({ id }: { id: string }) {
               />
             </div>
             <div className="field">
+              <label htmlFor="eligibility-sex">Sex (blank = all)</label>
+              <select
+                id="eligibility-sex"
+                className="in"
+                value={eligibility.allowed_sexes}
+                onChange={(event) =>
+                  setEligibility({
+                    ...eligibility,
+                    allowed_sexes: event.target.value,
+                  })
+                }
+              >
+                <option value="">All students</option>
+                <option value="FEMALE">Female students</option>
+                <option value="MALE">Male students</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="eligibility-residences">
+                Residence areas (comma separated, blank = any)
+              </label>
+              <input
+                id="eligibility-residences"
+                className="in"
+                value={eligibility.allowed_residences}
+                onChange={(event) =>
+                  setEligibility({
+                    ...eligibility,
+                    allowed_residences: event.target.value,
+                  })
+                }
+                placeholder="Hall 3, GRC Ladies Flat"
+              />
+              <span className="hint">
+                Names come from the residence areas in the student profile. A student with no
+                residence on file does not match a non-blank list.
+              </span>
+            </div>
+            <div className="field">
               <label htmlFor="eligibility-roster">
                 <input
                   id="eligibility-roster"
@@ -609,13 +704,33 @@ function Manage({ id }: { id: string }) {
             <span className="mono">{rosterList ? `${rosterList.length} listed` : "loading"}</span>
           </div>
           <p className="hint" style={{ marginTop: 0 }}>
-            Only these emails see the election and may vote in it. The CSV needs the columns
-            student_number, email and full_name. Re-importing updates rows in place; removing a
-            voter revokes eligibility and keeps the row for the audit trail.
+            Only these emails see the election and may vote in it. Paste a column of addresses (one
+            per line or comma separated) and the server trims, lower-cases and checks them before
+            adding. A CSV with student_number, email and full_name also works; re-importing updates
+            rows in place. Removing a voter revokes eligibility and keeps the row for the audit
+            trail.
           </p>
+          <form className="form-stack" onSubmit={addRosterEmails}>
+            <div className="field">
+              <label htmlFor="roster-emails">Add emails</label>
+              <textarea
+                id="roster-emails"
+                className="ta"
+                rows={3}
+                value={rosterEmails}
+                onChange={(event) => setRosterEmails(event.target.value)}
+                placeholder={"2024bse088@std.must.ac.ug\n2024bse089@std.must.ac.ug"}
+              />
+            </div>
+            <div>
+              <button className="btn primary" type="submit" disabled={rosterBusy}>
+                {rosterBusy ? "Working…" : "Add to list"}
+              </button>
+            </div>
+          </form>
           <form className="row" onSubmit={importRoster}>
             <input ref={rosterFileRef} type="file" accept=".csv,text/csv" className="in" />
-            <button className="btn primary" type="submit" disabled={rosterBusy}>
+            <button className="btn" type="submit" disabled={rosterBusy}>
               {rosterBusy ? "Working…" : "Import CSV"}
             </button>
           </form>
@@ -650,6 +765,14 @@ function Manage({ id }: { id: string }) {
                       </td>
                       <td>
                         <div className="table-actions">
+                          <button
+                            type="button"
+                            className="btn sm"
+                            disabled={rosterBusy}
+                            onClick={() => editRoster(entry)}
+                          >
+                            Edit
+                          </button>
                           {entry.status === "ELIGIBLE" ? (
                             <button
                               type="button"
@@ -659,7 +782,16 @@ function Manage({ id }: { id: string }) {
                             >
                               Remove
                             </button>
-                          ) : null}
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn sm"
+                              disabled={rosterBusy}
+                              onClick={() => restoreRoster(entry)}
+                            >
+                              Restore
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -72,9 +72,11 @@ type createElectionRequest struct {
 	EndsAt         string `json:"ends_at"`
 	ResultPolicy   string `json:"result_policy"`
 	// New eligibility fields (replaces AllowedDomains)
-	AllowedDomain  string `json:"allowed_domain"`
-	AllowedYears   string `json:"allowed_years"`
-	AllowedCourses string `json:"allowed_courses"`
+	AllowedDomain     string `json:"allowed_domain"`
+	AllowedYears      string `json:"allowed_years"`
+	AllowedCourses    string `json:"allowed_courses"`
+	AllowedSexes      string `json:"allowed_sexes"`
+	AllowedResidences string `json:"allowed_residences"`
 	// RequireRoster makes the roster the whole electorate: only listed emails
 	// may see or vote in the election.
 	RequireRoster bool `json:"require_roster"`
@@ -103,20 +105,22 @@ func (h *ElectionLifecycleHandler) Create(c *gin.Context) {
 	}
 
 	election := &models.Election{
-		Title:          strings.TrimSpace(in.Title),
-		Description:    in.Description,
-		Category:       strings.ToUpper(strings.TrimSpace(in.Category)),
-		OrganizingUnit: strings.TrimSpace(in.OrganizingUnit),
-		Status:         models.ElectionStatusDraft,
-		StartsAt:       startsAt,
-		EndsAt:         endsAt,
-		ResultPolicy:   strings.ToUpper(strings.TrimSpace(in.ResultPolicy)),
-		AllowedDomain:  strings.ToLower(strings.TrimPrefix(strings.TrimSpace(in.AllowedDomain), "@")),
-		AllowedYears:   strings.TrimSpace(in.AllowedYears),
-		AllowedCourses: strings.ToLower(strings.TrimSpace(in.AllowedCourses)),
-		RequireRoster:  in.RequireRoster,
-		PublicListing:  in.PublicListing,
-		CreatedByID:    c.GetString("user_id"),
+		Title:             strings.TrimSpace(in.Title),
+		Description:       in.Description,
+		Category:          strings.ToUpper(strings.TrimSpace(in.Category)),
+		OrganizingUnit:    strings.TrimSpace(in.OrganizingUnit),
+		Status:            models.ElectionStatusDraft,
+		StartsAt:          startsAt,
+		EndsAt:            endsAt,
+		ResultPolicy:      strings.ToUpper(strings.TrimSpace(in.ResultPolicy)),
+		AllowedDomain:     strings.ToLower(strings.TrimPrefix(strings.TrimSpace(in.AllowedDomain), "@")),
+		AllowedYears:      strings.TrimSpace(in.AllowedYears),
+		AllowedCourses:    strings.ToLower(strings.TrimSpace(in.AllowedCourses)),
+		AllowedSexes:      strings.ToUpper(strings.TrimSpace(in.AllowedSexes)),
+		AllowedResidences: strings.TrimSpace(in.AllowedResidences),
+		RequireRoster:     in.RequireRoster,
+		PublicListing:     in.PublicListing,
+		CreatedByID:       c.GetString("user_id"),
 	}
 	if election.Category == "" {
 		election.Category = models.ElectionCategoryGuild
@@ -180,9 +184,11 @@ func (h *ElectionLifecycleHandler) List(c *gin.Context) {
 	// Parse the caller's email once for eligibility filtering.
 	var callerID eligibility.Identity
 	var callerParsed bool
+	var caller *models.User
 	if !actor.Admin {
 		var user models.User
 		if err := h.DB.Where("id = ?", actor.UserID).First(&user).Error; err == nil {
+			caller = &user
 			callerID, callerParsed = eligibility.ParseEmail(user.Email)
 		}
 	}
@@ -193,7 +199,7 @@ func (h *ElectionLifecycleHandler) List(c *gin.Context) {
 			respond.Internal(c, err)
 			return
 		}
-		if !actor.Admin && !h.visibleTo(&elections[i], actor.UserID, callerID, callerParsed) {
+		if !actor.Admin && !h.visibleTo(&elections[i], actor.UserID, caller, callerID, callerParsed) {
 			continue
 		}
 		out = append(out, h.view(&elections[i], now))
@@ -209,21 +215,21 @@ func (h *ElectionLifecycleHandler) List(c *gin.Context) {
 // to the students the rule admits, or to everyone when the caller's own
 // address is one the domain parser does not recognise.
 func (h *ElectionLifecycleHandler) visibleTo(
-	election *models.Election, userID string,
+	election *models.Election, userID string, caller *models.User,
 	callerID eligibility.Identity, callerParsed bool,
 ) bool {
-	return electionVisibleTo(h.DB, election, userID, callerID, callerParsed)
+	return electionVisibleTo(h.DB, election, userID, caller, callerID, callerParsed)
 }
 
 // electionVisibleTo is the single visibility rule for one election, shared by
 // the list and by the downloadable information notice so the two cannot drift.
 func electionVisibleTo(
-	db *gorm.DB, election *models.Election, userID string,
+	db *gorm.DB, election *models.Election, userID string, caller *models.User,
 	callerID eligibility.Identity, callerParsed bool,
 ) bool {
 	// A restricted election is listed only to the people it names, plus the
 	// accounts that administer it. The roster is checked by email because that
-	// is what the list holds.
+	// is what the list holds. A revoked row no longer grants visibility.
 	if election.RequireRoster {
 		if election.CreatedByID != "" && election.CreatedByID == userID {
 			return true
@@ -242,8 +248,8 @@ func electionVisibleTo(
 		}
 		var listed int64
 		db.Model(&models.ElectionRoster{}).
-			Where("election_id = ? AND LOWER(email) = ?", election.ID,
-				strings.ToLower(strings.TrimSpace(email))).
+			Where("election_id = ? AND LOWER(email) = ? AND status = ?", election.ID,
+				strings.ToLower(strings.TrimSpace(email)), models.RosterStatusEligible).
 			Count(&listed)
 		return listed > 0
 	}
@@ -260,10 +266,16 @@ func electionVisibleTo(
 	if roleCount > 0 {
 		return true
 	}
-	if election.Status == models.ElectionStatusDraft {
-		return callerParsed && eligibility.RuleAllows(election, callerID)
+	// Sex and residence are part of the audience rule, so a caller whose
+	// profile does not match is not shown the election either.
+	profileAllows := func() bool {
+		allowed, err := eligibility.ProfileAllows(db, election, caller)
+		return err == nil && allowed
 	}
-	return !callerParsed || eligibility.RuleAllows(election, callerID)
+	if election.Status == models.ElectionStatusDraft {
+		return callerParsed && eligibility.RuleAllows(election, callerID) && profileAllows()
+	}
+	return !callerParsed || (eligibility.RuleAllows(election, callerID) && profileAllows())
 }
 
 // attachVoteStatus adds the caller's own participation flag to the list. It is
@@ -415,19 +427,21 @@ func (h *ElectionLifecycleHandler) Phase(c *gin.Context) {
 }
 
 type updateElectionRequest struct {
-	Title          *string `json:"title"`
-	Description    *string `json:"description"`
-	Category       *string `json:"category"`
-	OrganizingUnit *string `json:"organizing_unit"`
-	StartsAt       *string `json:"starts_at"`
-	EndsAt         *string `json:"ends_at"`
-	ResultPolicy   *string `json:"result_policy"`
-	AllowedDomain  *string `json:"allowed_domain"`
-	AllowedYears   *string `json:"allowed_years"`
-	AllowedCourses *string `json:"allowed_courses"`
-	RequireRoster  *bool   `json:"require_roster"`
-	PublicListing  *bool   `json:"public_listing"`
-	Reason         string  `json:"reason"`
+	Title             *string `json:"title"`
+	Description       *string `json:"description"`
+	Category          *string `json:"category"`
+	OrganizingUnit    *string `json:"organizing_unit"`
+	StartsAt          *string `json:"starts_at"`
+	EndsAt            *string `json:"ends_at"`
+	ResultPolicy      *string `json:"result_policy"`
+	AllowedDomain     *string `json:"allowed_domain"`
+	AllowedYears      *string `json:"allowed_years"`
+	AllowedCourses    *string `json:"allowed_courses"`
+	AllowedSexes      *string `json:"allowed_sexes"`
+	AllowedResidences *string `json:"allowed_residences"`
+	RequireRoster     *bool   `json:"require_roster"`
+	PublicListing     *bool   `json:"public_listing"`
+	Reason            string  `json:"reason"`
 }
 
 // Update edits configuration before voting opens. After open, only an audited
@@ -473,6 +487,12 @@ func (h *ElectionLifecycleHandler) Update(c *gin.Context) {
 	}
 	if in.AllowedCourses != nil {
 		updated.AllowedCourses = strings.ToLower(strings.TrimSpace(*in.AllowedCourses))
+	}
+	if in.AllowedSexes != nil {
+		updated.AllowedSexes = strings.ToUpper(strings.TrimSpace(*in.AllowedSexes))
+	}
+	if in.AllowedResidences != nil {
+		updated.AllowedResidences = strings.TrimSpace(*in.AllowedResidences)
 	}
 	if in.PublicListing != nil {
 		updated.PublicListing = *in.PublicListing
@@ -762,6 +782,12 @@ func changedElectionFields(before, after models.Election) []string {
 	if before.AllowedCourses != after.AllowedCourses {
 		changed = append(changed, "allowed_courses")
 	}
+	if before.AllowedSexes != after.AllowedSexes {
+		changed = append(changed, "allowed_sexes")
+	}
+	if before.AllowedResidences != after.AllowedResidences {
+		changed = append(changed, "allowed_residences")
+	}
 	if before.PublicListing != after.PublicListing {
 		changed = append(changed, "public_listing")
 	}
@@ -773,18 +799,20 @@ func changedElectionFields(before, after models.Election) []string {
 
 func electionUpdateValues(e *models.Election) map[string]interface{} {
 	return map[string]interface{}{
-		"title":           e.Title,
-		"description":     e.Description,
-		"category":        e.Category,
-		"organizing_unit": e.OrganizingUnit,
-		"starts_at":       e.StartsAt.UTC(),
-		"ends_at":         e.EndsAt.UTC(),
-		"result_policy":   e.ResultPolicy,
-		"allowed_domain":  e.AllowedDomain,
-		"allowed_years":   e.AllowedYears,
-		"allowed_courses": e.AllowedCourses,
-		"require_roster":  e.RequireRoster,
-		"public_listing":  e.PublicListing,
+		"title":              e.Title,
+		"description":        e.Description,
+		"category":           e.Category,
+		"organizing_unit":    e.OrganizingUnit,
+		"starts_at":          e.StartsAt.UTC(),
+		"ends_at":            e.EndsAt.UTC(),
+		"result_policy":      e.ResultPolicy,
+		"allowed_domain":     e.AllowedDomain,
+		"allowed_years":      e.AllowedYears,
+		"allowed_courses":    e.AllowedCourses,
+		"allowed_sexes":      e.AllowedSexes,
+		"allowed_residences": e.AllowedResidences,
+		"require_roster":     e.RequireRoster,
+		"public_listing":     e.PublicListing,
 	}
 }
 

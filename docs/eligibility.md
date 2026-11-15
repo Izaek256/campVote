@@ -51,6 +51,24 @@ Every refusal returns a voter-safe reason. It never names another person or
 exposes roster contents. Denials on the ballot gate are logged with
 `policy.LogDenial`.
 
+### Sex and residence audience
+
+An election may also restrict its audience by profile facts, not just email
+shape:
+
+| Field | Matched against | Blank means |
+|---|---|---|
+| `allowed_sexes` | `users.sex` (`MALE` / `FEMALE`) | any sex |
+| `allowed_residences` | the name of the area in `users.residence_area_id` | any residence |
+
+Both are comma-separated and case-insensitive. A non-blank list does not match
+an account whose profile has no value, so a student must have completed the
+profile field to qualify. `eligibility.ProfileAllows` is the single check, used
+by the ballot gate, the election list, the candidate list and the officer
+counts, so an election such as *female students living in Hall 3* hides and
+refuses the same people everywhere. A restricted election's roster is still the
+final say: both the rule and the list must admit a voter.
+
 `Submit` rechecks eligibility and open status **inside** the transaction that
 writes `voter_participations` and the anonymous `anonymous_ballots` row, so a
 revocation that lands between the HTTP gate and the write still refuses the
@@ -121,6 +139,8 @@ Election audit actions added for this feature:
 | Action | Written when |
 |---|---|
 | `ROSTER_IMPORTED` | a CSV import commits (details carry batch, hash and counts) |
+| `ROSTER_ADDED` | pasted addresses are added manually (details carry the count) |
+| `ROSTER_UPDATED` | an officer corrects an address, student number or name |
 | `ROSTER_REVOKED` | one row is revoked by import or status change |
 | `ELIGIBILITY_OVERRIDE` | an officer restores eligibility explicitly |
 | `ELIGIBILITY_FROZEN` | the electorate snapshot is taken |
@@ -188,4 +208,3 @@ Covered paths:
 - `Election.RequireRoster` remains on the model as a deprecated column.
 - Tests run on SQLite; the concurrency tests for duplicate submissions still
   need a PostgreSQL run (`GRIT_TEST_DATABASE_URL`) before release.
-- No UI yet: the import/preview and voter eligibility screens are frontend work.

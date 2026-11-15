@@ -1607,6 +1607,9 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.POST("/elections/:id/roster/preview", eligibilityHandler.Preview)
 		staff.POST("/elections/:id/roster/import", eligibilityHandler.Import)
 		staff.GET("/elections/:id/roster", eligibilityHandler.List)
+		// Manual list management: paste addresses, correct one, or revoke.
+		staff.POST("/elections/:id/roster/entries", eligibilityHandler.Add)
+		staff.PUT("/elections/:id/roster/:rosterId", eligibilityHandler.Update)
 		staff.POST("/elections/:id/roster/:rosterId/status", eligibilityHandler.SetStatus)
 		staff.POST("/elections/:id/eligibility/freeze", eligibilityHandler.Freeze)
 		staff.GET("/elections/:id/eligibility/report", eligibilityHandler.Report)

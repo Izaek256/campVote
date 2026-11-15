@@ -216,9 +216,10 @@ func init() {
 
 	// Roster evidence is officer-only and election-scoped in the handler.
 	permitted("rosters.import", "POST", "/api/v1/elections/:id/roster/preview",
-		"/api/v1/elections/:id/roster/import")
+		"/api/v1/elections/:id/roster/import", "/api/v1/elections/:id/roster/entries")
 	permitted("rosters.edit", "POST", "/api/v1/elections/:id/roster/:rosterId/status",
 		"/api/v1/elections/:id/eligibility/freeze")
+	permitted("rosters.edit", "PUT", "/api/v1/elections/:id/roster/:rosterId")
 	permitted("rosters.view", "GET", "/api/v1/elections/:id/eligibility/report",
 		"/api/v1/elections/:id/roster")
 

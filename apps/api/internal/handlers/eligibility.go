@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -133,6 +134,84 @@ func (h *EligibilityHandler) List(c *gin.Context) {
 		return
 	}
 	respond.OK(c, entries)
+}
+
+// Add appends manually entered addresses to the roster. The pasted list may be
+// separated by commas, semicolons, spaces or newlines; the server trims,
+// lower-cases and de-duplicates it before writing anything.
+func (h *EligibilityHandler) Add(c *gin.Context) {
+	authority, ok := h.authority(c, policy.PermRosterImport)
+	if !ok {
+		return
+	}
+	var in struct {
+		Emails string `json:"emails"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		respond.BadRequest(c, "A list of email addresses is required")
+		return
+	}
+	entries, err := eligibility.AddEmails(h.DB, authority.Election.ID, c.GetString("user_id"),
+		in.Emails, time.Now().UTC())
+	if errors.Is(err, eligibility.ErrElectionClosed) {
+		respond.Conflict(c, "The voter list can no longer be changed after voting closes")
+		return
+	}
+	if errors.Is(err, eligibility.ErrRosterFrozen) {
+		respond.Conflict(c, "The roster is frozen after voting opens; use an explicit override")
+		return
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		respond.NotFound(c, "Election not found")
+		return
+	}
+	if err != nil {
+		respond.BadRequest(c, err.Error())
+		return
+	}
+	h.audit(c, authority.Election.ID, "roster.added",
+		"Added "+strconv.Itoa(len(entries))+" voter(s) to "+authority.Election.Title)
+	respond.Created(c, entries, "Voters added to the list")
+}
+
+// Update corrects one roster row's address, student number or name.
+func (h *EligibilityHandler) Update(c *gin.Context) {
+	authority, ok := h.authority(c, policy.PermRosterEdit)
+	if !ok {
+		return
+	}
+	var in struct {
+		Email         *string `json:"email"`
+		FullName      *string `json:"full_name"`
+		StudentNumber *string `json:"student_number"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		respond.BadRequest(c, "The corrected voter details are required")
+		return
+	}
+	entry, err := eligibility.UpdateEntry(h.DB, authority.Election.ID, c.Param("rosterId"),
+		c.GetString("user_id"), eligibility.EntryUpdate{
+			Email: in.Email, FullName: in.FullName, StudentNumber: in.StudentNumber,
+		}, time.Now().UTC())
+	if errors.Is(err, eligibility.ErrElectionClosed) {
+		respond.Conflict(c, "The voter list can no longer be changed after voting closes")
+		return
+	}
+	if errors.Is(err, eligibility.ErrRosterFrozen) {
+		respond.Conflict(c, "The roster is frozen after voting opens; use an explicit override")
+		return
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		respond.NotFound(c, "Roster entry not found")
+		return
+	}
+	if err != nil {
+		respond.BadRequest(c, err.Error())
+		return
+	}
+	h.audit(c, authority.Election.ID, "roster.updated",
+		"Corrected a voter on "+authority.Election.Title)
+	respond.OK(c, entry, "Voter updated")
 }
 
 // SetStatus revokes or restores one roster entry. A reason is mandatory and the
