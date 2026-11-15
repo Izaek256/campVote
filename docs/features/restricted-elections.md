@@ -51,10 +51,12 @@ A revoked row no longer grants visibility: the audience check counts only
 On `/staff/elections/:id` the eligibility form carries an **Only voters on the
 imported list may see or vote** checkbox. The **Voter list** panel is always
 shown: with the checkbox off it explains how to enable the list, and with it on
-it offers a textarea for pasting addresses, a CSV import, and a row per voter
+it offers two clearly labelled ways to add names — a textarea for pasting
+addresses and a CSV import with a downloadable template — plus a row per voter
 with **Edit**, **Remove** (revoke) and **Restore** actions. The residence rule
-uses a multi-select of the active residence areas; saved names that no longer
-exist stay visible so editing the form cannot drop them silently.
+shows the chosen areas as removable pills, picked from the active residence
+areas; saved names that no longer exist stay visible so editing the form cannot
+drop them silently.
 
 ## Tests
 

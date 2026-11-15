@@ -387,6 +387,23 @@ function Manage({ id }: { id: string }) {
     }
   }
 
+  // The server reads CSV, so the template is CSV. Excel opens it and can save
+  // back to CSV after the officer fills in the rows.
+  function downloadRosterTemplate() {
+    const csv = [
+      "student_number,email,full_name",
+      "2024BSE088,2024bse088@std.must.ac.ug,Example Student",
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "voter-list-template.csv";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function assignRole(event: React.FormEvent) {
     event.preventDefault();
     if (!roleEmail.trim()) {
@@ -495,13 +512,37 @@ function Manage({ id }: { id: string }) {
     .split(",")
     .map((name) => name.trim())
     .filter(Boolean);
-  const residenceOptions = [
+  const availableResidences = [
     ...residenceAreas.map((area) => area.name),
     ...selectedResidences.filter(
       (name) => !residenceAreas.some((area) => area.name.toLowerCase() === name.toLowerCase())
     ),
-  ];
+  ].filter(
+    (name) => !selectedResidences.some((selected) => selected.toLowerCase() === name.toLowerCase())
+  );
   const rosterEnabled = election.require_roster || eligibility.require_roster;
+
+  function addResidence(name: string) {
+    setEligibility((current) => {
+      const names = current.allowed_residences
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (names.some((value) => value.toLowerCase() === name.toLowerCase())) return current;
+      return { ...current, allowed_residences: [...names, name].join(", ") };
+    });
+  }
+
+  function removeResidence(name: string) {
+    setEligibility((current) => ({
+      ...current,
+      allowed_residences: current.allowed_residences
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value && value.toLowerCase() !== name.toLowerCase())
+        .join(", "),
+    }));
+  }
 
   return (
     <StaffShell title={election.title}>
@@ -593,7 +634,7 @@ function Manage({ id }: { id: string }) {
             </div>
             <div className="field">
               <label htmlFor="eligibility-years">
-                Enrolment years (comma separated, blank = any)
+                Enrolment years <span className="hint">(blank = any)</span>
               </label>
               <input
                 id="eligibility-years"
@@ -610,7 +651,7 @@ function Manage({ id }: { id: string }) {
             </div>
             <div className="field">
               <label htmlFor="eligibility-courses">
-                Course codes (comma separated, blank = any)
+                Course codes <span className="hint">(blank = any)</span>
               </label>
               <input
                 id="eligibility-courses"
@@ -626,7 +667,9 @@ function Manage({ id }: { id: string }) {
               />
             </div>
             <div className="field">
-              <label htmlFor="eligibility-sex">Sex (blank = all)</label>
+              <label htmlFor="eligibility-sex">
+                Sex <span className="hint">(blank = all)</span>
+              </label>
               <select
                 id="eligibility-sex"
                 className="in"
@@ -643,41 +686,59 @@ function Manage({ id }: { id: string }) {
                 <option value="MALE">Male students</option>
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="eligibility-residences">Residence areas (blank = any)</label>
-              <select
-                id="eligibility-residences"
-                className="in"
-                multiple
-                size={Math.min(Math.max(residenceOptions.length, 2), 6)}
-                value={selectedResidences}
-                onChange={(event) =>
-                  setEligibility({
-                    ...eligibility,
-                    allowed_residences: Array.from(
-                      event.target.selectedOptions,
-                      (option) => option.value
-                    ).join(", "),
-                  })
-                }
-              >
-                {residenceOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
+            <div className="field full">
+              <label htmlFor="eligibility-residence-add">
+                Residence areas <span className="hint">(blank = any)</span>
+              </label>
+              <div className="pill-field">
+                <div className="pill-list">
+                  {selectedResidences.length === 0 ? (
+                    <span className="hint">Any residence</span>
+                  ) : (
+                    selectedResidences.map((name) => (
+                      <span className="pill" key={name}>
+                        {name}
+                        <button
+                          type="button"
+                          className="pill-x"
+                          aria-label={`Remove ${name}`}
+                          onClick={() => removeResidence(name)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+                <select
+                  id="eligibility-residence-add"
+                  className="in"
+                  value=""
+                  disabled={availableResidences.length === 0}
+                  onChange={(event) => {
+                    if (event.target.value) addResidence(event.target.value);
+                  }}
+                >
+                  <option value="">
+                    {availableResidences.length === 0
+                      ? "All residence areas selected"
+                      : "Add a residence area…"}
                   </option>
-                ))}
-              </select>
+                  {availableResidences.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <span className="hint">
-                {residenceOptions.length === 0 ? (
+                {residenceAreas.length === 0 && selectedResidences.length === 0 ? (
                   <>
                     No residence areas exist yet. Add them on the{" "}
                     <Link href="/staff/areas">residence areas page</Link>.
                   </>
                 ) : (
-                  <>
-                    Hold Ctrl (or Cmd on a Mac) to select more than one. A student with no residence
-                    on file does not match a non-blank list.
-                  </>
+                  <>A student with no residence on file does not match a non-blank list.</>
                 )}
               </span>
             </div>
@@ -702,7 +763,9 @@ function Manage({ id }: { id: string }) {
               </span>
             </div>
             <div className="field">
-              <label htmlFor="eligibility-reason">Reason (required once frozen)</label>
+              <label htmlFor="eligibility-reason">
+                Reason <span className="hint">(required once frozen)</span>
+              </label>
               <input
                 id="eligibility-reason"
                 className="in"
@@ -748,36 +811,58 @@ function Manage({ id }: { id: string }) {
               </p>
             ) : null}
             <p className="hint" style={{ marginTop: 0 }}>
-              Only these emails see the election and may vote in it. Paste a column of addresses
-              (one per line or comma separated) and the server trims, lower-cases and checks them
-              before adding. A CSV with student_number, email and full_name also works; re-importing
-              updates rows in place. Removing a voter revokes eligibility and keeps the row for the
-              audit trail.
+              Only these emails see the election and may vote in it. Add them by pasting addresses
+              or by importing a CSV; both write to the same list. Removing a voter revokes
+              eligibility and keeps the row for the audit trail.
             </p>
-            <form className="form-stack" onSubmit={addRosterEmails}>
-              <div className="field">
-                <label htmlFor="roster-emails">Add emails</label>
-                <textarea
-                  id="roster-emails"
-                  className="ta"
-                  rows={3}
-                  value={rosterEmails}
-                  onChange={(event) => setRosterEmails(event.target.value)}
-                  placeholder={"2024bse088@std.must.ac.ug\n2024bse089@std.must.ac.ug"}
-                />
+            <div className="roster-add-grid">
+              <div className="roster-add-card">
+                <h3>Paste email addresses</h3>
+                <p className="hint">
+                  One address per line, or separate them with commas. The server trims, lower-cases,
+                  de-duplicates and validates every address before adding any of them.
+                </p>
+                <form className="form-stack" onSubmit={addRosterEmails}>
+                  <div className="field">
+                    <label htmlFor="roster-emails">Email addresses</label>
+                    <textarea
+                      id="roster-emails"
+                      className="ta"
+                      rows={4}
+                      value={rosterEmails}
+                      onChange={(event) => setRosterEmails(event.target.value)}
+                      placeholder={"2024bse088@std.must.ac.ug\n2024bse089@std.must.ac.ug"}
+                    />
+                  </div>
+                  <div>
+                    <button className="btn primary" type="submit" disabled={rosterBusy}>
+                      {rosterBusy ? "Working…" : "Add to list"}
+                    </button>
+                  </div>
+                </form>
               </div>
-              <div>
-                <button className="btn primary" type="submit" disabled={rosterBusy}>
-                  {rosterBusy ? "Working…" : "Add to list"}
-                </button>
+              <div className="roster-add-card">
+                <h3>Import a CSV</h3>
+                <p className="hint">
+                  Required columns: <span className="mono">student_number</span>,{" "}
+                  <span className="mono">email</span> and <span className="mono">full_name</span>.
+                  Download the template, fill it in Excel, then save it as CSV and import it here.
+                  Re-importing updates rows in place.
+                </p>
+                <div className="row">
+                  <button type="button" className="btn sm" onClick={downloadRosterTemplate}>
+                    <Icon name="download" size="s" />
+                    Download CSV template
+                  </button>
+                </div>
+                <form className="row" onSubmit={importRoster}>
+                  <input ref={rosterFileRef} type="file" accept=".csv,text/csv" className="in" />
+                  <button className="btn primary" type="submit" disabled={rosterBusy}>
+                    {rosterBusy ? "Working…" : "Import CSV"}
+                  </button>
+                </form>
               </div>
-            </form>
-            <form className="row" onSubmit={importRoster}>
-              <input ref={rosterFileRef} type="file" accept=".csv,text/csv" className="in" />
-              <button className="btn" type="submit" disabled={rosterBusy}>
-                {rosterBusy ? "Working…" : "Import CSV"}
-              </button>
-            </form>
+            </div>
             <div className="tbl-wrap">
               <table className="tbl">
                 <thead>

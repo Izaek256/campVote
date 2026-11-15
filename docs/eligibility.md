@@ -63,8 +63,8 @@ shape:
 
 Both are comma-separated and case-insensitive. A non-blank list does not match
 an account whose profile has no value, so a student must have completed the
-profile field to qualify. The staff form picks residences from a multi-select of
-the active areas rather than free text. `eligibility.ProfileAllows` is the single check, used
+profile field to qualify. The staff form shows chosen residences as removable
+pills picked from the active areas rather than free text. `eligibility.ProfileAllows` is the single check, used
 by the ballot gate, the election list, the candidate list and the officer
 counts, so an election such as *female students living in Hall 3* hides and
 refuses the same people everywhere. A restricted election's roster is still the
