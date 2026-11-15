@@ -11,7 +11,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
-import { ApiError, candidates, elections, positions } from "@/lib/api";
+import { ApiError, candidates, elections, positions, residences } from "@/lib/api";
 import {
   categoryLabel,
   EAT,
@@ -26,6 +26,7 @@ import type {
   ElectionRole,
   EligibilityReport,
   Position,
+  ResidenceArea,
   Results,
   RosterEntry,
 } from "@/lib/types";
@@ -115,6 +116,7 @@ function Manage({ id }: { id: string }) {
   const [rosterList, setRosterList] = useState<RosterEntry[] | null>(null);
   const [rosterEmails, setRosterEmails] = useState("");
   const [rosterBusy, setRosterBusy] = useState(false);
+  const [residenceAreas, setResidenceAreas] = useState<ResidenceArea[]>([]);
   const rosterFileRef = useRef<HTMLInputElement>(null);
   const [readiness, setReadiness] = useState<{
     ready: boolean;
@@ -152,9 +154,7 @@ function Manage({ id }: { id: string }) {
         allowed_residences: current.allowed_residences ?? "",
         require_roster: current.require_roster ?? false,
       });
-      setRosterList(
-        current.require_roster ? await elections.roster.list(id).catch(() => null) : null
-      );
+      setRosterList(await elections.roster.list(id).catch(() => null));
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Election could not be loaded.";
       setLoadError(message);
@@ -200,12 +200,14 @@ function Manage({ id }: { id: string }) {
     // Everything linked to the election, so an officer sees the whole state
     // without opening each section: the positions, who is approved and who is
     // still awaiting review.
-    const [positionResult, candidateResult] = await Promise.all([
+    const [positionResult, candidateResult, areaResult] = await Promise.all([
       positions.list(id).catch(() => ({ positions: [] as Position[] })),
       candidates.list(id).catch(() => ({ candidates: [] as Candidate[] })),
+      residences.list().catch(() => [] as ResidenceArea[]),
     ]);
     setPositionList(positionResult.positions ?? []);
     setCandidateList(candidateResult.candidates ?? []);
+    setResidenceAreas(areaResult ?? []);
     setNotes(messages);
   }, [id, toast.error]);
 
@@ -487,6 +489,19 @@ function Manage({ id }: { id: string }) {
   // three-stage machine offers is closing early.
   const transitions = (election.allowed_transitions ?? []).filter((to) => to !== "OPEN");
   const frozen = Boolean(election.eligibility_frozen_at);
+  // Keep names already saved even if the area was renamed or deactivated, so
+  // opening the form cannot silently drop part of the rule.
+  const selectedResidences = eligibility.allowed_residences
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  const residenceOptions = [
+    ...residenceAreas.map((area) => area.name),
+    ...selectedResidences.filter(
+      (name) => !residenceAreas.some((area) => area.name.toLowerCase() === name.toLowerCase())
+    ),
+  ];
+  const rosterEnabled = election.require_roster || eligibility.require_roster;
 
   return (
     <StaffShell title={election.title}>
@@ -629,24 +644,41 @@ function Manage({ id }: { id: string }) {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="eligibility-residences">
-                Residence areas (comma separated, blank = any)
-              </label>
-              <input
+              <label htmlFor="eligibility-residences">Residence areas (blank = any)</label>
+              <select
                 id="eligibility-residences"
                 className="in"
-                value={eligibility.allowed_residences}
+                multiple
+                size={Math.min(Math.max(residenceOptions.length, 2), 6)}
+                value={selectedResidences}
                 onChange={(event) =>
                   setEligibility({
                     ...eligibility,
-                    allowed_residences: event.target.value,
+                    allowed_residences: Array.from(
+                      event.target.selectedOptions,
+                      (option) => option.value
+                    ).join(", "),
                   })
                 }
-                placeholder="Hall 3, GRC Ladies Flat"
-              />
+              >
+                {residenceOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
               <span className="hint">
-                Names come from the residence areas in the student profile. A student with no
-                residence on file does not match a non-blank list.
+                {residenceOptions.length === 0 ? (
+                  <>
+                    No residence areas exist yet. Add them on the{" "}
+                    <Link href="/staff/areas">residence areas page</Link>.
+                  </>
+                ) : (
+                  <>
+                    Hold Ctrl (or Cmd on a Mac) to select more than one. A student with no residence
+                    on file does not match a non-blank list.
+                  </>
+                )}
               </span>
             </div>
             <div className="field">
@@ -697,111 +729,130 @@ function Manage({ id }: { id: string }) {
         </form>
       </section>
 
-      {election.require_roster ? (
-        <section className="panel stack" id="roster" style={{ marginBottom: 20 }}>
-          <div className="section-h" style={{ marginTop: 0 }}>
-            <h2>Voter list</h2>
-            <span className="mono">{rosterList ? `${rosterList.length} listed` : "loading"}</span>
-          </div>
-          <p className="hint" style={{ marginTop: 0 }}>
-            Only these emails see the election and may vote in it. Paste a column of addresses (one
-            per line or comma separated) and the server trims, lower-cases and checks them before
-            adding. A CSV with student_number, email and full_name also works; re-importing updates
-            rows in place. Removing a voter revokes eligibility and keeps the row for the audit
-            trail.
-          </p>
-          <form className="form-stack" onSubmit={addRosterEmails}>
-            <div className="field">
-              <label htmlFor="roster-emails">Add emails</label>
-              <textarea
-                id="roster-emails"
-                className="ta"
-                rows={3}
-                value={rosterEmails}
-                onChange={(event) => setRosterEmails(event.target.value)}
-                placeholder={"2024bse088@std.must.ac.ug\n2024bse089@std.must.ac.ug"}
-              />
-            </div>
-            <div>
-              <button className="btn primary" type="submit" disabled={rosterBusy}>
-                {rosterBusy ? "Working…" : "Add to list"}
+      <section className="panel stack" id="roster" style={{ marginBottom: 20 }}>
+        <div className="section-h" style={{ marginTop: 0 }}>
+          <h2>Voter list</h2>
+          <span className="mono">
+            {rosterEnabled
+              ? rosterList
+                ? `${rosterList.length} listed`
+                : "loading"
+              : "not in use"}
+          </span>
+        </div>
+        {rosterEnabled ? (
+          <>
+            {eligibility.require_roster !== election.require_roster ? (
+              <p className="hint" style={{ marginTop: 0 }}>
+                Save the eligibility rule above to apply this change.
+              </p>
+            ) : null}
+            <p className="hint" style={{ marginTop: 0 }}>
+              Only these emails see the election and may vote in it. Paste a column of addresses
+              (one per line or comma separated) and the server trims, lower-cases and checks them
+              before adding. A CSV with student_number, email and full_name also works; re-importing
+              updates rows in place. Removing a voter revokes eligibility and keeps the row for the
+              audit trail.
+            </p>
+            <form className="form-stack" onSubmit={addRosterEmails}>
+              <div className="field">
+                <label htmlFor="roster-emails">Add emails</label>
+                <textarea
+                  id="roster-emails"
+                  className="ta"
+                  rows={3}
+                  value={rosterEmails}
+                  onChange={(event) => setRosterEmails(event.target.value)}
+                  placeholder={"2024bse088@std.must.ac.ug\n2024bse089@std.must.ac.ug"}
+                />
+              </div>
+              <div>
+                <button className="btn primary" type="submit" disabled={rosterBusy}>
+                  {rosterBusy ? "Working…" : "Add to list"}
+                </button>
+              </div>
+            </form>
+            <form className="row" onSubmit={importRoster}>
+              <input ref={rosterFileRef} type="file" accept=".csv,text/csv" className="in" />
+              <button className="btn" type="submit" disabled={rosterBusy}>
+                {rosterBusy ? "Working…" : "Import CSV"}
               </button>
-            </div>
-          </form>
-          <form className="row" onSubmit={importRoster}>
-            <input ref={rosterFileRef} type="file" accept=".csv,text/csv" className="in" />
-            <button className="btn" type="submit" disabled={rosterBusy}>
-              {rosterBusy ? "Working…" : "Import CSV"}
-            </button>
-          </form>
-          <div className="tbl-wrap">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Voter</th>
-                  <th>Student number</th>
-                  <th>Status</th>
-                  <th aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {(rosterList ?? []).length === 0 ? (
+            </form>
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead>
                   <tr>
-                    <td colSpan={4}>
-                      No voters listed yet. Until the list has entries, nobody can see this
-                      election.
-                    </td>
+                    <th>Voter</th>
+                    <th>Student number</th>
+                    <th>Status</th>
+                    <th aria-label="Actions" />
                   </tr>
-                ) : (
-                  (rosterList ?? []).map((entry) => (
-                    <tr key={entry.id}>
-                      <td>
-                        <b>{entry.full_name}</b>
-                        <div className="hint">{entry.email}</div>
+                </thead>
+                <tbody>
+                  {(rosterList ?? []).length === 0 ? (
+                    <tr>
+                      <td colSpan={4}>
+                        No voters listed yet. Until the list has entries, nobody can see this
+                        election.
                       </td>
-                      <td className="mono">{entry.student_number}</td>
-                      <td>
-                        <span className="chip">{entry.status.toLowerCase()}</span>
-                      </td>
-                      <td>
-                        <div className="table-actions">
-                          <button
-                            type="button"
-                            className="btn sm"
-                            disabled={rosterBusy}
-                            onClick={() => editRoster(entry)}
-                          >
-                            Edit
-                          </button>
-                          {entry.status === "ELIGIBLE" ? (
-                            <button
-                              type="button"
-                              className="btn sm danger-o"
-                              disabled={rosterBusy}
-                              onClick={() => revokeRoster(entry)}
-                            >
-                              Remove
-                            </button>
-                          ) : (
+                    </tr>
+                  ) : (
+                    (rosterList ?? []).map((entry) => (
+                      <tr key={entry.id}>
+                        <td>
+                          <b>{entry.full_name}</b>
+                          <div className="hint">{entry.email}</div>
+                        </td>
+                        <td className="mono">{entry.student_number}</td>
+                        <td>
+                          <span className="chip">{entry.status.toLowerCase()}</span>
+                        </td>
+                        <td>
+                          <div className="table-actions">
                             <button
                               type="button"
                               className="btn sm"
                               disabled={rosterBusy}
-                              onClick={() => restoreRoster(entry)}
+                              onClick={() => editRoster(entry)}
                             >
-                              Restore
+                              Edit
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
+                            {entry.status === "ELIGIBLE" ? (
+                              <button
+                                type="button"
+                                className="btn sm danger-o"
+                                disabled={rosterBusy}
+                                onClick={() => revokeRoster(entry)}
+                              >
+                                Remove
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn sm"
+                                disabled={rosterBusy}
+                                onClick={() => restoreRoster(entry)}
+                              >
+                                Restore
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <p className="hint" style={{ marginTop: 0 }}>
+            This election is open to everyone who matches the rule above. Tick{" "}
+            <b>Only voters on the imported list may see or vote</b> and save the rule to manage a
+            list of emails here.
+          </p>
+        )}
+      </section>
 
       <div className="split">
         <div className="stack">

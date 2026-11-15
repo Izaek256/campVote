@@ -638,7 +638,7 @@ Let an administrator build and correct a restricted election's voter list from t
 - **`handlers/eligibility.go`**: `Add` (`POST /roster/entries`) and `Update` (`PUT /roster/:rosterId`).
 - **`handlers/election_lifecycle.go` / `election_clone.go`**: the two fields are created, updated, cloned, audited and validated. `lifecycle.ValidateBasics` rejects a sex other than MALE/FEMALE.
 - **Visibility**: `electionVisibleTo` now counts only `ELIGIBLE` roster rows (a removed voter no longer sees a restricted election) and applies the sex/residence rule to rule-based elections. `CandidatesForVoters` applies the same rule.
-- **Web**: the staff election page gained sex and residence inputs in the eligibility form, a paste-addresses textarea, per-row Edit and Restore, and the roster panel now explains server-side cleaning. `lib/api.ts` and `lib/types.ts` carry the new fields and calls; the PDF information sheet names the sex/residence audience.
+- **Web**: the staff election page gained sex and residence inputs in the eligibility form (the residence field is a multi-select of active areas), an always-visible Voter list panel with a paste-addresses textarea and per-row Edit/Restore, and the panel now explains server-side cleaning. `lib/api.ts` and `lib/types.ts` carry the new fields and calls; the PDF information sheet names the sex/residence audience.
 
 ### Checks Run
 - `gofmt -l internal/` — clean.
