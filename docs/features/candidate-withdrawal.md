@@ -1,13 +1,16 @@
 # Candidate withdrawal after approval (issue #37)
 
-**Status:** implemented on `feature/37-planned-features`.
-**Scope:** an approved candidate can step down until the poll opens.
+**Status:** implemented on `feature/37-planned-features`; withdrawal window tightened on `hotfix/candidate-results-visibility`.
+**Scope:** every candidate application can step down only until the poll opens.
 
 ## Rule
 
-A candidate may withdraw while the election is still `DRAFT`. Once the election
-opens the ballot is fixed: withdrawing would change the contest after voters
-started voting, so both the self-service and the officer route answer `409`.
+No candidate may withdraw once the election is open. A candidate may withdraw
+while the election is still `DRAFT`. Once the election opens the ballot is
+fixed: withdrawing would change the contest after voters started voting, so both
+the self-service and the officer route answer `409`. This applies to every
+application status — `NOMINATED` and `PENDING` as well as `APPROVED` — even
+though only approved candidates appear on the ballot.
 
 The lifecycle is reconciled with `lifecycle.Ensure` before the check, so an
 election whose start time has passed is treated as open even if no request had
@@ -48,9 +51,11 @@ ballot version, which selects `APPROVED` candidates only.
 
 `apps/api/internal/handlers/candidate_workflow_test.go` —
 `TestApprovedCandidateCanWithdrawOnlyBeforeTheElectionOpens` (reason or letter
-required, audit written, refused once open) and
+required, audit written, refused once open),
 `TestAdministratorConfirmsAWithdrawalBeforeTheElectionOpens` (officer route and
-the same window).
+the same window), `TestNoCandidateCanWithdrawOnceTheElectionIsOpen` (nominated,
+pending and approved all answer `409` and keep their status), and
+`TestCandidateWithdrawalIsOwnedByApplicant` (another applicant gets `404`).
 
 ## Known limits
 

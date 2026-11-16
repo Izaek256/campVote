@@ -305,8 +305,9 @@ func (h *CandidateHandler) Apply(c *gin.Context) {
 	respond.Created(c, candidate, "Application submitted. Officials will review it.")
 }
 
-// WithdrawMine withdraws the caller's own candidacy. An approved candidate may
-// step down until the poll opens; after that the ballot is fixed.
+// WithdrawMine withdraws the caller's own candidacy. Every application may be
+// withdrawn until the poll opens; after that no candidate can withdraw because
+// the ballot is fixed.
 func (h *CandidateHandler) WithdrawMine(c *gin.Context) {
 	userID := c.GetString("user_id")
 	var input struct {
@@ -340,10 +341,8 @@ func (h *CandidateHandler) WithdrawMine(c *gin.Context) {
 		respond.Conflict(c, "A rejected application cannot be withdrawn")
 		return
 	}
-	if candidate.ApprovalStatus == models.CandidateStatusApproved {
-		if !h.withdrawalWindowOpen(c, candidate.ElectionID) {
-			return
-		}
+	if !h.withdrawalWindowOpen(c, candidate.ElectionID) {
+		return
 	}
 
 	now := h.now()
