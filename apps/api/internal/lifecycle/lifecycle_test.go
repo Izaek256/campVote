@@ -335,6 +335,44 @@ func TestCloseRunsTheOnClosedHookOnce(t *testing.T) {
 	}
 }
 
+// An open runs the registered hook exactly once, after the election is durably
+// OPEN, which is where eligibility freezes.
+func TestOpenRunsTheOnOpenedHookOnce(t *testing.T) {
+	db := testDB(t)
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	e := validElection(t, db, models.ElectionStatusDraft, now.Add(-time.Minute), now.Add(time.Hour))
+	addPositionAndCandidate(t, db, e.ID)
+
+	calls := 0
+	var seen string
+	lifecycle.OnOpened = func(_ *gorm.DB, election *models.Election, at time.Time) error {
+		calls++
+		seen = election.Status
+		if at.IsZero() {
+			t.Error("open hook received a zero time")
+		}
+		return nil
+	}
+	t.Cleanup(func() { lifecycle.OnOpened = nil })
+
+	if err := lifecycle.Ensure(db, e, now); err != nil {
+		t.Fatal(err)
+	}
+	if e.Status != models.ElectionStatusOpen {
+		t.Fatalf("status = %s, want OPEN", e.Status)
+	}
+	if calls != 1 || seen != models.ElectionStatusOpen {
+		t.Fatalf("open hook calls = %d, seen = %s, want 1 and OPEN", calls, seen)
+	}
+
+	if err := lifecycle.Ensure(db, e, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("open hook ran again on an already-open election: %d calls", calls)
+	}
+}
+
 // A hook failure must not undo the close.
 func TestCloseHookFailureLeavesTheElectionClosed(t *testing.T) {
 	db := testDB(t)

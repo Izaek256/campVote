@@ -55,20 +55,22 @@ func (h *ElectionLifecycleHandler) Clone(c *gin.Context) {
 		title = source.Title + " (copy)"
 	}
 	clone := &models.Election{
-		Title:          title,
-		Description:    source.Description,
-		Category:       source.Category,
-		OrganizingUnit: source.OrganizingUnit,
-		Status:         models.ElectionStatusDraft,
-		StartsAt:       startsAt,
-		EndsAt:         endsAt,
-		ResultPolicy:   source.ResultPolicy,
-		AllowedDomain:  source.AllowedDomain,
-		AllowedYears:   source.AllowedYears,
-		AllowedCourses: source.AllowedCourses,
-		RequireRoster:  source.RequireRoster,
-		PublicListing:  source.PublicListing,
-		CreatedByID:    c.GetString("user_id"),
+		Title:             title,
+		Description:       source.Description,
+		Category:          source.Category,
+		OrganizingUnit:    source.OrganizingUnit,
+		Status:            models.ElectionStatusDraft,
+		StartsAt:          startsAt,
+		EndsAt:            endsAt,
+		ResultPolicy:      source.ResultPolicy,
+		AllowedDomain:     source.AllowedDomain,
+		AllowedYears:      source.AllowedYears,
+		AllowedCourses:    source.AllowedCourses,
+		AllowedSexes:      source.AllowedSexes,
+		AllowedResidences: source.AllowedResidences,
+		RequireRoster:     source.RequireRoster,
+		PublicListing:     source.PublicListing,
+		CreatedByID:       c.GetString("user_id"),
 	}
 	if err := lifecycle.ValidateBasics(clone, now, false); err != nil {
 		respond.WriteError(c, err, "The copied schedule is not valid")

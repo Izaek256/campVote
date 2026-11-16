@@ -18,6 +18,8 @@ const (
 	AuditActionElectionExtended    = "ELECTION_EXTENDED"
 	AuditActionElectionDeleted     = "ELECTION_DELETED"
 	AuditActionRosterImported      = "ROSTER_IMPORTED"
+	AuditActionRosterAdded         = "ROSTER_ADDED"
+	AuditActionRosterUpdated       = "ROSTER_UPDATED"
 	AuditActionRosterRevoked       = "ROSTER_REVOKED"
 	AuditActionEligibilityFrozen   = "ELIGIBILITY_FROZEN"
 	AuditActionEligibilityOverride = "ELIGIBILITY_OVERRIDE"

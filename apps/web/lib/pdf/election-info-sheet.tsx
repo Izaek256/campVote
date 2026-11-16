@@ -181,6 +181,10 @@ function whoCanVote(election: Election): string {
   if (years) parts.push(`Year ${years}`);
   const courses = (election.allowed_courses ?? "").trim();
   if (courses) parts.push(courses);
+  const sexes = (election.allowed_sexes ?? "").trim();
+  if (sexes) parts.push(sexes.toLowerCase());
+  const residences = (election.allowed_residences ?? "").trim();
+  if (residences) parts.push(`residents of ${residences}`);
   const eligible = election.eligibility_frozen_count || 0;
   parts.push(`${thousands(eligible)} eligible`);
   return parts.join(" • ");

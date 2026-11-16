@@ -562,9 +562,27 @@ export const elections = {
       }),
   },
   eligibility: (id: string) => api<EligibilityDecision>(`/elections/${id}/eligibility`),
+  /** Count the electorate for an eligibility rule the officer has not saved yet. */
+  previewEligibility: (id: string, body: Record<string, unknown>) =>
+    api<{ total: number; eligible: number }>(`/elections/${id}/eligibility/preview`, {
+      method: "POST",
+      body,
+    }),
   report: (id: string) => api<EligibilityReport>(`/elections/${id}/eligibility/report`),
   roster: {
     list: (id: string) => api<RosterEntry[]>(`/elections/${id}/roster`),
+    /** Add pasted addresses; the server trims, lower-cases and validates them. */
+    add: (id: string, emails: string) =>
+      api<RosterEntry[]>(`/elections/${id}/roster/entries`, {
+        method: "POST",
+        body: { emails },
+      }),
+    /** Correct one voter's address, name or student number. */
+    update: (
+      id: string,
+      rosterId: string,
+      body: { email?: string; full_name?: string; student_number?: string }
+    ) => api<RosterEntry>(`/elections/${id}/roster/${rosterId}`, { method: "PUT", body }),
     preview: (id: string, file: File) =>
       rosterFile<{ preview: RosterPreview }>(id, "preview", file),
     import: (id: string, file: File) => rosterFile<{ preview: RosterPreview }>(id, "import", file),
@@ -574,11 +592,12 @@ export const elections = {
         method: "POST",
         body: { status: "INELIGIBLE", reason },
       }),
+    restore: (id: string, rosterId: string, reason: string) =>
+      api<RosterEntry>(`/elections/${id}/roster/${rosterId}/status`, {
+        method: "POST",
+        body: { status: "ELIGIBLE", reason },
+      }),
   },
-  freeze: (id: string) =>
-    api<{ frozen_at: string; frozen_count: number }>(`/elections/${id}/eligibility/freeze`, {
-      method: "POST",
-    }),
   ballot: (id: string) => api<Ballot>(`/elections/${id}/ballot`),
   startBallot: (id: string) =>
     api<{

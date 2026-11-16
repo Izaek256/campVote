@@ -58,6 +58,10 @@ export interface Election {
   allowed_domain: string;
   allowed_years?: string;
   allowed_courses?: string;
+  /** Profile sex values ("FEMALE", "MALE"); blank means any sex. */
+  allowed_sexes?: string;
+  /** Residence area names, comma separated; blank means any residence. */
+  allowed_residences?: string;
   /** Only emails on the election's roster may see or vote in it. */
   require_roster?: boolean;
   eligibility_frozen_at?: string | null;

@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -552,6 +553,16 @@ func TestRestrictedElectionIsHiddenFromUnlistedStudents(t *testing.T) {
 		t.Fatalf("a listed student does not see the election: %+v", list)
 	}
 
+	// Revoking a row removes the voter from the audience, not only the ballot.
+	if err := db.Model(&models.ElectionRoster{}).Where("election_id = ?", created.ID).
+		Update("status", models.RosterStatusIneligible).Error; err != nil {
+		t.Fatal(err)
+	}
+	client.As(voterToken).Get("/api/v1/elections").AssertOK().BindData(&list)
+	if len(list) != 0 {
+		t.Fatalf("a revoked voter still sees the restricted election: %+v", list)
+	}
+
 	// Closing it does not publish the list to everyone.
 	if err := db.Model(&models.Election{}).Where("id = ?", created.ID).
 		Update("status", models.ElectionStatusClosed).Error; err != nil {
@@ -657,4 +668,35 @@ func TestAdminCanDeleteDraftButNotAnElectionWithBallots(t *testing.T) {
 	if kept != 1 {
 		t.Fatalf("election with ballots was removed: count = %d, want 1", kept)
 	}
+}
+
+func TestEligibilitySexAndResidenceAreSaved(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Date(2026, 11, 1, 8, 0, 0, 0, time.UTC)
+	clock := now
+	engine := lifecycleEngine(t, db, &clock)
+	auth := testkit.Auth(testkit.Config(), db)
+	admin := rbacUser(t, db, "audience-admin@must.ac.ug", models.RoleAdmin)
+	adminToken := testkit.SignIn(t, db, auth, admin)
+	client := testkit.New(t, engine)
+
+	created := createLifecycleElection(t, client, adminToken,
+		now.Add(24*time.Hour), now.Add(30*time.Hour))
+	client.As(adminToken).Put("/api/v1/elections/"+created.ID, map[string]any{
+		"allowed_sexes":      "female",
+		"allowed_residences": "Hall 3, GRC Ladies Flat",
+	}).AssertOK()
+
+	var stored models.Election
+	if err := db.Where("id = ?", created.ID).First(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.AllowedSexes != "FEMALE" || stored.AllowedResidences != "Hall 3, GRC Ladies Flat" {
+		t.Fatalf("stored rule = %q / %q", stored.AllowedSexes, stored.AllowedResidences)
+	}
+
+	// A value the profile table cannot hold is refused before it is saved.
+	client.As(adminToken).Put("/api/v1/elections/"+created.ID, map[string]any{
+		"allowed_sexes": "everyone",
+	}).AssertStatus(http.StatusUnprocessableEntity)
 }

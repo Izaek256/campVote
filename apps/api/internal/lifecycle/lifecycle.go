@@ -37,6 +37,10 @@ const SystemActor = "system"
 // the durable fact, and Read retries a missing snapshot.
 var OnClosed func(db *gorm.DB, election *models.Election, at time.Time) error
 
+// OnOpened runs after an election has been persisted as OPEN. It snapshots the
+// electorate, so eligibility freezes with voting rather than by a manual step.
+var OnOpened func(db *gorm.DB, election *models.Election, at time.Time) error
+
 var (
 	// ErrIllegalTransition is returned for a state pair the machine forbids.
 	ErrIllegalTransition = errors.New("illegal election transition")
@@ -153,6 +157,9 @@ func ValidateBasics(e *models.Election, at time.Time, scheduling bool) error {
 	}
 	if !validDomains(e.AllowedDomain) {
 		fields["allowed_domain"] = "use a single institutional domain such as std.mast.ac.ug"
+	}
+	if !validSexes(e.AllowedSexes) {
+		fields["allowed_sexes"] = "use MALE, FEMALE, both, or leave it blank for any sex"
 	}
 	switch {
 	case e.StartsAt.IsZero() || e.EndsAt.IsZero():
@@ -384,6 +391,11 @@ func persist(db *gorm.DB, e *models.Election, to, actorID, reason, ip string, at
 	if err := db.Where("id = ?", e.ID).First(e).Error; err != nil {
 		return nil, err
 	}
+	if to == models.ElectionStatusOpen && OnOpened != nil {
+		if hookErr := OnOpened(db, e, at); hookErr != nil {
+			log.Printf("lifecycle: freeze on open for election %s failed: %v", e.ID, hookErr)
+		}
+	}
 	if to == models.ElectionStatusClosed && OnClosed != nil {
 		if hookErr := OnClosed(db, e, at); hookErr != nil {
 			// Closing is not undone by a tally failure. Read retries a missing
@@ -443,6 +455,21 @@ func validDomains(value string) bool {
 	for _, domain := range strings.Split(value, ",") {
 		domain = strings.TrimSpace(strings.TrimPrefix(domain, "@"))
 		if domain == "" || strings.ContainsAny(domain, " @,") {
+			return false
+		}
+	}
+	return true
+}
+
+// validSexes accepts an empty list (any sex) or the profile values the user
+// table allows.
+func validSexes(value string) bool {
+	for _, sex := range strings.Split(value, ",") {
+		sex = strings.ToUpper(strings.TrimSpace(sex))
+		if sex == "" {
+			continue
+		}
+		if sex != models.SexMale && sex != models.SexFemale {
 			return false
 		}
 	}

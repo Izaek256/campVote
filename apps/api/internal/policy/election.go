@@ -93,7 +93,7 @@ func roleGrants(role string) []string {
 	case models.RoleElectionOfficial:
 		return []string{PermElectionView, PermElectionEdit, "candidates.*", PermRosterView, PermBallotView, PermResultsView, PermResultsViewLive}
 	case models.RoleElectionAuditor:
-		return []string{PermElectionView, "candidates.view", PermResultsView, PermAuditView}
+		return []string{PermElectionView, PermElectionCertify, "candidates.view", PermResultsView, PermAuditView}
 	case models.RoleCandidate:
 		// Viewing a provisional tally needs results.view_live, which a candidate
 		// never holds, so this grants published results only.
@@ -276,15 +276,11 @@ func ValidElectionRole(role string) bool {
 	return false
 }
 
-// CertifyDecision checks the certification rule for an authority: the actor
-// holds elections.certify, is not the election's creator, and is not the only
-// election official. The last part is the separation-of-duties requirement
-// that one person does not both run and certify the count.
 // CertifyDecision answers whether this actor may certify the election's
-// current snapshot. The creator may certify its own election: a class or club
-// poll may have no separately assigned staff, and it still has to be able to
-// close its record. The minimum is one official account — the creator, an
-// assigned official or a system administrator — and voting must have closed.
+// current snapshot. The actor holds elections.certify and is the creator, an
+// assigned official/chief/auditor, or a global administrator; voting must have
+// closed. A class or club poll may have no separately assigned staff, and an
+// observer certifying the count is the audit sign-off.
 func CertifyDecision(db *gorm.DB, a *Authority, actor Actor) (bool, string) {
 	if !a.Can(PermElectionCertify) {
 		return false, "You are not authorised to certify results"
@@ -300,12 +296,12 @@ func CertifyDecision(db *gorm.DB, a *Authority, actor Actor) (bool, string) {
 	var assigned int64
 	if err := db.Model(&models.ElectionRole{}).
 		Where("election_id = ? AND user_id = ? AND role IN ?", a.Election.ID, actor.UserID,
-			[]string{models.RoleElectionOfficial, models.RoleChiefElectionAdmin}).
+			[]string{models.RoleElectionOfficial, models.RoleChiefElectionAdmin, models.RoleElectionAuditor}).
 		Count(&assigned).Error; err != nil {
 		return false, "the election officials could not be checked"
 	}
 	if assigned == 0 {
-		return false, "only the creator or an assigned election official may certify"
+		return false, "only the creator, an assigned election official or an auditor may certify"
 	}
 	return true, ""
 }

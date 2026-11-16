@@ -621,3 +621,63 @@ Fix undelivered verification-code emails and close a security hole where the cod
 - Could not verify real inbox delivery: `.env` has no SMTP credentials. The user needs to provide them.
 - `MAIL_ECHO_CODES` defaults to false; the dev echo only works when explicitly opted in AND delivery fails.
 - The `failover(smtp,log)` driver in dev-without-SMTP hides SMTP failures behind the log fallback; the new startup warning makes this visible.
+
+---
+
+## [2026-11-15] Restricted-list management UI + sex/residence audience rules
+
+### Goal
+Let an administrator build and correct a restricted election's voter list from the draft page (paste addresses, edit, remove, restore), and let any election target students by sex and residence as well as domain, year and course. Blank means everyone.
+
+### Changes
+- **`models/election.go`**: added `AllowedSexes` and `AllowedResidences`, both comma-separated and blank-by-default. AutoMigrate adds the columns.
+- **`eligibility/identity.go`**: `Rule` gained the two fields and `AllowsProfile(sex, residence)` / `ProfileReason()`. Position rules are unchanged.
+- **`eligibility/service.go`**: `ProfileAllows` resolves the residence area name and is applied in `CheckRoster`, the officer counts and the restricted-election freeze check (a late roster row is now eligible in a restricted election). `EligibleCounts` filters by the same profile rule.
+- **`eligibility/faculty_turnout.go`**: the per-faculty eligible count uses the same profile rule.
+- **`eligibility/manual.go`** (new): `AddEmails` cleans a pasted list (comma/semicolon/space/newline, trim, lower-case, de-dupe), validates every address before writing, derives the student number/name from the local part, and audits `ROSTER_ADDED`. `UpdateEntry` corrects email/student number/name and audits `ROSTER_UPDATED`. Both refuse after close, and after the freeze unless the election is restricted.
+- **`handlers/eligibility.go`**: `Add` (`POST /roster/entries`) and `Update` (`PUT /roster/:rosterId`).
+- **`handlers/election_lifecycle.go` / `election_clone.go`**: the two fields are created, updated, cloned, audited and validated. `lifecycle.ValidateBasics` rejects a sex other than MALE/FEMALE.
+- **Visibility**: `electionVisibleTo` now counts only `ELIGIBLE` roster rows (a removed voter no longer sees a restricted election) and applies the sex/residence rule to rule-based elections. `CandidatesForVoters` applies the same rule.
+- **Web**: the staff election page gained sex and residence inputs in the eligibility form (the residence field shows chosen areas as removable pills picked from the active list), an always-visible Voter list panel split into a paste-addresses card and a CSV-import card with a downloadable template, and per-row Edit/Restore. `lib/api.ts` and `lib/types.ts` carry the new fields and calls; the PDF information sheet names the sex/residence audience.
+
+### Checks Run
+- `gofmt -l internal/` — clean.
+- `go build ./internal/...` — PASS.
+- `go test ./internal/eligibility ./internal/handlers ./internal/lifecycle ./internal/policy ./internal/routes ./internal/models -count=1` — PASS.
+- `pnpm --filter web type-check` — PASS.
+- `pnpm --filter web test` — PASS, 48/48.
+- Biome check on the changed web files — PASS after formatting.
+
+### Risks / Known limitations
+- Residence matching is by area name, so renaming a residence area changes who matches an existing election's rule. Deactivating an area clears the students' residence, so they stop matching.
+- The roster still stores whatever address the officer supplies; nothing proves it belongs to the named student.
+- Manually added names default to the email local part until an officer edits them.
+- The profile sex/residence fields are set once by the student and corrected by an administrator, so a wrong value can block a legitimate voter until corrected.
+
+---
+
+## [2026-11-16] Live eligibility counter, automatic freeze, CSV import fix, auditor certification
+
+### Goal
+Make the eligible-voter counter follow the unsaved eligibility form and stay
+fast on a large roll; remove the manual freeze control now that opening freezes
+eligibility; fix the CSV import that failed with a generic error; let an
+assigned auditor certify a closed election.
+
+### Changes
+- **`eligibility/service.go`**: new `CountForRule(db, electionID, rule, requireRoster)`. It streams verified accounts with `FindInBatches` (500 per batch) and evaluates batches on a bounded pool of `runtime.NumCPU()` goroutines. `EligibleCounts` now delegates to it, so report, freeze snapshot and live preview use one counter. Restricted elections count only `ELIGIBLE` roster rows; rule-based elections count matches minus non-`ELIGIBLE` rows.
+- **`handlers/eligibility.go`**: `PreviewCount` serves `POST /api/v1/elections/:id/eligibility/preview` (`rosters.view`) and counts the rule in the request body.
+- **`lifecycle/lifecycle.go`**: new `OnOpened` hook, called from `persist` after an election is written as `OPEN`. **`routes/routes.go`** registers it to `eligibility.Freeze`, so eligibility freezes when voting opens without an officer action.
+- **`eligibility/import.go`**: `Plan.View()` returns `[]` rather than `nil` for `errors`, so a clean preview no longer serializes `"errors": null`.
+- **`policy/election.go` / `models/role.go`**: `ELECTION_AUDITOR` gains `elections.certify`, and `CertifyDecision` accepts an assigned auditor.
+- **Web**: the staff page's Eligible voters and Rule matches KPIs plus the section header now come from a debounced preview call on every form change. The manual Freeze card and button are gone; the freed space is a third KPI so the panel stays symmetrical. CSV import reads `preview.errors ?? []`.
+
+### Checks Run
+- `gofmt`, `go build ./internal/...`, `go vet` on the touched packages.
+- `go test ./internal/eligibility ./internal/handlers ./internal/policy ./internal/lifecycle ./internal/routes ./internal/models -count=1`.
+- `pnpm --filter @campvote/web type-check`, `test` (Vitest), Biome on the changed files.
+
+### Risks / Known limitations
+- The counter reads every verified account on each preview; the debounce keeps that to roughly one call per pause, but a very large database still pays a full scan per preview.
+- The freeze route stays for repair; the UI no longer exposes it.
+- An auditor can certify any election they are assigned to; there is no second-approver rule.

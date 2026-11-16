@@ -41,8 +41,11 @@ func eligibilityEngine(t *testing.T, db *gorm.DB) *gin.Engine {
 	staff.Use(policy.Guard(db))
 	staff.POST("/api/v1/elections/:id/roster/preview", eh.Preview)
 	staff.POST("/api/v1/elections/:id/roster/import", eh.Import)
+	staff.POST("/api/v1/elections/:id/roster/entries", eh.Add)
+	staff.PUT("/api/v1/elections/:id/roster/:rosterId", eh.Update)
 	staff.POST("/api/v1/elections/:id/roster/:rosterId/status", eh.SetStatus)
 	staff.POST("/api/v1/elections/:id/eligibility/freeze", eh.Freeze)
+	staff.POST("/api/v1/elections/:id/eligibility/preview", eh.PreviewCount)
 	staff.GET("/api/v1/elections/:id/eligibility/report", eh.Report)
 	return r
 }
@@ -338,6 +341,32 @@ func TestRosterImportPreviewCommitFreezeAndReport(t *testing.T) {
 	}
 }
 
+func TestEligibilityPreviewCountUsesTheUnsavedRule(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Now().UTC()
+	ballotElection(t, db, "e-a", now.Add(-time.Hour), now.Add(time.Hour))
+	chief := testkit.User(t, db, "chief@must.ac.ug", models.RoleChiefElectionAdmin)
+	testkit.User(t, db, "2022bse001@std.mast.ac.ug", models.RoleStudentVoter)
+	testkit.User(t, db, "2023bcs002@std.mast.ac.ug", models.RoleStudentVoter)
+	cfg := testkit.Config()
+	auth := testkit.Auth(cfg, db)
+	client := testkit.New(t, eligibilityEngine(t, db))
+	chiefToken := testkit.SignIn(t, db, auth, chief)
+
+	client.As(chiefToken).Post("/api/v1/elections/e-a/eligibility/preview", map[string]any{
+		"allowed_domain": "std.mast.ac.ug",
+	}).AssertOK().JSON().Where("data.total", 2).Where("data.eligible", 2)
+
+	// The preview follows the form values, not the saved rule.
+	client.As(chiefToken).Post("/api/v1/elections/e-a/eligibility/preview", map[string]any{
+		"allowed_domain": "std.mast.ac.ug", "allowed_years": "2022",
+	}).AssertOK().JSON().Where("data.total", 1)
+
+	client.As(chiefToken).Post("/api/v1/elections/e-a/eligibility/preview", map[string]any{
+		"allowed_domain": "std.mast.ac.ug", "allowed_sexes": "FEMALE",
+	}).AssertOK().JSON().Where("data.total", 0)
+}
+
 func listed(t *testing.T, db *gorm.DB, electionID, student, email string) *models.ElectionRoster {
 	t.Helper()
 	entry := &models.ElectionRoster{
@@ -353,4 +382,76 @@ func listed(t *testing.T, db *gorm.DB, electionID, student, email string) *model
 func postCSV(t *testing.T, client *testkit.Client, token, path, csv, _ string) *testkit.Response {
 	t.Helper()
 	return client.As(token).DoRaw(http.MethodPost, path, "text/csv", []byte(csv))
+}
+
+func TestManualRosterAddEditAndRestore(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Now().UTC()
+	a := ballotElection(t, db, "e-a", now.Add(-time.Hour), now.Add(time.Hour))
+	if err := db.Model(&models.Election{}).Where("id = ?", a.election.ID).
+		Update("require_roster", true).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	chief := testkit.User(t, db, "chief@must.ac.ug", models.RoleChiefElectionAdmin)
+	voter := testkit.User(t, db, "2022bse001@std.mast.ac.ug", models.RoleStudentVoter)
+	cfg := testkit.Config()
+	auth := testkit.Auth(cfg, db)
+	client := testkit.New(t, eligibilityEngine(t, db))
+	chiefToken := testkit.SignIn(t, db, auth, chief)
+	voterToken := testkit.SignIn(t, db, auth, voter)
+
+	// The list is the electorate: without a row the voter cannot see the ballot.
+	client.As(voterToken).Get("/api/v1/elections/e-a/ballot").AssertForbidden()
+
+	// A malformed address refuses the whole paste.
+	client.As(chiefToken).Post("/api/v1/elections/e-a/roster/entries", map[string]string{
+		"emails": "2022BSE001@STD.MAST.AC.UG, not-an-email",
+	}).AssertBadRequest()
+	var count int64
+	db.Model(&models.ElectionRoster{}).Where("election_id = ?", a.election.ID).Count(&count)
+	if count != 0 {
+		t.Fatalf("a refused paste wrote %d row(s)", count)
+	}
+
+	// Pasted addresses are trimmed, lower-cased and de-duplicated server-side.
+	client.As(chiefToken).Post("/api/v1/elections/e-a/roster/entries", map[string]string{
+		"emails": " 2022BSE001@STD.MAST.AC.UG \n2022bse001@std.mast.ac.ug",
+	}).AssertCreated()
+	client.As(voterToken).Get("/api/v1/elections/e-a/ballot").AssertOK()
+
+	var entry models.ElectionRoster
+	if err := db.Where("election_id = ?", a.election.ID).First(&entry).Error; err != nil {
+		t.Fatal(err)
+	}
+	if entry.Email != "2022bse001@std.mast.ac.ug" || entry.StudentNumber != "2022BSE001" {
+		t.Fatalf("stored row = %+v", entry)
+	}
+
+	// Correcting the address takes the voter off the list.
+	client.As(chiefToken).Put("/api/v1/elections/e-a/roster/"+entry.ID, map[string]string{
+		"email": "2022bse099@std.mast.ac.ug",
+	}).AssertOK()
+	client.As(voterToken).Get("/api/v1/elections/e-a/ballot").AssertForbidden()
+
+	// A voter cannot manage the list.
+	client.As(voterToken).Post("/api/v1/elections/e-a/roster/entries", map[string]string{
+		"emails": "2022bse002@std.mast.ac.ug",
+	}).AssertForbidden()
+
+	// Removing revokes; restoring is accepted and audited.
+	client.As(chiefToken).Post("/api/v1/elections/e-a/roster/"+entry.ID+"/status", map[string]string{
+		"status": models.RosterStatusIneligible, "reason": "not registered",
+	}).AssertOK()
+	client.As(chiefToken).Post("/api/v1/elections/e-a/roster/"+entry.ID+"/status", map[string]string{
+		"status": models.RosterStatusEligible, "reason": "registrar confirmed",
+	}).AssertOK()
+
+	var audits int64
+	db.Model(&models.ElectionAuditLog{}).Where("election_id = ?", a.election.ID).
+		Where("action IN ?", []string{models.AuditActionRosterAdded, models.AuditActionRosterUpdated}).
+		Count(&audits)
+	if audits < 2 {
+		t.Errorf("audit events = %d, want an add and an update", audits)
+	}
 }
