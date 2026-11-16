@@ -272,7 +272,7 @@ func TestAdministratorConfirmsAWithdrawalBeforeTheElectionOpens(t *testing.T) {
 func TestCandidateWithdrawalIsOwnedByApplicant(t *testing.T) {
 	db := rbacDB(t)
 	now := time.Now().UTC()
-	election, position := candidateElection(t, db, models.ElectionStatusOpen, now.Add(24*time.Hour))
+	election, position := candidateElection(t, db, models.ElectionStatusDraft, now.Add(24*time.Hour))
 	voter := testkit.User(t, db, "2023bed001@std.mast.ac.ug", models.RoleStudentVoter)
 	other := testkit.User(t, db, "2023bba001@std.mast.ac.ug", models.RoleStudentVoter)
 	listed(t, db, election.ID, "22/U/0103", voter.Email)
@@ -282,8 +282,13 @@ func TestCandidateWithdrawalIsOwnedByApplicant(t *testing.T) {
 	voterToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), voter)
 	otherToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), other)
 
-	var created models.Candidate
-	client.As(voterToken).Post("/api/v1/elections/e-cand/candidates/apply", applicationPayload(position.ID, "Synthetic Applicant")).AssertCreated().BindData(&created)
+	created := models.Candidate{
+		ElectionID: election.ID, PositionID: position.ID, FullName: "Synthetic Applicant",
+		NominatedBy: voter.ID, ApprovalStatus: models.CandidateStatusNominated,
+	}
+	if err := db.Create(&created).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	// Another applicant cannot withdraw somebody else's application.
 	client.As(otherToken).Post("/api/v1/candidates/my/"+created.ID+"/withdraw",
@@ -296,5 +301,38 @@ func TestCandidateWithdrawalIsOwnedByApplicant(t *testing.T) {
 	db.Where("id = ?", created.ID).First(&withdrawn)
 	if withdrawn.ApprovalStatus != models.CandidateStatusWithdrawn || withdrawn.WithdrawalReason != "Personal reasons" {
 		t.Fatalf("withdrawn = %+v", withdrawn)
+	}
+}
+
+func TestNoCandidateCanWithdrawOnceTheElectionIsOpen(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Now().UTC()
+	election, position := candidateElection(t, db, models.ElectionStatusOpen, now.Add(-time.Minute))
+	voter := testkit.User(t, db, "2023bed004@std.mast.ac.ug", models.RoleStudentVoter)
+	listed(t, db, election.ID, "22/U/0107", voter.Email)
+
+	client := testkit.New(t, candidateEngine(t, db))
+	voterToken := testkit.SignIn(t, db, testkit.Auth(testkit.Config(), db), voter)
+
+	for _, status := range []string{
+		models.CandidateStatusNominated,
+		models.CandidateStatusPending,
+		models.CandidateStatusApproved,
+	} {
+		created := models.Candidate{
+			ElectionID: election.ID, PositionID: position.ID, FullName: "Open Applicant " + status,
+			NominatedBy: voter.ID, ApprovalStatus: status,
+		}
+		if err := db.Create(&created).Error; err != nil {
+			t.Fatal(err)
+		}
+		client.As(voterToken).Post("/api/v1/candidates/my/"+created.ID+"/withdraw",
+			map[string]any{"reason": "Changed my mind"}).AssertConflict()
+
+		var stored models.Candidate
+		db.Where("id = ?", created.ID).First(&stored)
+		if stored.ApprovalStatus != status {
+			t.Fatalf("%s application changed to %s after a refused withdrawal", status, stored.ApprovalStatus)
+		}
 	}
 }
