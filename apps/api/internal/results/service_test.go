@@ -62,10 +62,19 @@ func closedElection(t *testing.T, db *gorm.DB) models.Election {
 	}
 	candidate := models.Candidate{
 		ID: "e-auto-cand", ElectionID: election.ID, PositionID: position.ID,
-		FullName: "Ada",
+		FullName: "Ada", ApprovalStatus: models.CandidateStatusApproved,
 	}
 	if err := db.Create(&candidate).Error; err != nil {
 		t.Fatal(err)
+	}
+	for _, status := range []string{models.CandidateStatusRejected, models.CandidateStatusWithdrawn} {
+		off := models.Candidate{
+			ElectionID: election.ID, PositionID: position.ID,
+			FullName: "Not standing " + status, ApprovalStatus: status,
+		}
+		if err := db.Create(&off).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 	ballot := models.AnonymousBallot{ElectionID: election.ID}
 	if err := db.Create(&ballot).Error; err != nil {
@@ -124,8 +133,9 @@ func TestEnsureOnCloseRecordsOneProvisionalSnapshot(t *testing.T) {
 		t.Fatalf("turnout = %d/%d, want 1 cast of 2 eligible",
 			content.Turnout.BallotsCast, content.Turnout.EligibleVoters)
 	}
-	if len(content.Positions) != 1 || content.Positions[0].Rows[0].Votes != 1 {
-		t.Fatalf("tally did not count the one ballot: %+v", content.Positions)
+	if len(content.Positions) != 1 || len(content.Positions[0].Rows) != 1 ||
+		content.Positions[0].Rows[0].Votes != 1 {
+		t.Fatalf("tally did not count the one ballot for the only standing candidate: %+v", content.Positions)
 	}
 
 	var audits int64

@@ -45,8 +45,11 @@ func Compute(db *gorm.DB, electionID string) (tally.Result, error) {
 	}
 
 	var positions []models.Position
+	// Only approved candidates stood, so a rejected or withdrawn application
+	// must not surface in the results with a zero.
 	if err := db.Where("election_id = ?", electionID).
-		Preload("Candidates").Order("display_order ASC, id ASC").
+		Preload("Candidates", "approval_status = ?", models.CandidateStatusApproved).
+		Order("display_order ASC, id ASC").
 		Find(&positions).Error; err != nil {
 		return tally.Result{}, err
 	}

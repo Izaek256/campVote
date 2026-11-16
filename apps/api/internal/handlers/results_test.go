@@ -65,8 +65,10 @@ func resultsFixtureFor(t *testing.T, db *gorm.DB, id string, status, policy stri
 	if err := db.Create(&position).Error; err != nil {
 		t.Fatal(err)
 	}
-	ada := models.Candidate{ID: id + "-ada", ElectionID: id, PositionID: position.ID, FullName: "Ada"}
-	ben := models.Candidate{ID: id + "-ben", ElectionID: id, PositionID: position.ID, FullName: "Ben"}
+	ada := models.Candidate{ID: id + "-ada", ElectionID: id, PositionID: position.ID, FullName: "Ada",
+		ApprovalStatus: models.CandidateStatusApproved}
+	ben := models.Candidate{ID: id + "-ben", ElectionID: id, PositionID: position.ID, FullName: "Ben",
+		ApprovalStatus: models.CandidateStatusApproved}
 	for _, candidate := range []*models.Candidate{&ada, &ben} {
 		if err := db.Create(candidate).Error; err != nil {
 			t.Fatal(err)
