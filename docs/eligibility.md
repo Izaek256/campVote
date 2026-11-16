@@ -51,6 +51,25 @@ Every refusal returns a voter-safe reason. It never names another person or
 exposes roster contents. Denials on the ballot gate are logged with
 `policy.LogDenial`.
 
+### Sex and residence audience
+
+An election may also restrict its audience by profile facts, not just email
+shape:
+
+| Field | Matched against | Blank means |
+|---|---|---|
+| `allowed_sexes` | `users.sex` (`MALE` / `FEMALE`) | any sex |
+| `allowed_residences` | the name of the area in `users.residence_area_id` | any residence |
+
+Both are comma-separated and case-insensitive. A non-blank list does not match
+an account whose profile has no value, so a student must have completed the
+profile field to qualify. The staff form shows chosen residences as removable
+pills picked from the active areas rather than free text. `eligibility.ProfileAllows` is the single check, used
+by the ballot gate, the election list, the candidate list and the officer
+counts, so an election such as *female students living in Hall 3* hides and
+refuses the same people everywhere. A restricted election's roster is still the
+final say: both the rule and the list must admit a voter.
+
 `Submit` rechecks eligibility and open status **inside** the transaction that
 writes `voter_participations` and the anonymous `anonymous_ballots` row, so a
 revocation that lands between the HTTP gate and the write still refuses the
@@ -65,6 +84,7 @@ Endpoints:
 | `POST` | `/api/v1/elections/:id/roster/preview` | `rosters.import` |
 | `POST` | `/api/v1/elections/:id/roster/import` | `rosters.import` |
 | `POST` | `/api/v1/elections/:id/roster/:rosterId/status` | `rosters.edit` |
+| `POST` | `/api/v1/elections/:id/eligibility/preview` | `rosters.view` |
 | `POST` | `/api/v1/elections/:id/eligibility/freeze` | `rosters.edit` |
 | `GET` | `/api/v1/elections/:id/eligibility/report` | `rosters.view` |
 
@@ -100,9 +120,13 @@ to the repository or used in tests; tests use synthetic rows only.
 
 ## 5. Freeze, revocation and overrides
 
-- `Freeze` is explicit and only allowed while the election is `OPEN` and inside
-  its schedule. It snapshots `eligibility_frozen_at` and the eligible count and
-  writes `ELIGIBILITY_FROZEN`.
+- Eligibility freezes **automatically when voting opens**. `lifecycle.persist`
+  runs the `OnOpened` hook, which calls `Freeze`; it snapshots
+  `eligibility_frozen_at` and the eligible count and writes
+  `ELIGIBILITY_FROZEN`. There is no manual freeze control in the UI. The
+  `POST /eligibility/freeze` route remains as an idempotent repair for an
+  election opened by an older build.
+- The freeze is allowed while the election is `OPEN` and inside its schedule.
 - After the freeze, imports may **revoke** (`status != ELIGIBLE`) but may not
   add rows, change identity fields, or restore eligibility. Restoring is an
   explicit officer override with its own audit action.
@@ -121,6 +145,8 @@ Election audit actions added for this feature:
 | Action | Written when |
 |---|---|
 | `ROSTER_IMPORTED` | a CSV import commits (details carry batch, hash and counts) |
+| `ROSTER_ADDED` | pasted addresses are added manually (details carry the count) |
+| `ROSTER_UPDATED` | an officer corrects an address, student number or name |
 | `ROSTER_REVOKED` | one row is revoked by import or status change |
 | `ELIGIBILITY_OVERRIDE` | an officer restores eligibility explicitly |
 | `ELIGIBILITY_FROZEN` | the electorate snapshot is taken |
@@ -128,12 +154,20 @@ Election audit actions added for this feature:
 Audit rows contain roster IDs, statuses, reasons and counts. They never contain
 ballot selections or a voter-to-choice mapping.
 
-## 7. Report
+## 7. Report and live count
 
 `GET /api/v1/elections/:id/eligibility/report` returns counts only:
 total, eligible, counts by status, participation, turnout, freeze snapshot and
 the last import batch. It deliberately contains no email, student number, name
 or user ID, and tests assert those strings are absent.
+
+`POST /api/v1/elections/:id/eligibility/preview` counts an **unsaved** rule from
+the staff form, so the counter updates as the officer edits sex, residence,
+year or course. Both endpoints use `eligibility.CountForRule`, which streams
+verified accounts through `FindInBatches` and evaluates batches on a bounded
+worker pool (`runtime.NumCPU()`). Under a restricted election only `ELIGIBLE`
+roster rows count; otherwise every rule match counts unless its row is
+non-`ELIGIBLE`.
 
 ## 8. Open policy questions for stakeholder sign-off
 
@@ -143,8 +177,8 @@ or user ID, and tests assert those strings are absent.
    `TestRevocationAfterVotingLeavesTheBallotStanding`.
 2. **Identity proof:** is verified institutional email acceptable, or must the
    university provide SSO/OIDC that asserts student number and status?
-3. **Freeze timing:** should the snapshot happen automatically when the election
-   opens, or stay a deliberate officer action (current behaviour)?
+3. **Freeze timing (decided):** the snapshot is taken automatically when the
+   election opens; the officer no longer presses a button.
 4. **Duplicate identities:** is email the agreed identity key, or should student
    number be authoritative when the two disagree?
 5. **Who may import:** which officers may upload a roll, and is a second
@@ -188,4 +222,3 @@ Covered paths:
 - `Election.RequireRoster` remains on the model as a deprecated column.
 - Tests run on SQLite; the concurrency tests for duplicate submissions still
   need a PostgreSQL run (`GRIT_TEST_DATABASE_URL`) before release.
-- No UI yet: the import/preview and voter eligibility screens are frontend work.

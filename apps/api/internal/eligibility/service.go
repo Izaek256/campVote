@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -114,12 +116,22 @@ func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Dec
 		return Decision{Reason: reason}, nil
 	}
 
+	// Sex and residence are profile facts, not email facts, so they are
+	// checked separately and only when the election restricts them.
+	profileAllowed, err := ProfileAllows(db, election, user)
+	if err != nil {
+		return Decision{}, err
+	}
+	if !profileAllowed {
+		return Decision{Reason: RuleForElection(election).ProfileReason()}, nil
+	}
+
 	// Check for an explicit roster exclusion. A non-ELIGIBLE status (e.g.
 	// SUSPENDED, GRADUATED, INELIGIBLE) denies even when the rule matches.
 	// A restricted election is the opposite: the roster is the whole
 	// electorate, so no row means no access.
 	var entry models.ElectionRoster
-	err := db.Where("election_id = ? AND LOWER(email) = ?", election.ID,
+	err = db.Where("election_id = ? AND LOWER(email) = ?", election.ID,
 		strings.ToLower(strings.TrimSpace(user.Email))).
 		First(&entry).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -133,7 +145,9 @@ func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Dec
 		if !models.IsEligibleStatus(entry.Status) {
 			return Decision{Reason: "Your eligibility for this election is " + strings.ToLower(entry.Status)}, nil
 		}
-		if election.EligibilityFrozenAt != nil && entry.CreatedAt.After(*election.EligibilityFrozenAt) {
+		// A restricted election's list is its electorate, so an officer may add
+		// a name while polls are open. The rule-based freeze still applies.
+		if election.EligibilityFrozenAt != nil && !election.RequireRoster && entry.CreatedAt.After(*election.EligibilityFrozenAt) {
 			return Decision{Reason: "Your eligibility evidence was added after voting opened"}, nil
 		}
 		return Decision{Eligible: true, RosterID: entry.ID}, nil
@@ -141,6 +155,29 @@ func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Dec
 
 	// No roster row and rule allows → eligible.
 	return Decision{Eligible: true}, nil
+}
+
+// ProfileAllows applies an election's sex and residence restrictions to a
+// signed-in account. A blank rule admits everyone without a query; otherwise
+// the residence area name is resolved from the account's residence_area_id.
+func ProfileAllows(db *gorm.DB, election *models.Election, user *models.User) (bool, error) {
+	rule := RuleForElection(election)
+	if rule.AllowedSexes == "" && rule.AllowedResidences == "" {
+		return true, nil
+	}
+	if user == nil {
+		return false, nil
+	}
+	residence := ""
+	if user.ResidenceAreaID != nil && *user.ResidenceAreaID != "" {
+		var area models.ResidenceArea
+		err := db.Where("id = ?", *user.ResidenceAreaID).First(&area).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, err
+		}
+		residence = area.Name
+	}
+	return rule.AllowsProfile(user.Sex, residence), nil
 }
 
 // Freeze snapshots the eligible count when an election opens. After it, new
@@ -273,33 +310,132 @@ func EligibleCount(db *gorm.DB, election *models.Election) (int64, error) {
 // EligibleCounts returns both the rule-matching account count (total) and the
 // count after roster exclusions (eligible), for the officer report.
 func EligibleCounts(db *gorm.DB, election *models.Election) (total, eligible int64, err error) {
-	var excluded []string
-	if err := db.Model(&models.ElectionRoster{}).
-		Where("election_id = ? AND status <> ?", election.ID, models.RosterStatusEligible).
-		Pluck("LOWER(email)", &excluded).Error; err != nil {
+	return CountForRule(db, election.ID, RuleForElection(election), election.RequireRoster)
+}
+
+// countBatch is how many accounts one worker evaluates at a time. The rows are
+// read in batches so a large roll never has to fit in memory at once.
+const countBatch = 500
+
+// CountForRule counts verified accounts matching the rule, in parallel. It is
+// the single counter behind the report, the freeze snapshot and the live
+// preview, so those three can never disagree.
+//
+// A restricted election's roster is its electorate: only an ELIGIBLE row counts.
+// Under rule-based eligibility the roster is an exclusion list, so every match
+// counts unless its row is non-ELIGIBLE.
+func CountForRule(db *gorm.DB, electionID string, rule Rule, requireRoster bool) (total, eligible int64, err error) {
+	residences, err := residenceNames(db)
+	if err != nil {
 		return 0, 0, err
 	}
-	blocked := make(map[string]bool, len(excluded))
-	for _, email := range excluded {
-		blocked[strings.TrimSpace(email)] = true
+	allowed, blocked, err := rosterSets(db, electionID)
+	if err != nil {
+		return 0, 0, err
 	}
 
-	var users []models.User
-	if err := db.Where("email_verified_at IS NOT NULL").Find(&users).Error; err != nil {
-		return 0, 0, err
+	workers := runtime.NumCPU()
+	if workers < 1 {
+		workers = 1
 	}
-	for _, u := range users {
-		id, ok := ParseEmail(u.Email)
-		if !ok || !RuleAllows(election, id) {
-			continue
-		}
-		total++
-		if blocked[strings.ToLower(strings.TrimSpace(u.Email))] {
-			continue
-		}
-		eligible++
+	// Bound the concurrent batches: the work is CPU-bound per row, but each
+	// batch also holds a database cursor open.
+	sem := make(chan struct{}, workers)
+	var (
+		mu sync.Mutex
+		wg sync.WaitGroup
+	)
+
+	var batch []models.User
+	feedErr := db.Model(&models.User{}).Where("email_verified_at IS NOT NULL").
+		FindInBatches(&batch, countBatch, func(_ *gorm.DB, _ int) error {
+			// FindInBatches reuses the slice, so each worker needs its own copy.
+			chunk := make([]models.User, len(batch))
+			copy(chunk, batch)
+
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(chunk []models.User) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				var found, kept int64
+				for _, u := range chunk {
+					id, ok := ParseEmail(u.Email)
+					if !ok || !rule.Allows(id) {
+						continue
+					}
+					if !rule.AllowsProfile(u.Sex, residences[userResidence(u)]) {
+						continue
+					}
+					key := strings.ToLower(strings.TrimSpace(u.Email))
+					if requireRoster {
+						if !allowed[key] {
+							continue
+						}
+						found++
+						kept++
+						continue
+					}
+					found++
+					if !blocked[key] {
+						kept++
+					}
+				}
+				mu.Lock()
+				total += found
+				eligible += kept
+				mu.Unlock()
+			}(chunk)
+			return nil
+		}).Error
+	wg.Wait()
+	if feedErr != nil {
+		return 0, 0, feedErr
 	}
 	return total, eligible, nil
+}
+
+// rosterSets splits an election's roster into the addresses it admits and the
+// addresses it explicitly excludes.
+func rosterSets(db *gorm.DB, electionID string) (allowed, blocked map[string]bool, err error) {
+	var rows []models.ElectionRoster
+	if err := db.Select("email", "status").Where("election_id = ?", electionID).
+		Find(&rows).Error; err != nil {
+		return nil, nil, err
+	}
+	allowed = make(map[string]bool, len(rows))
+	blocked = make(map[string]bool)
+	for _, row := range rows {
+		email := strings.ToLower(strings.TrimSpace(row.Email))
+		if models.IsEligibleStatus(row.Status) {
+			allowed[email] = true
+		} else {
+			blocked[email] = true
+		}
+	}
+	return allowed, blocked, nil
+}
+
+// residenceNames maps residence_area_id to its display name. The table is
+// small and administrator-maintained, so one query is cheaper than a join per
+// account.
+func residenceNames(db *gorm.DB) (map[string]string, error) {
+	var areas []models.ResidenceArea
+	if err := db.Find(&areas).Error; err != nil {
+		return nil, err
+	}
+	names := make(map[string]string, len(areas))
+	for _, area := range areas {
+		names[area.ID] = area.Name
+	}
+	return names, nil
+}
+
+func userResidence(u models.User) string {
+	if u.ResidenceAreaID == nil {
+		return ""
+	}
+	return *u.ResidenceAreaID
 }
 
 // Report is the officer-facing eligibility summary. Counts only: it has no

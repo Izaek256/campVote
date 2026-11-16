@@ -3351,6 +3351,40 @@ body {
 .form-grid .full {
   grid-column: 1 / -1;
 }
+.field > label .hint {
+  font-weight: 400;
+}
+/* Residence multi-select: the UI kit's tag input holds the removable pills. */
+.pill-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tagin .hint {
+  padding: 6px 4px;
+}
+.tagin .t button:hover {
+  color: var(--danger);
+}
+/* Voter list: the two ways to add names sit side by side. */
+.roster-add-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.roster-add-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--sunken);
+}
+.roster-add-card h3 {
+  margin: 0;
+  font-size: 15px;
+}
 .btn.block {
   width: 100%;
 }
@@ -3872,6 +3906,9 @@ body {
   .app-topnav .pubnav > .row {
     flex-shrink: 0;
     gap: 8px;
+  }
+  .roster-add-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 640px) {

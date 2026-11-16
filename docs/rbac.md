@@ -20,7 +20,7 @@ Two independent layers decide access. **Route policy** (`internal/policy/routes.
 | Student Voter | `STUDENT_VOTER` | Self-service only; no privileged grant. |
 | Staff Voter | `STAFF_VOTER` | Self-service only; no privileged grant. |
 | Candidate | `CANDIDATE` | Per-election. Reads published results; never voter data or choices. |
-| Election Observer-Auditor | `ELECTION_AUDITOR` | Per-election. Reads authorised evidence and audit records; never ballot choices. |
+| Election Observer-Auditor | `ELECTION_AUDITOR` | Per-election. Reads authorised evidence and audit records, and certifies a closed result; never ballot choices. |
 
 The three Grit scaffold roles (`ADMIN`, `EDITOR`, `USER`) remain because existing data and routes use them. `EDITOR` and `USER` receive no campus-election authority beyond what their legacy grants already allow.
 
@@ -36,7 +36,7 @@ The three Grit scaffold roles (`ADMIN`, `EDITOR`, `USER`) remain because existin
 | `STUDENT_VOTER` | none |
 | `STAFF_VOTER` | none |
 | `CANDIDATE` | `elections.view`, `candidates.view`, `results.view` |
-| `ELECTION_AUDITOR` | `elections.view`, `candidates.view`, `results.view`, `audit.view` |
+| `ELECTION_AUDITOR` | `elections.view`, `elections.certify`, `candidates.view`, `results.view`, `audit.view` |
 
 `SeedRoles` is idempotent and never overwrites an existing row, so an operator's edits survive a restart.
 
@@ -158,8 +158,7 @@ Candidates and auditors hold `results.view`, so they can read a published tally.
 
 - A candidate cannot be assigned `ELECTION_OFFICIAL`, `CHIEF_ELECTION_ADMIN` or `ELECTION_AUDITOR` in the same election; assigning any of those to an existing candidate is refused the same way.
 - An official or auditor cannot be made a candidate in an election they administer or observe.
-- Certification requires **at least two distinct users** assigned as official or chief on that election, and the certifying actor must be one of them unless they are global.
-- The election creator cannot certify its own results.
+- Certification is open to the election creator, any assigned `ELECTION_OFFICIAL`, `CHIEF_ELECTION_ADMIN` or `ELECTION_AUDITOR`, and global administrators. An assigned auditor therefore certifies a closed result, which is the observer's sign-off.
 - Certification is only possible when the election is `CLOSED`; it relabels the current snapshot from `PROVISIONAL` to `CERTIFIED` (it does not move the election on) and writes an `ElectionAuditLog` row (`results_certified`) in one transaction.
 
 ## Live role changes

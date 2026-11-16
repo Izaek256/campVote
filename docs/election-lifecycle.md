@@ -171,8 +171,8 @@ are removed in one transaction. Ballot choices are never involved.
 
 `PUT /elections/:id` accepts any of `title`, `description`, `category`,
 `organizing_unit`, `starts_at`, `ends_at`, `result_policy`, `allowed_domain`,
-`allowed_years`, `allowed_courses`, plus `reason`. After open, only `ends_at`
-(later) and `reason` are accepted.
+`allowed_years`, `allowed_courses`, `allowed_sexes`, `allowed_residences`, plus
+`reason`. After open, only `ends_at` (later) and `reason` are accepted.
 
 Permission checks happen twice, as in ISSUE-03: the route policy checks the
 grant, and `policy.AuthorityFor` checks the caller's relationship to this

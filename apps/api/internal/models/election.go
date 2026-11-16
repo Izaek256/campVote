@@ -70,6 +70,13 @@ type Election struct {
 	// AllowedCourses is a comma-separated list of course codes, e.g. "bse,bcs".
 	// Empty means any course.
 	AllowedCourses string `gorm:"size:255" json:"allowed_courses"`
+	// AllowedSexes is a comma-separated list of profile sex values, e.g.
+	// "FEMALE". Empty means any sex. It is matched against users.sex, so an
+	// account that has not filled in its profile does not match a non-empty list.
+	AllowedSexes string `gorm:"size:20" json:"allowed_sexes"`
+	// AllowedResidences is a comma-separated list of residence area names, e.g.
+	// "Hall 3,GRC Ladies Flat". Empty means any residence.
+	AllowedResidences string `gorm:"size:255" json:"allowed_residences"`
 
 	// AllowedDomains is kept for backward compatibility with existing rows.
 	// New code uses AllowedDomain + AllowedYears + AllowedCourses.

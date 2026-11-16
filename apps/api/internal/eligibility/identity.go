@@ -48,18 +48,23 @@ func ParseEmail(email string) (Identity, bool) {
 }
 
 // Rule is an eligibility constraint: a required email domain, plus optional
-// year and course allow-lists. It is the shared shape used by an election's
-// voter eligibility and by a position's candidate eligibility, so both are
-// evaluated by exactly the same code.
+// year, course, sex and residence allow-lists. It is the shared shape used by
+// an election's voter eligibility and by a position's candidate eligibility, so
+// both are evaluated by exactly the same code.
 type Rule struct {
-	AllowedDomain  string
-	AllowedYears   string
-	AllowedCourses string
+	AllowedDomain     string
+	AllowedYears      string
+	AllowedCourses    string
+	AllowedSexes      string
+	AllowedResidences string
 }
 
 // RuleForElection reads the eligibility rule an election declares.
 func RuleForElection(e *models.Election) Rule {
-	return Rule{AllowedDomain: e.AllowedDomain, AllowedYears: e.AllowedYears, AllowedCourses: e.AllowedCourses}
+	return Rule{
+		AllowedDomain: e.AllowedDomain, AllowedYears: e.AllowedYears, AllowedCourses: e.AllowedCourses,
+		AllowedSexes: e.AllowedSexes, AllowedResidences: e.AllowedResidences,
+	}
 }
 
 // RuleForPosition reads the eligibility rule a position declares for the
@@ -95,6 +100,33 @@ func (r Rule) Allows(id Identity) bool {
 	}
 
 	return true
+}
+
+// AllowsProfile reports whether the account's sex and residence satisfy the
+// rule. A blank list admits anyone; a non-empty list with an unset profile
+// value does not match. Residence matching is case-insensitive on the area
+// name, and the caller resolves the name from users.residence_area_id.
+func (r Rule) AllowsProfile(sex, residence string) bool {
+	if r.AllowedSexes != "" && !inList(sex, r.AllowedSexes) {
+		return false
+	}
+	if r.AllowedResidences != "" && !inList(residence, r.AllowedResidences) {
+		return false
+	}
+	return true
+}
+
+// ProfileReason is the voter-safe explanation for a profile restriction.
+func (r Rule) ProfileReason() string {
+	switch {
+	case r.AllowedSexes != "" && r.AllowedResidences != "":
+		return "This election is for " + strings.ToLower(r.AllowedSexes) + " students living in " + r.AllowedResidences
+	case r.AllowedSexes != "":
+		return "This election is for " + strings.ToLower(r.AllowedSexes) + " students"
+	case r.AllowedResidences != "":
+		return "This election is for residents of " + r.AllowedResidences
+	}
+	return "This election is restricted"
 }
 
 // RuleAllows reports whether the identity is permitted by the election's

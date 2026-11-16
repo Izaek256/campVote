@@ -85,9 +85,14 @@ func FacultyTurnoutBreakdown(db *gorm.DB, election *models.Election, threshold i
 
 	var users []models.User
 	if err := db.Model(&models.User{}).
-		Select("id", "email", "email_verified_at").Find(&users).Error; err != nil {
+		Select("id", "email", "email_verified_at", "sex", "residence_area_id").Find(&users).Error; err != nil {
 		return nil, err
 	}
+	residences, err := residenceNames(db)
+	if err != nil {
+		return nil, err
+	}
+	rule := RuleForElection(election)
 	eligibleByFaculty := make(map[string]int)
 	facultyByUser := make(map[string]string, len(users))
 	for _, user := range users {
@@ -97,7 +102,10 @@ func FacultyTurnoutBreakdown(db *gorm.DB, election *models.Election, threshold i
 			continue
 		}
 		identity, parsed := ParseEmail(user.Email)
-		if !parsed || !RuleAllows(election, identity) {
+		if !parsed || !rule.Allows(identity) {
+			continue
+		}
+		if !rule.AllowsProfile(user.Sex, residences[userResidence(user)]) {
 			continue
 		}
 		eligibleByFaculty[facultyByUser[user.ID]]++

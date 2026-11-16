@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -135,6 +136,84 @@ func (h *EligibilityHandler) List(c *gin.Context) {
 	respond.OK(c, entries)
 }
 
+// Add appends manually entered addresses to the roster. The pasted list may be
+// separated by commas, semicolons, spaces or newlines; the server trims,
+// lower-cases and de-duplicates it before writing anything.
+func (h *EligibilityHandler) Add(c *gin.Context) {
+	authority, ok := h.authority(c, policy.PermRosterImport)
+	if !ok {
+		return
+	}
+	var in struct {
+		Emails string `json:"emails"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		respond.BadRequest(c, "A list of email addresses is required")
+		return
+	}
+	entries, err := eligibility.AddEmails(h.DB, authority.Election.ID, c.GetString("user_id"),
+		in.Emails, time.Now().UTC())
+	if errors.Is(err, eligibility.ErrElectionClosed) {
+		respond.Conflict(c, "The voter list can no longer be changed after voting closes")
+		return
+	}
+	if errors.Is(err, eligibility.ErrRosterFrozen) {
+		respond.Conflict(c, "The roster is frozen after voting opens; use an explicit override")
+		return
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		respond.NotFound(c, "Election not found")
+		return
+	}
+	if err != nil {
+		respond.BadRequest(c, err.Error())
+		return
+	}
+	h.audit(c, authority.Election.ID, "roster.added",
+		"Added "+strconv.Itoa(len(entries))+" voter(s) to "+authority.Election.Title)
+	respond.Created(c, entries, "Voters added to the list")
+}
+
+// Update corrects one roster row's address, student number or name.
+func (h *EligibilityHandler) Update(c *gin.Context) {
+	authority, ok := h.authority(c, policy.PermRosterEdit)
+	if !ok {
+		return
+	}
+	var in struct {
+		Email         *string `json:"email"`
+		FullName      *string `json:"full_name"`
+		StudentNumber *string `json:"student_number"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		respond.BadRequest(c, "The corrected voter details are required")
+		return
+	}
+	entry, err := eligibility.UpdateEntry(h.DB, authority.Election.ID, c.Param("rosterId"),
+		c.GetString("user_id"), eligibility.EntryUpdate{
+			Email: in.Email, FullName: in.FullName, StudentNumber: in.StudentNumber,
+		}, time.Now().UTC())
+	if errors.Is(err, eligibility.ErrElectionClosed) {
+		respond.Conflict(c, "The voter list can no longer be changed after voting closes")
+		return
+	}
+	if errors.Is(err, eligibility.ErrRosterFrozen) {
+		respond.Conflict(c, "The roster is frozen after voting opens; use an explicit override")
+		return
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		respond.NotFound(c, "Roster entry not found")
+		return
+	}
+	if err != nil {
+		respond.BadRequest(c, err.Error())
+		return
+	}
+	h.audit(c, authority.Election.ID, "roster.updated",
+		"Corrected a voter on "+authority.Election.Title)
+	respond.OK(c, entry, "Voter updated")
+}
+
 // SetStatus revokes or restores one roster entry. A reason is mandatory and the
 // change is written to the election audit log.
 func (h *EligibilityHandler) SetStatus(c *gin.Context) {
@@ -167,6 +246,40 @@ func (h *EligibilityHandler) SetStatus(c *gin.Context) {
 	h.audit(c, authority.Election.ID, "roster.status_changed",
 		"Changed roster status to "+entry.Status+" for "+authority.Election.Title)
 	respond.OK(c, entry)
+}
+
+// PreviewCount evaluates the eligibility form as it currently stands, without
+// saving it, so the officer sees the electorate size before committing a rule.
+func (h *EligibilityHandler) PreviewCount(c *gin.Context) {
+	authority, ok := h.authority(c, policy.PermRosterView)
+	if !ok {
+		return
+	}
+	var in struct {
+		AllowedDomain     string `json:"allowed_domain"`
+		AllowedYears      string `json:"allowed_years"`
+		AllowedCourses    string `json:"allowed_courses"`
+		AllowedSexes      string `json:"allowed_sexes"`
+		AllowedResidences string `json:"allowed_residences"`
+		RequireRoster     bool   `json:"require_roster"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		respond.BadRequest(c, "The eligibility rule is required")
+		return
+	}
+	rule := eligibility.Rule{
+		AllowedDomain:     strings.TrimSpace(in.AllowedDomain),
+		AllowedYears:      strings.TrimSpace(in.AllowedYears),
+		AllowedCourses:    strings.TrimSpace(in.AllowedCourses),
+		AllowedSexes:      strings.TrimSpace(in.AllowedSexes),
+		AllowedResidences: strings.TrimSpace(in.AllowedResidences),
+	}
+	total, eligible, err := eligibility.CountForRule(h.DB, authority.Election.ID, rule, in.RequireRoster)
+	if err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	respond.OK(c, gin.H{"total": total, "eligible": eligible})
 }
 
 // Freeze snapshots the eligible count when voting opens. It is idempotent.
