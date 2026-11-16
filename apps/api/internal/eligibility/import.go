@@ -358,9 +358,15 @@ type PreviewView struct {
 }
 
 func (p *Plan) View() PreviewView {
+	// A nil slice serializes as null, which makes every client that reads
+	// `errors.length` throw instead of reporting a clean import.
+	problems := p.Errors
+	if problems == nil {
+		problems = []RowError{}
+	}
 	return PreviewView{
 		Creates: p.Creates, Updates: p.Updates, Unchanged: p.Unchanged,
-		Revokes: p.Revokes, Errors: p.Errors, ContentHash: p.ContentHash,
+		Revokes: p.Revokes, Errors: problems, ContentHash: p.ContentHash,
 	}
 }
 

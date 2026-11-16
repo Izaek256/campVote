@@ -84,6 +84,7 @@ Endpoints:
 | `POST` | `/api/v1/elections/:id/roster/preview` | `rosters.import` |
 | `POST` | `/api/v1/elections/:id/roster/import` | `rosters.import` |
 | `POST` | `/api/v1/elections/:id/roster/:rosterId/status` | `rosters.edit` |
+| `POST` | `/api/v1/elections/:id/eligibility/preview` | `rosters.view` |
 | `POST` | `/api/v1/elections/:id/eligibility/freeze` | `rosters.edit` |
 | `GET` | `/api/v1/elections/:id/eligibility/report` | `rosters.view` |
 
@@ -119,9 +120,13 @@ to the repository or used in tests; tests use synthetic rows only.
 
 ## 5. Freeze, revocation and overrides
 
-- `Freeze` is explicit and only allowed while the election is `OPEN` and inside
-  its schedule. It snapshots `eligibility_frozen_at` and the eligible count and
-  writes `ELIGIBILITY_FROZEN`.
+- Eligibility freezes **automatically when voting opens**. `lifecycle.persist`
+  runs the `OnOpened` hook, which calls `Freeze`; it snapshots
+  `eligibility_frozen_at` and the eligible count and writes
+  `ELIGIBILITY_FROZEN`. There is no manual freeze control in the UI. The
+  `POST /eligibility/freeze` route remains as an idempotent repair for an
+  election opened by an older build.
+- The freeze is allowed while the election is `OPEN` and inside its schedule.
 - After the freeze, imports may **revoke** (`status != ELIGIBLE`) but may not
   add rows, change identity fields, or restore eligibility. Restoring is an
   explicit officer override with its own audit action.
@@ -149,12 +154,20 @@ Election audit actions added for this feature:
 Audit rows contain roster IDs, statuses, reasons and counts. They never contain
 ballot selections or a voter-to-choice mapping.
 
-## 7. Report
+## 7. Report and live count
 
 `GET /api/v1/elections/:id/eligibility/report` returns counts only:
 total, eligible, counts by status, participation, turnout, freeze snapshot and
 the last import batch. It deliberately contains no email, student number, name
 or user ID, and tests assert those strings are absent.
+
+`POST /api/v1/elections/:id/eligibility/preview` counts an **unsaved** rule from
+the staff form, so the counter updates as the officer edits sex, residence,
+year or course. Both endpoints use `eligibility.CountForRule`, which streams
+verified accounts through `FindInBatches` and evaluates batches on a bounded
+worker pool (`runtime.NumCPU()`). Under a restricted election only `ELIGIBLE`
+roster rows count; otherwise every rule match counts unless its row is
+non-`ELIGIBLE`.
 
 ## 8. Open policy questions for stakeholder sign-off
 
@@ -164,8 +177,8 @@ or user ID, and tests assert those strings are absent.
    `TestRevocationAfterVotingLeavesTheBallotStanding`.
 2. **Identity proof:** is verified institutional email acceptable, or must the
    university provide SSO/OIDC that asserts student number and status?
-3. **Freeze timing:** should the snapshot happen automatically when the election
-   opens, or stay a deliberate officer action (current behaviour)?
+3. **Freeze timing (decided):** the snapshot is taken automatically when the
+   election opens; the officer no longer presses a button.
 4. **Duplicate identities:** is email the agreed identity key, or should student
    number be authoritative when the two disagree?
 5. **Who may import:** which officers may upload a roll, and is a second

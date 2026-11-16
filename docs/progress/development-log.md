@@ -653,3 +653,31 @@ Let an administrator build and correct a restricted election's voter list from t
 - The roster still stores whatever address the officer supplies; nothing proves it belongs to the named student.
 - Manually added names default to the email local part until an officer edits them.
 - The profile sex/residence fields are set once by the student and corrected by an administrator, so a wrong value can block a legitimate voter until corrected.
+
+---
+
+## [2026-11-16] Live eligibility counter, automatic freeze, CSV import fix, auditor certification
+
+### Goal
+Make the eligible-voter counter follow the unsaved eligibility form and stay
+fast on a large roll; remove the manual freeze control now that opening freezes
+eligibility; fix the CSV import that failed with a generic error; let an
+assigned auditor certify a closed election.
+
+### Changes
+- **`eligibility/service.go`**: new `CountForRule(db, electionID, rule, requireRoster)`. It streams verified accounts with `FindInBatches` (500 per batch) and evaluates batches on a bounded pool of `runtime.NumCPU()` goroutines. `EligibleCounts` now delegates to it, so report, freeze snapshot and live preview use one counter. Restricted elections count only `ELIGIBLE` roster rows; rule-based elections count matches minus non-`ELIGIBLE` rows.
+- **`handlers/eligibility.go`**: `PreviewCount` serves `POST /api/v1/elections/:id/eligibility/preview` (`rosters.view`) and counts the rule in the request body.
+- **`lifecycle/lifecycle.go`**: new `OnOpened` hook, called from `persist` after an election is written as `OPEN`. **`routes/routes.go`** registers it to `eligibility.Freeze`, so eligibility freezes when voting opens without an officer action.
+- **`eligibility/import.go`**: `Plan.View()` returns `[]` rather than `nil` for `errors`, so a clean preview no longer serializes `"errors": null`.
+- **`policy/election.go` / `models/role.go`**: `ELECTION_AUDITOR` gains `elections.certify`, and `CertifyDecision` accepts an assigned auditor.
+- **Web**: the staff page's Eligible voters and Rule matches KPIs plus the section header now come from a debounced preview call on every form change. The manual Freeze card and button are gone; the freed space is a third KPI so the panel stays symmetrical. CSV import reads `preview.errors ?? []`.
+
+### Checks Run
+- `gofmt`, `go build ./internal/...`, `go vet` on the touched packages.
+- `go test ./internal/eligibility ./internal/handlers ./internal/policy ./internal/lifecycle ./internal/routes ./internal/models -count=1`.
+- `pnpm --filter @campvote/web type-check`, `test` (Vitest), Biome on the changed files.
+
+### Risks / Known limitations
+- The counter reads every verified account on each preview; the debounce keeps that to roughly one call per pause, but a very large database still pays a full scan per preview.
+- The freeze route stays for repair; the UI no longer exposes it.
+- An auditor can certify any election they are assigned to; there is no second-approver rule.

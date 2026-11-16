@@ -163,9 +163,9 @@ func DefaultRoles() []Role {
 		},
 		{
 			Name:        RoleElectionAuditor,
-			Description: "Election observer. Reads authorised evidence and audit records, never ballot choices.",
+			Description: "Election observer. Reads authorised evidence and audit records, and certifies a closed result; never ballot choices.",
 			IsSystem:    true,
-			Grants:      `["elections.view","candidates.view","results.view","audit.view"]`,
+			Grants:      `["elections.view","elections.certify","candidates.view","results.view","audit.view"]`,
 		},
 	}
 }

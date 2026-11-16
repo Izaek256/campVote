@@ -222,6 +222,7 @@ func init() {
 	permitted("rosters.edit", "PUT", "/api/v1/elections/:id/roster/:rosterId")
 	permitted("rosters.view", "GET", "/api/v1/elections/:id/eligibility/report",
 		"/api/v1/elections/:id/roster")
+	permitted("rosters.view", "POST", "/api/v1/elections/:id/eligibility/preview")
 
 	// ── ADMIN only ────────────────────────────────────────────────────────
 	adminOnly("POST", "/api/v1/admin/activity/reseal", "/api/v1/admin/webhooks/:id/replay",

@@ -3,6 +3,7 @@ package eligibility_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -599,5 +600,90 @@ func TestFrozenRuleBasedRosterRefusesManualAdd(t *testing.T) {
 	}
 	if _, err := eligibility.AddEmails(db, election.ID, "officer", studentEmail("2022", "bse", "078"), now); !errors.Is(err, eligibility.ErrRosterFrozen) {
 		t.Fatalf("error = %v, want ErrRosterFrozen", err)
+	}
+}
+
+// The live counter reads the rule it is given, not the saved one, and counts
+// the same electorate the ballot gate would admit: profile restrictions apply,
+// and a restricted election's roster is its whole electorate.
+func TestCountForRuleUsesTheGivenRuleAndRoster(t *testing.T) {
+	db := testDB(t)
+	now := time.Now().UTC()
+	if err := db.Create(&models.ResidenceArea{ID: "area-1", Name: "Hall 3"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.ResidenceArea{ID: "area-2", Name: "Hall 4"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	election := openElection(t, db, "e-count", now.Add(-time.Hour), now.Add(time.Hour))
+
+	// 1200 accounts is more than two countBatch windows, so the batch reader
+	// and the worker pool both run.
+	var users []models.User
+	for i := 0; i < 600; i++ {
+		u := account(studentEmail("2022", "bse", fmt.Sprintf("%03d", i)))
+		u.Sex = models.SexFemale
+		users = append(users, *u)
+	}
+	for i := 0; i < 400; i++ {
+		u := account(studentEmail("2022", "bse", fmt.Sprintf("1%03d", i)))
+		u.Sex = models.SexFemale
+		u.ResidenceAreaID = models.Ptr("area-2")
+		users = append(users, *u)
+	}
+	for i := 0; i < 200; i++ {
+		u := account(studentEmail("2022", "bse", fmt.Sprintf("2%03d", i)))
+		users = append(users, *u)
+	}
+	if err := db.CreateInBatches(users, 200).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	rule := eligibility.Rule{AllowedDomain: "std.mast.ac.ug", AllowedSexes: "FEMALE", AllowedResidences: "Hall 3"}
+	total, eligible, err := eligibility.CountForRule(db, election.ID, rule, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 600 || eligible != 600 {
+		t.Fatalf("rule-based counts = %d/%d, want 600/600", total, eligible)
+	}
+
+	// A restricted election counts only the addresses on its list.
+	if err := db.Model(&models.Election{}).Where("id = ?", election.ID).
+		Update("require_roster", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	listed := rosterEntry(t, db, election.ID, "2022BSE000", studentEmail("2022", "bse", "000"))
+	rosterEntry(t, db, election.ID, "2022BSE001", studentEmail("2022", "bse", "001"))
+	total, eligible, err = eligibility.CountForRule(db, election.ID, rule, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 || eligible != 2 {
+		t.Fatalf("restricted counts = %d/%d, want 2/2", total, eligible)
+	}
+
+	// A revoked row stays listed but no longer counts.
+	if err := db.Model(&models.ElectionRoster{}).Where("id = ?", listed.ID).
+		Update("status", models.RosterStatusSuspended).Error; err != nil {
+		t.Fatal(err)
+	}
+	total, eligible, err = eligibility.CountForRule(db, election.ID, rule, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || eligible != 1 {
+		t.Fatalf("after revocation counts = %d/%d, want 1/1", total, eligible)
+	}
+}
+
+// A clean preview serializes errors as [], not null: clients read .length.
+func TestPreviewViewAlwaysHasAnErrorsArray(t *testing.T) {
+	raw, err := json.Marshal((&eligibility.Plan{}).View())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"errors":[]`) {
+		t.Fatalf("preview = %s, want an empty errors array", raw)
 	}
 }

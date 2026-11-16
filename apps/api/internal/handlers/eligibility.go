@@ -248,6 +248,40 @@ func (h *EligibilityHandler) SetStatus(c *gin.Context) {
 	respond.OK(c, entry)
 }
 
+// PreviewCount evaluates the eligibility form as it currently stands, without
+// saving it, so the officer sees the electorate size before committing a rule.
+func (h *EligibilityHandler) PreviewCount(c *gin.Context) {
+	authority, ok := h.authority(c, policy.PermRosterView)
+	if !ok {
+		return
+	}
+	var in struct {
+		AllowedDomain     string `json:"allowed_domain"`
+		AllowedYears      string `json:"allowed_years"`
+		AllowedCourses    string `json:"allowed_courses"`
+		AllowedSexes      string `json:"allowed_sexes"`
+		AllowedResidences string `json:"allowed_residences"`
+		RequireRoster     bool   `json:"require_roster"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		respond.BadRequest(c, "The eligibility rule is required")
+		return
+	}
+	rule := eligibility.Rule{
+		AllowedDomain:     strings.TrimSpace(in.AllowedDomain),
+		AllowedYears:      strings.TrimSpace(in.AllowedYears),
+		AllowedCourses:    strings.TrimSpace(in.AllowedCourses),
+		AllowedSexes:      strings.TrimSpace(in.AllowedSexes),
+		AllowedResidences: strings.TrimSpace(in.AllowedResidences),
+	}
+	total, eligible, err := eligibility.CountForRule(h.DB, authority.Election.ID, rule, in.RequireRoster)
+	if err != nil {
+		respond.Internal(c, err)
+		return
+	}
+	respond.OK(c, gin.H{"total": total, "eligible": eligible})
+}
+
 // Freeze snapshots the eligible count when voting opens. It is idempotent.
 func (h *EligibilityHandler) Freeze(c *gin.Context) {
 	authority, ok := h.authority(c, policy.PermRosterEdit)

@@ -114,6 +114,7 @@ function Manage({ id }: { id: string }) {
     require_roster: false,
   });
   const [rosterList, setRosterList] = useState<RosterEntry[] | null>(null);
+  const [liveCount, setLiveCount] = useState<{ total: number; eligible: number } | null>(null);
   const [rosterEmails, setRosterEmails] = useState("");
   const [rosterBusy, setRosterBusy] = useState(false);
   const [rosterFile, setRosterFile] = useState<File | null>(null);
@@ -217,6 +218,38 @@ function Manage({ id }: { id: string }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // The counter follows the form, not the saved rule, so an officer sees the
+  // size of the electorate before committing a change. Debounced because every
+  // keystroke would otherwise start a full count on the server.
+  useEffect(() => {
+    if (!election) return;
+    // A restricted election counts its list, so wait for it to load. The roster
+    // is also an input for a rule-based election: revoking a row excludes it.
+    if (eligibility.require_roster && rosterList === null) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      elections
+        .previewEligibility(id, {
+          allowed_domain: eligibility.allowed_domain.trim(),
+          allowed_years: eligibility.allowed_years.trim(),
+          allowed_courses: eligibility.allowed_courses.trim(),
+          allowed_sexes: eligibility.allowed_sexes.trim(),
+          allowed_residences: eligibility.allowed_residences.trim(),
+          require_roster: eligibility.require_roster,
+        })
+        .then((count) => {
+          if (!cancelled) setLiveCount(count);
+        })
+        .catch(() => {
+          if (!cancelled) setLiveCount(null);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [id, election, eligibility, rosterList]);
 
   async function run(action: () => Promise<unknown>, message: string) {
     setBusy(true);
@@ -347,8 +380,9 @@ function Manage({ id }: { id: string }) {
     setRosterBusy(true);
     try {
       const { preview } = await elections.roster.preview(id, rosterFile);
-      if (preview.errors.length > 0) {
-        toast.error(`${preview.errors.length} row(s) are invalid: ${preview.errors[0].reason}`);
+      const problems = preview.errors ?? [];
+      if (problems.length > 0) {
+        toast.error(`${problems.length} row(s) are invalid: ${problems[0].reason}`);
         return;
       }
       await elections.roster.import(id, rosterFile);
@@ -609,40 +643,22 @@ function Manage({ id }: { id: string }) {
         </p>
       ))}
 
-      <div className="grid2" style={{ marginBottom: 20 }}>
-        <div className="panel">
-          <div className="kpis" style={{ gridTemplateColumns: "1fr 1fr" }}>
-            <div className="kpi">
-              <span className="l">Eligible voters</span>
-              <span className="v">{formatNumber(report?.eligible ?? 0)}</span>
-              <span className="s">{frozen ? "frozen roster" : "roster not frozen"}</span>
-            </div>
-            <div className="kpi">
-              <span className="l">Turnout</span>
-              <span className="v">{formatPercent(report?.turnout_percent ?? 0)}</span>
-              <span className="s">of {formatNumber(report?.eligible ?? 0)} eligible</span>
-            </div>
+      <div className="panel" style={{ marginBottom: 20 }}>
+        <div className="kpis" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+          <div className="kpi">
+            <span className="l">Eligible voters</span>
+            <span className="v">{formatNumber(liveCount?.eligible ?? report?.eligible ?? 0)}</span>
+            <span className="s">matches the rule as edited</span>
           </div>
-        </div>
-        <div className="panel stack">
-          <span className="lbl">Eligibility</span>
-          <p className="hint">
-            {frozen
-              ? `Frozen at ${formatEAT(election.eligibility_frozen_at ?? "")} with ${formatNumber(
-                  election.eligibility_frozen_count
-                )} voters.`
-              : "Freezing records the eligible count when voting opens. It is idempotent."}
-          </p>
-          <div className="row">
-            <button
-              type="button"
-              className="btn sm"
-              disabled={busy || frozen}
-              onClick={() => run(() => elections.freeze(id), "Eligibility frozen.")}
-            >
-              <Icon name="lock" size="s" />
-              {frozen ? "Frozen" : "Freeze eligibility"}
-            </button>
+          <div className="kpi">
+            <span className="l">Rule matches</span>
+            <span className="v">{formatNumber(liveCount?.total ?? report?.total ?? 0)}</span>
+            <span className="s">accounts matching the rule</span>
+          </div>
+          <div className="kpi">
+            <span className="l">Turnout</span>
+            <span className="v">{formatPercent(report?.turnout_percent ?? 0)}</span>
+            <span className="s">of {formatNumber(report?.eligible ?? 0)} eligible</span>
           </div>
         </div>
       </div>
@@ -651,7 +667,11 @@ function Manage({ id }: { id: string }) {
         <div className="section-h" style={{ marginTop: 0 }}>
           <h2>Eligibility rule</h2>
           <span className="mono">
-            {report ? `${formatNumber(report.eligible)} registered users match` : "count loading"}
+            {liveCount
+              ? `${formatNumber(liveCount.total)} registered users match`
+              : report
+                ? `${formatNumber(report.total)} registered users match`
+                : "count loading"}
           </span>
         </div>
         <form className="form-stack" onSubmit={saveEligibility}>

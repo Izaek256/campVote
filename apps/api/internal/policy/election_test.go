@@ -233,3 +233,19 @@ func TestCertifyIsOpenToTheCreatorAndAnyAssignedOfficial(t *testing.T) {
 		t.Errorf("unassigned official authority = %v, want ErrNotVisible", err)
 	}
 }
+
+func TestAssignedAuditorMayCertifyAClosedElection(t *testing.T) {
+	db := testDB(t)
+	user(t, db, "creator", models.RoleChiefElectionAdmin)
+	user(t, db, "auditor", models.RoleElectionAuditor)
+	election(t, db, "e-a", models.ElectionStatusClosed, models.ResultPolicyAfterClose, "creator")
+	assign(t, db, "e-a", "auditor", models.RoleElectionAuditor)
+
+	a, err := policy.AuthorityFor(db, actor(t, db, "auditor"), "e-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, reason := policy.CertifyDecision(db, a, actor(t, db, "auditor")); !ok {
+		t.Errorf("an assigned auditor should certify a closed result: %s", reason)
+	}
+}

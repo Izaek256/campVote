@@ -37,11 +37,12 @@ stored.
 - `POST /api/v1/elections/:id/roster/:rosterId/status` revokes or restores one
   row with a mandatory reason, written to the election audit log.
 
-For an unrestricted election the existing freeze still applies: after voting
-opens, new entries are refused. For a restricted election the freeze is skipped,
-because the list *is* the electorate and an officer may still need to add or
-remove a name while polls are open. Both kinds refuse changes once the election
-is closed or its end time has passed (`ErrElectionClosed`, HTTP 409).
+For an unrestricted election the existing freeze still applies: it is taken
+automatically when voting opens, and from then on new entries are refused. For a
+restricted election the freeze is skipped, because the list *is* the electorate
+and an officer may still need to add or remove a name while polls are open. Both
+kinds refuse changes once the election is closed or its end time has passed
+(`ErrElectionClosed`, HTTP 409).
 
 A revoked row no longer grants visibility: the audience check counts only
 `ELIGIBLE` rows, so removing a voter takes them off both the list and the ballot.

@@ -562,6 +562,12 @@ export const elections = {
       }),
   },
   eligibility: (id: string) => api<EligibilityDecision>(`/elections/${id}/eligibility`),
+  /** Count the electorate for an eligibility rule the officer has not saved yet. */
+  previewEligibility: (id: string, body: Record<string, unknown>) =>
+    api<{ total: number; eligible: number }>(`/elections/${id}/eligibility/preview`, {
+      method: "POST",
+      body,
+    }),
   report: (id: string) => api<EligibilityReport>(`/elections/${id}/eligibility/report`),
   roster: {
     list: (id: string) => api<RosterEntry[]>(`/elections/${id}/roster`),
@@ -592,10 +598,6 @@ export const elections = {
         body: { status: "ELIGIBLE", reason },
       }),
   },
-  freeze: (id: string) =>
-    api<{ frozen_at: string; frozen_count: number }>(`/elections/${id}/eligibility/freeze`, {
-      method: "POST",
-    }),
   ballot: (id: string) => api<Ballot>(`/elections/${id}/ballot`),
   startBallot: (id: string) =>
     api<{

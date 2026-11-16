@@ -8,9 +8,10 @@
 `POST /api/v1/elections/:id/results/certify` requires:
 
 - the `elections.certify` permission on the election (a global administrator,
-  the creator, or an assigned `CHIEF_ELECTION_ADMIN`);
+  the creator, an assigned `CHIEF_ELECTION_ADMIN`, or an assigned
+  `ELECTION_AUDITOR`);
 - the election to be `CLOSED`;
-- the actor to be the creator, an assigned official/chief, or a global
+- the actor to be the creator, an assigned official/chief/auditor, or a global
   administrator.
 
 The previous rule refused the creator and required a second assigned official,

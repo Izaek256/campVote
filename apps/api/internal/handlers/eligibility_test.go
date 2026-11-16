@@ -45,6 +45,7 @@ func eligibilityEngine(t *testing.T, db *gorm.DB) *gin.Engine {
 	staff.PUT("/api/v1/elections/:id/roster/:rosterId", eh.Update)
 	staff.POST("/api/v1/elections/:id/roster/:rosterId/status", eh.SetStatus)
 	staff.POST("/api/v1/elections/:id/eligibility/freeze", eh.Freeze)
+	staff.POST("/api/v1/elections/:id/eligibility/preview", eh.PreviewCount)
 	staff.GET("/api/v1/elections/:id/eligibility/report", eh.Report)
 	return r
 }
@@ -338,6 +339,32 @@ func TestRosterImportPreviewCommitFreezeAndReport(t *testing.T) {
 	if audits < 3 {
 		t.Errorf("audit events = %d, want import, freeze and revocation", audits)
 	}
+}
+
+func TestEligibilityPreviewCountUsesTheUnsavedRule(t *testing.T) {
+	db := rbacDB(t)
+	now := time.Now().UTC()
+	ballotElection(t, db, "e-a", now.Add(-time.Hour), now.Add(time.Hour))
+	chief := testkit.User(t, db, "chief@must.ac.ug", models.RoleChiefElectionAdmin)
+	testkit.User(t, db, "2022bse001@std.mast.ac.ug", models.RoleStudentVoter)
+	testkit.User(t, db, "2023bcs002@std.mast.ac.ug", models.RoleStudentVoter)
+	cfg := testkit.Config()
+	auth := testkit.Auth(cfg, db)
+	client := testkit.New(t, eligibilityEngine(t, db))
+	chiefToken := testkit.SignIn(t, db, auth, chief)
+
+	client.As(chiefToken).Post("/api/v1/elections/e-a/eligibility/preview", map[string]any{
+		"allowed_domain": "std.mast.ac.ug",
+	}).AssertOK().JSON().Where("data.total", 2).Where("data.eligible", 2)
+
+	// The preview follows the form values, not the saved rule.
+	client.As(chiefToken).Post("/api/v1/elections/e-a/eligibility/preview", map[string]any{
+		"allowed_domain": "std.mast.ac.ug", "allowed_years": "2022",
+	}).AssertOK().JSON().Where("data.total", 1)
+
+	client.As(chiefToken).Post("/api/v1/elections/e-a/eligibility/preview", map[string]any{
+		"allowed_domain": "std.mast.ac.ug", "allowed_sexes": "FEMALE",
+	}).AssertOK().JSON().Where("data.total", 0)
 }
 
 func listed(t *testing.T, db *gorm.DB, electionID, student, email string) *models.ElectionRoster {

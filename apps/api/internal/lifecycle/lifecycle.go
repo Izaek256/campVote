@@ -37,6 +37,10 @@ const SystemActor = "system"
 // the durable fact, and Read retries a missing snapshot.
 var OnClosed func(db *gorm.DB, election *models.Election, at time.Time) error
 
+// OnOpened runs after an election has been persisted as OPEN. It snapshots the
+// electorate, so eligibility freezes with voting rather than by a manual step.
+var OnOpened func(db *gorm.DB, election *models.Election, at time.Time) error
+
 var (
 	// ErrIllegalTransition is returned for a state pair the machine forbids.
 	ErrIllegalTransition = errors.New("illegal election transition")
@@ -386,6 +390,11 @@ func persist(db *gorm.DB, e *models.Election, to, actorID, reason, ip string, at
 	// Reload so Version and UpdatedAt describe the row that was written.
 	if err := db.Where("id = ?", e.ID).First(e).Error; err != nil {
 		return nil, err
+	}
+	if to == models.ElectionStatusOpen && OnOpened != nil {
+		if hookErr := OnOpened(db, e, at); hookErr != nil {
+			log.Printf("lifecycle: freeze on open for election %s failed: %v", e.ID, hookErr)
+		}
 	}
 	if to == models.ElectionStatusClosed && OnClosed != nil {
 		if hookErr := OnClosed(db, e, at); hookErr != nil {

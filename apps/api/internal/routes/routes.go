@@ -22,6 +22,7 @@ import (
 	"campvote/apps/api/internal/cache"
 	"campvote/apps/api/internal/config"
 	"campvote/apps/api/internal/database"
+	"campvote/apps/api/internal/eligibility"
 	"campvote/apps/api/internal/events"
 	"campvote/apps/api/internal/flags"
 	"campvote/apps/api/internal/handlers"
@@ -852,6 +853,12 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 	// election. It is idempotent and records the first provisional tally;
 	// Read retries a missing one after a restart or a failed hook.
 	lifecycle.OnClosed = results.OnClose
+	// Eligibility freezes when voting opens. The hook lives here because
+	// lifecycle must not import eligibility; the snapshot is idempotent.
+	lifecycle.OnOpened = func(db *gorm.DB, election *models.Election, at time.Time) error {
+		_, err := eligibility.Freeze(db, election.ID, lifecycle.SystemActor, at)
+		return err
+	}
 	// A new snapshot is broadcast on a public channel named for the election.
 	// The payload says only that results changed: the results endpoint still
 	// applies the publication policy, and no count rides the socket.
@@ -1612,6 +1619,7 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		staff.PUT("/elections/:id/roster/:rosterId", eligibilityHandler.Update)
 		staff.POST("/elections/:id/roster/:rosterId/status", eligibilityHandler.SetStatus)
 		staff.POST("/elections/:id/eligibility/freeze", eligibilityHandler.Freeze)
+		staff.POST("/elections/:id/eligibility/preview", eligibilityHandler.PreviewCount)
 		staff.GET("/elections/:id/eligibility/report", eligibilityHandler.Report)
 
 		// ISSUE-10: Audit evidence reports
