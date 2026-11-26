@@ -11,7 +11,7 @@ import { StaffShell } from "@/components/staff-shell";
 import { useToast } from "@/components/toast";
 import { ApiError, elections, positions } from "@/lib/api";
 import { scrollIntoView } from "@/lib/scroll-into-view";
-import type { Election, Position } from "@/lib/types";
+import type { Election, Position, PositionSelections } from "@/lib/types";
 
 type Form = {
   title: string;
@@ -23,6 +23,7 @@ type Form = {
   max_selections: number;
   allow_blank: boolean;
   display_order: number;
+  admin_selected: boolean;
 };
 
 const emptyForm: Form = {
@@ -35,6 +36,7 @@ const emptyForm: Form = {
   max_selections: 1,
   allow_blank: true,
   display_order: 0,
+  admin_selected: false,
 };
 
 function Manage({ id }: { id: string }) {
@@ -46,6 +48,10 @@ function Manage({ id }: { id: string }) {
   const [editing, setEditing] = useState<Position | "new" | null>(null);
   const [form, setForm] = useState<Form>(emptyForm);
   const [deleting, setDeleting] = useState<Position | null>(null);
+  const [selectedFor, setSelectedFor] = useState<Position | null>(null);
+  const [selections, setSelections] = useState<PositionSelections | null>(null);
+  const [inviteEmails, setInviteEmails] = useState("");
+  const [selectBusy, setSelectBusy] = useState(false);
   const editorRef = useRef<HTMLFormElement>(null);
 
   const load = useCallback(async () => {
@@ -87,6 +93,7 @@ function Manage({ id }: { id: string }) {
       max_selections: position.max_selections,
       allow_blank: position.allow_blank,
       display_order: position.display_order,
+      admin_selected: position.admin_selected ?? false,
     });
   }
 
@@ -111,6 +118,41 @@ function Manage({ id }: { id: string }) {
       toast.error(err instanceof ApiError ? err.message : "The position could not be saved.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function openSelections(position: Position) {
+    setSelectedFor(position);
+    setSelections(null);
+    setInviteEmails("");
+    try {
+      setSelections(await positions.selections(id, position.id));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Selections could not be loaded.");
+    }
+  }
+
+  async function invite() {
+    if (!selectedFor) return;
+    const emails = inviteEmails
+      .split(/[\s,;]+/)
+      .map((email) => email.trim())
+      .filter(Boolean);
+    if (emails.length === 0) {
+      toast.error("Add at least one student email.");
+      return;
+    }
+    setSelectBusy(true);
+    try {
+      await positions.inviteSelected(id, selectedFor.id, emails);
+      toast.success("Candidates selected.");
+      setInviteEmails("");
+      await openSelections(selectedFor);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The selection could not be saved.");
+    } finally {
+      setSelectBusy(false);
     }
   }
 
@@ -312,6 +354,22 @@ function Manage({ id }: { id: string }) {
                 number of seats or candidates.
               </span>
             </div>
+            <div className="field full">
+              <label className="chk">
+                <input
+                  type="checkbox"
+                  checked={form.admin_selected}
+                  onChange={(event) =>
+                    setForm({ ...form, admin_selected: event.target.checked })
+                  }
+                />
+                <span>Administrator selects the candidates</span>
+              </label>
+              <span className="hint">
+                Only the emails you invite may stand. Ordinary applications are closed for this
+                position, and a selected candidate must publish a manifesto before voting opens.
+              </span>
+            </div>
           </div>
           <div className="row">
             <button className="btn primary" type="submit" disabled={busy}>
@@ -376,6 +434,9 @@ function Manage({ id }: { id: string }) {
                         {position.description}
                       </span>
                     ) : null}
+                    {position.admin_selected ? (
+                      <span className="chip review">Administrator-selected</span>
+                    ) : null}
                     {position.requirements ? (
                       <>
                         <span className="candidate-meta clamp-2" title={position.requirements}>
@@ -399,6 +460,15 @@ function Manage({ id }: { id: string }) {
                   </td>
                   <td className="r">
                     <span className="row" style={{ justifyContent: "flex-end" }}>
+                      {position.admin_selected ? (
+                        <button
+                          type="button"
+                          className="btn sm primary"
+                          onClick={() => openSelections(position)}
+                        >
+                          Candidates
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="btn sm"
@@ -422,6 +492,64 @@ function Manage({ id }: { id: string }) {
             </tbody>
           </table>
         </div>
+      ) : null}
+
+      {selectedFor ? (
+        <section className="panel stack" style={{ marginTop: 20 }}>
+          <div className="section-h" style={{ marginTop: 0 }}>
+            <h2>Selected candidates — {selectedFor.title}</h2>
+            <button type="button" className="btn sm ghost" onClick={() => setSelectedFor(null)}>
+              Close
+            </button>
+          </div>
+          <p className="hint" style={{ margin: 0 }}>
+            Only these emails may stand. Each person accepts the invitation, adds their details and
+            publishes a manifesto; no transcript or approval step is needed.
+          </p>
+          <div className="field">
+            <label htmlFor="invite-emails">Invite student emails</label>
+            <textarea
+              id="invite-emails"
+              className="ta"
+              rows={3}
+              value={inviteEmails}
+              onChange={(event) => setInviteEmails(event.target.value)}
+              placeholder="2024bse088@std.mast.ac.ug, 2024bse089@std.mast.ac.ug"
+            />
+            <span className="hint">Separate addresses with commas, spaces or new lines.</span>
+          </div>
+          <div className="row">
+            <button type="button" className="btn primary" onClick={invite} disabled={selectBusy}>
+              {selectBusy ? "Saving…" : "Select candidates"}
+            </button>
+          </div>
+          {selections === null ? (
+            <span className="hint">Loading selections…</span>
+          ) : selections.candidates.length === 0 ? (
+            <span className="hint">Nobody selected yet.</span>
+          ) : (
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Name</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selections.candidates.map((candidate) => (
+                    <tr key={candidate.id}>
+                      <td>{candidate.invited_email}</td>
+                      <td>{candidate.full_name === candidate.invited_email ? "—" : candidate.full_name}</td>
+                      <td>{candidate.approval_status.replaceAll("_", " ").toLowerCase()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       ) : null}
 
       <ConfirmDialog

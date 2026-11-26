@@ -320,7 +320,14 @@ export interface RecountResult {
   ballots_unchanged: boolean;
 }
 
-export type CandidateStatus = "NOMINATED" | "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+export type CandidateStatus =
+  | "SELECTED"
+  | "ACCEPTED"
+  | "NOMINATED"
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "WITHDRAWN";
 
 export interface Candidate {
   id: string;
@@ -338,6 +345,9 @@ export interface Candidate {
   approval_status: CandidateStatus | string;
   review_notes?: string;
   nominated_by?: string;
+  /** Present when an administrator selected this person for the position. */
+  invited_email?: string;
+  accepted_at?: string | null;
   reviewed_at?: string | null;
   withdrawn_at?: string | null;
   withdrawal_reason?: string;
@@ -395,6 +405,8 @@ export interface Position {
   status: PositionStatus | string;
   /** Cap on approved candidates; 0 means no limit. */
   max_candidates: number;
+  /** Administrator invites specific emails; ordinary applications are closed. */
+  admin_selected: boolean;
   /** Candidate eligibility rule: required domain plus optional year/course lists. */
   allowed_domain?: string;
   allowed_years?: string;
@@ -424,6 +436,12 @@ export interface PositionApplications {
   position: Position;
   applications: Candidate[];
   approved_count: number;
+}
+
+/** The invited/accepted candidates for an administrator-selected position. */
+export interface PositionSelections {
+  position: Position;
+  candidates: Candidate[];
 }
 
 export interface CandidateApplicationView {

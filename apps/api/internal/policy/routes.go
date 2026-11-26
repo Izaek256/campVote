@@ -176,13 +176,17 @@ func init() {
 	authenticated("GET", "/api/v1/candidates/my")
 	authenticated("POST", "/api/v1/elections/:id/candidates/apply",
 		"/api/v1/candidates/my/:candidate_id/withdraw",
+		"/api/v1/candidates/my/:candidate_id/accept",
+		"/api/v1/candidates/my/:candidate_id/submit",
 		"/api/v1/candidates/my/:candidate_id/ballot-photo",
 		"/api/v1/candidates/my/:candidate_id/manifesto")
 
 	// Officer candidate review and ballot definition (ISSUE-06). These were
 	// registered without a policy, so the guard denied every one of them.
-	permitted("candidates.view", "GET", "/api/v1/elections/:id/candidates")
-	permitted("candidates.create", "POST", "/api/v1/elections/:id/candidates")
+	permitted("candidates.view", "GET", "/api/v1/elections/:id/candidates",
+		"/api/v1/elections/:id/positions/:position_id/selections")
+	permitted("candidates.create", "POST", "/api/v1/elections/:id/candidates",
+		"/api/v1/elections/:id/positions/:position_id/selections")
 	permitted("candidates.edit", "PUT", "/api/v1/elections/:id/candidates/:candidate_id",
 		"/api/v1/elections/:id/positions/:position_id")
 	permitted("candidates.review", "POST", "/api/v1/elections/:id/candidates/:candidate_id/approve",

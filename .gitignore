@@ -42,5 +42,9 @@ Thumbs.db
 # Local tooling state
 .vercel/
 
+# Agent/IDE tooling metadata (not application code)
+.agents/
+skills-lock.json
+
 .vercel
 .env*

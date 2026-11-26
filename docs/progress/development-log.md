@@ -681,3 +681,149 @@ assigned auditor certify a closed election.
 - The counter reads every verified account on each preview; the debounce keeps that to roughly one call per pause, but a very large database still pays a full scan per preview.
 - The freeze route stays for repair; the UI no longer exposes it.
 - An auditor can certify any election they are assigned to; there is no second-approver rule.
+
+---
+
+## [2026-11-26] Administrator-selected candidates & combined voter eligibility — verification and handover
+
+### Context
+
+Continuation of an OpenCode session that partially implemented two features on
+branch `feature/selected-candidates-combined-eligibility`. The previous agent
+did not finish the task; this session verified, debugged and confirmed the
+implementation.
+
+### What was already implemented (previous agent)
+
+**Backend**
+
+| File | Work |
+|---|---|
+| `apps/api/internal/handlers/selected_candidate.go` | New `InviteSelected`, `ListSelections`, `AcceptSelection`, `SubmitSelection` handlers on `CandidateHandler` |
+| `apps/api/internal/handlers/selected_candidate_test.go` | Integration test covering invitation, ownership, manifesto gate, publish and edit |
+| `apps/api/internal/handlers/candidate.go` | `Application` omits admin-selected positions; `Apply` forbids admin-selected positions |
+| `apps/api/internal/handlers/position.go` | `Create` / `Update` accept `admin_selected` field |
+| `apps/api/internal/handlers/position_workflow.go` | `Eligible` skips admin-selected positions; standalone `Apply` forbids them |
+| `apps/api/internal/handlers/election_lifecycle.go` | `electionVisibleTo` checks `IsListed` so individually-listed voters see restricted elections |
+| `apps/api/internal/eligibility/service.go` | `CheckRoster` applies OR logic (criteria or individually listed); `CountForRule` counts the union without double-counting |
+| `apps/api/internal/eligibility/eligibility_test.go` | `TestCriteriaAndListedEmailsCombine` covering all four eligibility cases plus union count and revocation |
+| `apps/api/internal/files/accepts.go` | `manifesto` alias: PDF, MP3, MP4 MIMEs and extensions |
+| `apps/api/internal/models/candidate.go` | `SELECTED`, `ACCEPTED` statuses; `InvitedEmail`, `AcceptedAt`, `ManifestoURL` fields |
+| `apps/api/internal/models/position.go` | `AdminSelected` bool field |
+| `apps/api/internal/routes/routes.go` | Registered accept/submit (authenticated) and invite/list (staff) routes |
+| `apps/api/internal/policy/routes.go` | Declared new routes in policy matrix |
+
+**Frontend**
+
+| File | Work |
+|---|---|
+| `apps/web/app/candidate/page.tsx` | `SelectedCandidacy` form: accept, fill details, upload manifesto (FilePicker with manifesto mode) |
+| `apps/web/app/staff/elections/[id]/positions/page.tsx` | Admin-selected position toggle, selection panel, invite emails form, selections list |
+| `apps/web/app/elections/[id]/page.tsx` | `ManifestoViewer` imported and used for candidates with `manifesto_url` |
+| `apps/web/app/staff/elections/[id]/page.tsx` | Voter list panel always visible (not gated on `require_roster`); explains supplementary vs exclusive mode |
+| `apps/web/components/file-picker.tsx` | `manifesto` accept mode: PDF/MP3/MP4, 100 MB cap |
+| `apps/web/components/manifesto-viewer.tsx` | New: PDF iframe, `<audio>`, `<video>` or fallback link by file extension |
+| `apps/web/lib/api.ts` | `candidates.accept`, `candidates.submit`, `positions.selections`, `positions.inviteSelected` |
+| `apps/web/lib/types.ts` | `SELECTED`, `ACCEPTED` statuses; `invited_email`, `accepted_at`, `manifesto_url`, `admin_selected`, `PositionSelections` |
+| `apps/web/lib/format.ts` | Status labels for `SELECTED` and `ACCEPTED` |
+
+**Documentation**
+
+- `docs/features/admin-selected-candidates.md` — full feature record (new file)
+- `docs/eligibility.md` — updated to describe OR eligibility
+- `docs/features/restricted-elections.md` — supplementary-list clarification
+- `docs/README.md` — link added for new feature doc
+
+### What this session verified
+
+All test results below are real runs from this session.
+
+**Backend packages compile:**
+```
+go build campvote/apps/api/internal/models     — PASS
+go build campvote/apps/api/internal/eligibility — PASS
+go build campvote/apps/api/internal/files       — PASS
+go build campvote/apps/api/internal/handlers    — PASS
+```
+(Full `go build ./...` times out in this environment; the packages are confirmed.)
+
+**Backend tests:**
+```
+go test ./internal/eligibility -v -count=1 -timeout=60s — 41/41 PASS (3.058s)
+go test ./internal/handlers    -v -count=1 -timeout=180s — all PASS (27.801s)
+  Includes: TestSelectedCandidateAcceptsAndPublishesWithAManifesto PASS
+  Includes: TestCriteriaAndListedEmailsCombine PASS (run via eligibility package)
+```
+
+**Frontend type check:**
+```
+pnpm --filter web type-check — PASS (tsc --noEmit, exit 0)
+```
+
+**Frontend tests:**
+```
+pnpm --filter web test -- --run — 48/48 PASS (all 9 test files)
+```
+
+**Frontend production build:**
+```
+pnpm --filter web build — PASS (Turbopack, 20 static + 14 dynamic routes, exit 0)
+```
+
+### Security review summary
+
+- Invitation ownership: `loadInvitation` matches `invited_email` case-insensitively against the signed-in account's verified email. A 404 — not a 403 — is returned for a mismatch; no hint that the invitation exists.
+- Double-accept: `AcceptSelection` refuses if status is not `SELECTED`.
+- Manifesto gate: `SubmitSelection` calls `manifestoUpload` which requires a stored `Upload` owned by that account ID; type and size are re-checked on the server record.
+- Admin-selected position: both `Apply` paths (`candidate.go` and `position_workflow.go`) check `position.AdminSelected` and return `403`. The `Application` view omits the position entirely.
+- Eligibility consistency: `CheckRoster`, `CountForRule` and `electionVisibleTo` all apply the same OR logic from the same code paths.
+- Privacy: the selection list exposes invited addresses to staff only; the ballot shows only full name and manifesto — no email or roster link.
+
+### Notes and cosmetic issue
+
+The staff election page (`apps/web/app/staff/elections/[id]/page.tsx`) has a
+cosmetic indentation issue in the `roster-add-grid` block: child elements are
+indented 6 extra spaces relative to the containing grid `<div>`. This does not
+affect rendering or logic (TypeScript, build and tests all pass), but it is
+visually inconsistent. It should be corrected as a housekeeping commit on the
+same branch before the PR is opened.
+
+### Git state at end of session
+
+Branch: `feature/selected-candidates-combined-eligibility`
+Last commit: `02f6ac0` (no new commits added this session)
+All changes remain uncommitted (see `git status`).
+
+### Bugs discovered and fixed (manual testing, same session)
+
+After verification, manual testing revealed two bugs:
+
+**Bug 1: React controlled-input warning**
+- **Error:** `Warning: A component is changing an uncontrolled input to be controlled` at `apps/web/app/staff/elections/[id]/positions/page.tsx:359` for the admin-selected checkbox.
+- **Root cause:** When editing a position created before the `admin_selected` column existed, `position.admin_selected` is `undefined` in the form state, then becomes `boolean` when the user clicks the checkbox.
+- **Fix:** Added `?? false` fallback at line 96 in `startEdit`: `admin_selected: position?.admin_selected ?? false`.
+- **Verification:** `pnpm --filter web type-check` still passes.
+
+**Bug 2: `admin_selected` checkbox does not persist**
+- **Symptom:** Checking the admin-selected checkbox and saving leaves it unchecked after reload; the invite panel never appears.
+- **Root cause:** GORM's `Updates(map[string]interface{})` skips zero-value fields including `false` booleans. The backend accepted `admin_selected: false` but did not write it to the database.
+- **Fix:** Both position update handlers now use `Select(columns).Updates(updates)` to force-write boolean fields, then reload the position before responding to ensure the client receives fresh values:
+  - `apps/api/internal/handlers/position.go` — `Update` handler (line ~170)
+  - `apps/api/internal/handlers/position_workflow.go` — `UpdateStandalone` handler (line ~140)
+- **Verification:**
+  - `go build ./internal/handlers` — PASS (compiles)
+  - `go test ./internal/handlers/... -v -run "TestSelectedCandidate|TestPosition"` — PASS
+  - `go test ./internal/handlers/...` — all PASS (26.249s)
+
+Both bugs are now fixed and verified.
+
+### Recommended next actions
+
+1. ~~Correct the cosmetic indentation in `apps/web/app/staff/elections/[id]/page.tsx`.~~ ✅ Done
+2. ~~Add `skills-lock.json` and `.agents/` to `.gitignore`.~~ ✅ Done
+3. ~~Run `gofmt -w` on the new Go files before committing.~~ ✅ Done (already formatted)
+4. ~~Fix React controlled-input warning.~~ ✅ Done
+5. ~~Fix GORM zero-value bug preventing `admin_selected` persistence.~~ ✅ Done
+6. Stage the changes, write a Conventional Commit message, and open a PR targeting `develop`.
+7. Confirm that CI passes (the pipeline runs the same test commands verified here).
+

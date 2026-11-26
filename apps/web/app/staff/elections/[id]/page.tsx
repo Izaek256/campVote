@@ -854,230 +854,220 @@ function Manage({ id }: { id: string }) {
         <div className="section-h" style={{ marginTop: 0 }}>
           <h2>Voter list</h2>
           <span className="mono">
-            {rosterEnabled
-              ? rosterList
-                ? `${rosterList.length} listed`
-                : "loading"
-              : "not in use"}
+            {rosterList ? `${rosterList.length} listed` : "loading"}
           </span>
         </div>
-        {rosterEnabled ? (
-          <>
-            {eligibility.require_roster !== election.require_roster ? (
-              <p className="hint" style={{ marginTop: 0 }}>
-                Save the eligibility rule above to apply this change.
-              </p>
-            ) : null}
-            <p className="hint" style={{ marginTop: 0 }}>
-              Only these emails see the election and may vote in it. Add them by pasting addresses
-              or by importing a CSV; both write to the same list. Removing a voter revokes
-              eligibility and keeps the row for the audit trail.
+        {eligibility.require_roster !== election.require_roster ? (
+          <p className="hint" style={{ marginTop: 0 }}>
+            Save the eligibility rule above to apply the list-only change.
+          </p>
+        ) : null}
+        <p className="hint" style={{ marginTop: 0 }}>
+          {rosterEnabled
+            ? "Only these emails see the election and may vote in it."
+            : "These emails are additionally eligible, even when the rule above does not match them. Everyone the rule matches stays eligible too."}{" "}
+          Add them by pasting addresses or by importing a CSV; both write to the same list. Removing
+          a voter revokes eligibility and keeps the row for the audit trail.
+        </p>
+        <div className="roster-add-grid">
+          <div className="roster-add-card">
+            <h3>Paste email addresses</h3>
+            <p className="hint">
+              One address per line, or separate them with commas. The server trims, lower-cases,
+              de-duplicates and validates every address before adding any of them.
             </p>
-            <div className="roster-add-grid">
-              <div className="roster-add-card">
-                <h3>Paste email addresses</h3>
-                <p className="hint">
-                  One address per line, or separate them with commas. The server trims, lower-cases,
-                  de-duplicates and validates every address before adding any of them.
-                </p>
-                <form className="form-stack" onSubmit={addRosterEmails}>
-                  <div className="field">
-                    <label htmlFor="roster-emails">Email addresses</label>
-                    <textarea
-                      id="roster-emails"
-                      className="ta"
-                      rows={4}
-                      value={rosterEmails}
-                      onChange={(event) => setRosterEmails(event.target.value)}
-                      placeholder={"2024bse088@std.must.ac.ug\n2024bse089@std.must.ac.ug"}
-                    />
+            <form className="form-stack" onSubmit={addRosterEmails}>
+              <div className="field">
+                <label htmlFor="roster-emails">Email addresses</label>
+                <textarea
+                  id="roster-emails"
+                  className="ta"
+                  rows={4}
+                  value={rosterEmails}
+                  onChange={(event) => setRosterEmails(event.target.value)}
+                  placeholder={"2024bse088@std.must.ac.ug\n2024bse089@std.must.ac.ug"}
+                />
+              </div>
+              <div>
+                <button className="btn primary" type="submit" disabled={rosterBusy}>
+                  {rosterBusy ? "Working…" : "Add to list"}
+                </button>
+              </div>
+            </form>
+          </div>
+          <div className="roster-add-card">
+            <h3>Import a CSV</h3>
+            <p className="hint">
+              Required columns: <span className="mono">student_number</span>,{" "}
+              <span className="mono">email</span> and <span className="mono">full_name</span>.
+              Download the template, fill it in Excel, then save it as CSV and import it here.
+              Re-importing updates rows in place.
+            </p>
+            <div className="row">
+              <button type="button" className="btn sm" onClick={downloadRosterTemplate}>
+                <Icon name="download" size="s" />
+                Download CSV template
+              </button>
+            </div>
+            <form className="form-stack" onSubmit={importRoster}>
+              <div
+                className={`file-picker ${rosterFileError ? "bad" : ""} ${
+                  rosterDragActive ? "drag-active" : ""
+                }`}
+                onDragEnter={handleRosterDrag}
+                onDragLeave={handleRosterDrag}
+                onDragOver={handleRosterDrag}
+                onDrop={handleRosterDrop}
+              >
+                <input
+                  ref={rosterFileRef}
+                  id="roster-file"
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="file-picker-input"
+                  onChange={(event) => pickRosterFile(event.target.files?.[0] ?? null)}
+                  disabled={rosterBusy}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                />
+                {rosterFile ? (
+                  <div className="file-picker-filled">
+                    <div className="file-picker-preview-wrapper">
+                      <div className="file-picker-preview file-picker-preview-pdf">
+                        <Icon name="file" size="s" />
+                      </div>
+                    </div>
+                    <div className="file-picker-filename">
+                      <span className="lbl">Selected file</span>
+                      <span className="hint">{rosterFile.name}</span>
+                    </div>
+                    <div className="row" style={{ gap: 8 }}>
+                      <button
+                        type="button"
+                        className="btn sm ghost"
+                        onClick={() => rosterFileRef.current?.click()}
+                        disabled={rosterBusy}
+                      >
+                        <Icon name="refresh" size="s" />
+                        <span>Replace</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn sm danger-o"
+                        onClick={clearRosterFile}
+                        disabled={rosterBusy}
+                        title="Remove file"
+                      >
+                        <Icon name="x" size="s" />
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <button className="btn primary" type="submit" disabled={rosterBusy}>
-                      {rosterBusy ? "Working…" : "Add to list"}
+                ) : (
+                  <div className="file-picker-empty">
+                    <div className={`file-picker-icon ${rosterDragActive ? "drag" : ""}`}>
+                      <Icon name="file" size="l" />
+                    </div>
+                    <div className="file-picker-text">
+                      <span className="file-picker-label">
+                        {rosterDragActive ? "Drop the CSV here" : "Select a CSV file"}
+                      </span>
+                      <span className="hint">CSV only · max 8 MB</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn primary sm"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (!rosterBusy) rosterFileRef.current?.click();
+                      }}
+                      disabled={rosterBusy}
+                    >
+                      Browse
                     </button>
                   </div>
-                </form>
+                )}
               </div>
-              <div className="roster-add-card">
-                <h3>Import a CSV</h3>
-                <p className="hint">
-                  Required columns: <span className="mono">student_number</span>,{" "}
-                  <span className="mono">email</span> and <span className="mono">full_name</span>.
-                  Download the template, fill it in Excel, then save it as CSV and import it here.
-                  Re-importing updates rows in place.
-                </p>
-                <div className="row">
-                  <button type="button" className="btn sm" onClick={downloadRosterTemplate}>
-                    <Icon name="download" size="s" />
-                    Download CSV template
-                  </button>
-                </div>
-                <form className="form-stack" onSubmit={importRoster}>
-                  <div
-                    className={`file-picker ${rosterFileError ? "bad" : ""} ${
-                      rosterDragActive ? "drag-active" : ""
-                    }`}
-                    onDragEnter={handleRosterDrag}
-                    onDragLeave={handleRosterDrag}
-                    onDragOver={handleRosterDrag}
-                    onDrop={handleRosterDrop}
-                  >
-                    <input
-                      ref={rosterFileRef}
-                      id="roster-file"
-                      type="file"
-                      accept=".csv,text/csv"
-                      className="file-picker-input"
-                      onChange={(event) => pickRosterFile(event.target.files?.[0] ?? null)}
-                      disabled={rosterBusy}
-                      aria-hidden="true"
-                      tabIndex={-1}
-                    />
-                    {rosterFile ? (
-                      <div className="file-picker-filled">
-                        <div className="file-picker-preview-wrapper">
-                          <div className="file-picker-preview file-picker-preview-pdf">
-                            <Icon name="file" size="s" />
-                          </div>
-                        </div>
-                        <div className="file-picker-filename">
-                          <span className="lbl">Selected file</span>
-                          <span className="hint">{rosterFile.name}</span>
-                        </div>
-                        <div className="row" style={{ gap: 8 }}>
-                          <button
-                            type="button"
-                            className="btn sm ghost"
-                            onClick={() => rosterFileRef.current?.click()}
-                            disabled={rosterBusy}
-                          >
-                            <Icon name="refresh" size="s" />
-                            <span>Replace</span>
-                          </button>
+              {rosterFileError ? <span className="error-text">{rosterFileError}</span> : null}
+              <div>
+                <button
+                  className="btn primary"
+                  type="submit"
+                  disabled={rosterBusy || !rosterFile}
+                >
+                  {rosterBusy ? "Working…" : "Import CSV"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Voter</th>
+                <th>Student number</th>
+                <th>Status</th>
+                <th aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {(rosterList ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    No voters listed yet.{" "}
+                    {rosterEnabled
+                      ? "Until the list has entries, nobody can see this election."
+                      : "The rule above decides who is eligible."}
+                  </td>
+                </tr>
+              ) : (
+                (rosterList ?? []).map((entry) => (
+                  <tr key={entry.id}>
+                    <td>
+                      <b>{entry.full_name}</b>
+                      <div className="hint">{entry.email}</div>
+                    </td>
+                    <td className="mono">{entry.student_number}</td>
+                    <td>
+                      <span className="chip">{entry.status.toLowerCase()}</span>
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button
+                          type="button"
+                          className="btn sm"
+                          disabled={rosterBusy}
+                          onClick={() => editRoster(entry)}
+                        >
+                          Edit
+                        </button>
+                        {entry.status === "ELIGIBLE" ? (
                           <button
                             type="button"
                             className="btn sm danger-o"
-                            onClick={clearRosterFile}
                             disabled={rosterBusy}
-                            title="Remove file"
+                            onClick={() => revokeRoster(entry)}
                           >
-                            <Icon name="x" size="s" />
+                            Remove
                           </button>
-                        </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn sm"
+                            disabled={rosterBusy}
+                            onClick={() => restoreRoster(entry)}
+                          >
+                            Restore
+                          </button>
+                        )}
                       </div>
-                    ) : (
-                      <div className="file-picker-empty">
-                        <div className={`file-picker-icon ${rosterDragActive ? "drag" : ""}`}>
-                          <Icon name="file" size="l" />
-                        </div>
-                        <div className="file-picker-text">
-                          <span className="file-picker-label">
-                            {rosterDragActive ? "Drop the CSV here" : "Select a CSV file"}
-                          </span>
-                          <span className="hint">CSV only · max 8 MB</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn primary sm"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            if (!rosterBusy) rosterFileRef.current?.click();
-                          }}
-                          disabled={rosterBusy}
-                        >
-                          Browse
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  {rosterFileError ? <span className="error-text">{rosterFileError}</span> : null}
-                  <div>
-                    <button
-                      className="btn primary"
-                      type="submit"
-                      disabled={rosterBusy || !rosterFile}
-                    >
-                      {rosterBusy ? "Working…" : "Import CSV"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-            <div className="tbl-wrap">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Voter</th>
-                    <th>Student number</th>
-                    <th>Status</th>
-                    <th aria-label="Actions" />
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {(rosterList ?? []).length === 0 ? (
-                    <tr>
-                      <td colSpan={4}>
-                        No voters listed yet. Until the list has entries, nobody can see this
-                        election.
-                      </td>
-                    </tr>
-                  ) : (
-                    (rosterList ?? []).map((entry) => (
-                      <tr key={entry.id}>
-                        <td>
-                          <b>{entry.full_name}</b>
-                          <div className="hint">{entry.email}</div>
-                        </td>
-                        <td className="mono">{entry.student_number}</td>
-                        <td>
-                          <span className="chip">{entry.status.toLowerCase()}</span>
-                        </td>
-                        <td>
-                          <div className="table-actions">
-                            <button
-                              type="button"
-                              className="btn sm"
-                              disabled={rosterBusy}
-                              onClick={() => editRoster(entry)}
-                            >
-                              Edit
-                            </button>
-                            {entry.status === "ELIGIBLE" ? (
-                              <button
-                                type="button"
-                                className="btn sm danger-o"
-                                disabled={rosterBusy}
-                                onClick={() => revokeRoster(entry)}
-                              >
-                                Remove
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn sm"
-                                disabled={rosterBusy}
-                                onClick={() => restoreRoster(entry)}
-                              >
-                                Restore
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : (
-          <p className="hint" style={{ marginTop: 0 }}>
-            This election is open to everyone who matches the rule above. Tick{" "}
-            <b>Only voters on the imported list may see or vote</b> and save the rule to manage a
-            list of emails here.
-          </p>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <div className="split">

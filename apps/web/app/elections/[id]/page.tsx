@@ -7,6 +7,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { SiteHeader } from "@/components/site-header";
 import { Countdown } from "@/components/countdown";
 import { LoadError } from "@/components/load-error";
+import { ManifestoViewer } from "@/components/manifesto-viewer";
 import { StatusChip } from "@/components/status-chip";
 import { useToast } from "@/components/toast";
 import { ApiError, candidates, documents, elections, fileUrl } from "@/lib/api";
@@ -272,16 +273,10 @@ function ElectionView({ id }: { id: string }) {
                             </p>
                           ) : null}
                           {candidate.manifesto_url ? (
-                            <a
-                              className="btn sm"
-                              href={fileUrl(candidate.manifesto_url)}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ alignSelf: "flex-start" }}
-                            >
-                              <Icon name="file" size="s" />
-                              Read the manifesto document
-                            </a>
+                            <ManifestoViewer
+                              url={candidate.manifesto_url}
+                              title={`${candidate.full_name} — ${position.title}`}
+                            />
                           ) : null}
                           {!candidate.manifesto && !candidate.manifesto_url ? (
                             <span className="hint">No manifesto published yet.</span>

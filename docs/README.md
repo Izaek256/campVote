@@ -20,7 +20,7 @@
 - [`features/admin-login-mobile.md`](features/admin-login-mobile.md) — ISSUE-30 student/admin sign-in separation, administrator 2FA, server role enforcement and mobile layout checks.
 - [`implementation/GOOGLE_SIGNIN.md`](implementation/GOOGLE_SIGNIN.md) — Google Identity Services student sign-in: token verification, account linking, configuration, Google Cloud setup, rollback and troubleshooting.
 - [`rbac.md`](rbac.md) — ISSUE-03 server-side RBAC: SRS role matrix, route policies, per-election scoping, results visibility, certification and test evidence.
-- [`eligibility.md`](eligibility.md) — ISSUE-04 per-election eligibility: roster evidence, verified-email identity, CSV import, freeze/revocation, audit and open policy questions.
+- [`eligibility.md`](eligibility.md) — ISSUE-04 per-election eligibility: criteria or roster evidence, verified-email identity, CSV import, freeze/revocation, audit and open policy questions.
 - [`election-lifecycle.md`](election-lifecycle.md) — ISSUE-05 election states, transition matrix, schedule boundaries, server clock, configuration validation/freeze, audited exceptions and test evidence.
 - [`vote-submission.md`](vote-submission.md) — ISSUE-08 atomic, idempotent, concurrency-safe ballot submission, ballot-version binding, vote-status endpoint, voter views and test evidence.
 - [`implementation/ROADMAP.md`](implementation/ROADMAP.md) — Phased milestone delivery order.
@@ -45,6 +45,7 @@
 - [`features/landing-page.md`](features/landing-page.md) — ISSUE-31 public landing page with admin CMS, draft/publish separation, upcoming elections, SEO and social previews.
 - [`features/voter-profile.md`](features/voter-profile.md) — issue #37 voter profile (age, sex, residence), administrator-managed residence areas, and the server-side ballot gate.
 - [`features/restricted-elections.md`](features/restricted-elections.md) — issue #37 restricted elections: an imported roster as the whole electorate, visibility, and roster changes until close.
+- [`features/admin-selected-candidates.md`](features/admin-selected-candidates.md) — administrator-selected candidates: invited emails, accept/submit flow, mandatory PDF/MP3/MP4 manifesto and in-app viewer.
 - [`features/election-clone.md`](features/election-clone.md) — issue #37 copying an election: what is copied, what is left behind, and who may do it.
 - [`features/candidate-withdrawal.md`](features/candidate-withdrawal.md) — issue #37 withdrawal after approval, before the poll opens, with typed or uploaded evidence.
 - [`features/live-election-edits.md`](features/live-election-edits.md) — issue #37 the title, description and end-time edits an open election accepts, and their audit.

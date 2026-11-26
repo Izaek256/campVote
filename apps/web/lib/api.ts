@@ -15,6 +15,7 @@ import type {
   MyCandidate,
   Position,
   PositionApplications,
+  PositionSelections,
   PositionWithMeta,
   RecountResult,
   ResultSnapshot,
@@ -296,6 +297,12 @@ export const candidates = {
       body,
     }),
   mine: () => api<{ candidates: MyCandidate[] }>("/candidates/my"),
+  /** Accept an administrator's invitation to stand for a position. */
+  accept: (candidateId: string) =>
+    api<Candidate>(`/candidates/my/${candidateId}/accept`, { method: "POST" }),
+  /** Submit (or edit) a selected candidate's details and mandatory manifesto. */
+  submit: (candidateId: string, body: Record<string, unknown>) =>
+    api<Candidate>(`/candidates/my/${candidateId}/submit`, { method: "POST", body }),
   /** An officer records a withdrawal on the candidate's behalf, before the poll opens. */
   adminWithdraw: (electionId: string, candidateId: string, reason: string) =>
     api<Candidate>(`/elections/${electionId}/candidates/${candidateId}/withdraw`, {
@@ -372,6 +379,15 @@ export const positions = {
     api<unknown>(`/elections/${electionId}/positions/${positionId}`, {
       method: "DELETE",
     }),
+  /** The invited/accepted candidates for an administrator-selected position. */
+  selections: (electionId: string, positionId: string) =>
+    api<PositionSelections>(`/elections/${electionId}/positions/${positionId}/selections`),
+  /** Name the emails allowed to stand; also switches the position to admin-selected. */
+  inviteSelected: (electionId: string, positionId: string, emails: string[]) =>
+    api<{ candidates: Candidate[] }>(
+      `/elections/${electionId}/positions/${positionId}/selections`,
+      { method: "POST", body: { emails } }
+    ),
 
   // Standalone (positions-first) endpoints. A position exists before any
   // election does; these paths are not election-scoped.

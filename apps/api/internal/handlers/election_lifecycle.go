@@ -266,6 +266,13 @@ func electionVisibleTo(
 	if roleCount > 0 {
 		return true
 	}
+	// A listed email is the second, independent path in: it grants visibility
+	// even when the criteria do not match.
+	if caller != nil {
+		if listed, err := eligibility.IsListed(db, election.ID, caller.Email); err == nil && listed {
+			return true
+		}
+	}
 	// Sex and residence are part of the audience rule, so a caller whose
 	// profile does not match is not shown the election either.
 	profileAllows := func() bool {

@@ -6,8 +6,10 @@ voter/admin UI are separate issues (ISSUE-06/08).
 
 ## 1. What this guarantees
 
-- Eligibility is decided **per election**, on the server, from an authoritative
-  roster entry. A valid institutional email domain alone never grants a vote.
+- Eligibility is decided **per election**, on the server, from either the
+  election's criteria or an individually listed email. Either path admits the
+  account, and an account that qualifies both ways counts once. A valid
+  institutional email domain alone never grants a vote.
 - The ballot view, start and submit endpoints all run the same
   `eligibility.CheckElection` gate. Hiding a button is never the control.
 - An account's email is verified before it can use a roster entry, so changing
@@ -21,15 +23,16 @@ voter/admin UI are separate issues (ISSUE-06/08).
 
 | Concept | Value |
 |---|---|
-| Authoritative evidence | `election_rosters` row for the election |
+| Authoritative evidence | `election_rosters` row, or the election's criteria when no row exists |
 | Identity key | normalized institutional email (`LOWER(TRIM(email))`) |
 | Secondary key | `student_number`, unique per election |
 | Domain prerequisite | `elections.allowed_domains` (comma-separated; empty means "roster only") |
 | Account proof | `users.email_verified_at IS NOT NULL` |
 
-`Election.RequireRoster` is **deprecated**. It is kept so old rows migrate, but
-it no longer grants or denies access by itself; a roster entry is always
-required.
+`Election.RequireRoster` selects the strict list-only mode. It is not required
+for individual inclusion: in any election an `ELIGIBLE` roster row admits that
+email regardless of the criteria. With `RequireRoster` set, the list is the
+whole electorate and the criteria cannot admit somebody it leaves out.
 
 The email is the join between an account and a roster row, which is why the
 account must have verified that address. Registration, OAuth/SSO and first-admin
@@ -41,11 +44,19 @@ clears it until the new address is confirmed.
 `internal/eligibility/service.go::CheckElection` evaluates, in order:
 
 1. election exists and `IsOpen(now)` (status + schedule);
-2. account is present and its email is verified;
-3. email matches `allowed_domains` (when configured);
-4. a roster row exists for `election_id` + email;
-5. the row's status is `ELIGIBLE`;
-6. the row was not created after the eligibility freeze.
+2. the account is present, its email is verified and it matches the expected
+   registration format;
+3. a roster row exists for `election_id` + email:
+   - an `ELIGIBLE` row admits the account and (in a non-restricted election) is
+     not created after the freeze;
+   - a non-`ELIGIBLE` row refuses it, even when the criteria would admit it;
+4. with no row, a restricted election (`RequireRoster`) refuses;
+5. otherwise the election's criteria (`RuleAllows`) plus sex/residence
+   (`ProfileAllows`) must admit the account;
+6. the account's profile must contain the fields the ballot requires.
+
+The criteria and the individual list are therefore a union: an account admitted
+by either one is eligible.
 
 Every refusal returns a voter-safe reason. It never names another person or
 exposes roster contents. Denials on the ballot gate are logged with
@@ -67,8 +78,8 @@ profile field to qualify. The staff form shows chosen residences as removable
 pills picked from the active areas rather than free text. `eligibility.ProfileAllows` is the single check, used
 by the ballot gate, the election list, the candidate list and the officer
 counts, so an election such as *female students living in Hall 3* hides and
-refuses the same people everywhere. A restricted election's roster is still the
-final say: both the rule and the list must admit a voter.
+refuses the same people everywhere. In a restricted election the list is the
+final say: an `ELIGIBLE` row admits regardless of these profile facts.
 
 `Submit` rechecks eligibility and open status **inside** the transaction that
 writes `voter_participations` and the anonymous `anonymous_ballots` row, so a
@@ -166,8 +177,8 @@ the staff form, so the counter updates as the officer edits sex, residence,
 year or course. Both endpoints use `eligibility.CountForRule`, which streams
 verified accounts through `FindInBatches` and evaluates batches on a bounded
 worker pool (`runtime.NumCPU()`). Under a restricted election only `ELIGIBLE`
-roster rows count; otherwise every rule match counts unless its row is
-non-`ELIGIBLE`.
+roster rows count; otherwise the count is the union of rule matches and listed
+emails, with each account counted once and a non-`ELIGIBLE` row excluded.
 
 ## 8. Open policy questions for stakeholder sign-off
 
@@ -219,6 +230,7 @@ Covered paths:
 - The ballot endpoints here are the minimum needed to enforce eligibility.
   Ballot versioning, confirmation receipts, tallying and result publication are
   ISSUE-06/08.
-- `Election.RequireRoster` remains on the model as a deprecated column.
+- `Election.RequireRoster` remains on the model; it now means list-only mode
+  rather than the default route to eligibility.
 - Tests run on SQLite; the concurrency tests for duplicate submissions still
   need a PostgreSQL run (`GRIT_TEST_DATABASE_URL`) before release.

@@ -78,6 +78,8 @@ export function statusClass(status: ElectionStatus): string {
 }
 
 const candidateLabels: Record<string, string> = {
+  SELECTED: "Selected — awaiting acceptance",
+  ACCEPTED: "Accepted — awaiting details",
   NOMINATED: "Submitted",
   PENDING: "Under review",
   APPROVED: "Approved",
@@ -86,6 +88,8 @@ const candidateLabels: Record<string, string> = {
 };
 
 const candidateClasses: Record<string, string> = {
+  SELECTED: "review",
+  ACCEPTED: "sched",
   NOMINATED: "sched",
   PENDING: "review",
   APPROVED: "final",
