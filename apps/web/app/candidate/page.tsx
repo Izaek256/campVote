@@ -14,6 +14,7 @@ import { StatusChip } from "@/components/status-chip";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/toast";
 import { ApiError, candidates, fileUrl, upload } from "@/lib/api";
+import { ManifestoButton } from "@/components/manifesto-viewer";
 import {
   candidateStatusClass,
   candidateStatusLabel,
@@ -590,17 +591,13 @@ function MyCandidacy() {
                         Accept invitation
                       </button>
                     ) : null}
-                    {candidate.manifesto_url ? (
-                      <a
-                        className="btn sm"
-                        href={fileUrl(candidate.manifesto_url)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <Icon name="file" size="s" />
-                        Manifesto
-                      </a>
-                    ) : null}
+                {candidate.manifesto_url ? (
+                    <ManifestoButton
+                      url={candidate.manifesto_url}
+                      title={`${candidate.full_name} — ${position_title || "Candidacy"}`}
+                      className="btn sm"
+                    />
+                  ) : null}
                     {item.result ? (
                       <button
                         type="button"

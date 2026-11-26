@@ -10,6 +10,7 @@ import { RequireAuth } from "@/components/require-auth";
 import { StaffShell } from "@/components/staff-shell";
 import { useToast } from "@/components/toast";
 import { ApiError, candidates, elections, fileUrl, positions } from "@/lib/api";
+import { ManifestoButton } from "@/components/manifesto-viewer";
 import { candidateStatusClass, candidateStatusLabel, formatEAT } from "@/lib/format";
 import type { Candidate, ElectionStatus, Position } from "@/lib/types";
 
@@ -175,15 +176,11 @@ function Review({ id }: { id: string }) {
                 </div>
                 <div className="row">
                   {candidate.manifesto_url ? (
-                    <a
+                    <ManifestoButton
+                      url={candidate.manifesto_url}
+                      title={`${candidate.full_name} — ${positionTitle(candidate.position_id)}`}
                       className="btn sm"
-                      href={fileUrl(candidate.manifesto_url)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <Icon name="file" size="s" />
-                      Manifesto
-                    </a>
+                    />
                   ) : null}
                   {candidate.approval_status === "NOMINATED" ||
                   candidate.approval_status === "PENDING" ? (
