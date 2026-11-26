@@ -110,7 +110,18 @@ function Manage({ id }: { id: string }) {
         toast.success("Position created.");
       } else if (editing) {
         await positions.update(id, editing.id, form);
-        toast.success("Position saved.");
+        // If there are emails in the inline invite box, send them now.
+        const emails = inviteEmails
+          .split(/[\s,;]+/)
+          .map((e) => e.trim())
+          .filter(Boolean);
+        if (form.admin_selected && emails.length > 0) {
+          await positions.inviteSelected(id, editing.id, emails);
+          setInviteEmails("");
+          toast.success("Position saved and candidates invited.");
+        } else {
+          toast.success("Position saved.");
+        }
       }
       setEditing(null);
       await load();
@@ -370,6 +381,28 @@ function Manage({ id }: { id: string }) {
                 position, and a selected candidate must publish a manifesto before voting opens.
               </span>
             </div>
+            {form.admin_selected && editing !== "new" ? (
+              <div className="field full">
+                <label htmlFor="form-invite-emails">Invite candidate emails</label>
+                <textarea
+                  id="form-invite-emails"
+                  className="ta"
+                  rows={3}
+                  value={inviteEmails}
+                  onChange={(event) => setInviteEmails(event.target.value)}
+                  placeholder="2024bse088@std.must.ac.ug, 2024bse089@std.must.ac.ug"
+                />
+                <span className="hint">
+                  Separate addresses with commas, spaces or new lines. These are sent after you
+                  save. Already-invited addresses shown below.
+                </span>
+              </div>
+            ) : form.admin_selected && editing === "new" ? (
+              <div className="banner info" style={{ gridColumn: "1 / -1" }}>
+                <Icon name="info" />
+                <div>Save this position first, then invite candidates from the positions list.</div>
+              </div>
+            ) : null}
           </div>
           <div className="row">
             <button className="btn primary" type="submit" disabled={busy}>
