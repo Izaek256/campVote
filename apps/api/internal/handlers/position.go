@@ -51,6 +51,7 @@ func (h *PositionHandler) Create(c *gin.Context) {
 		DisplayOrder   int    `json:"display_order"`
 		Status         string `json:"status"`
 		MaxCandidates  int    `json:"max_candidates"`
+		AdminSelected  bool   `json:"admin_selected"`
 		AllowedDomain  string `json:"allowed_domain"`
 		AllowedYears   string `json:"allowed_years"`
 		AllowedCourses string `json:"allowed_courses"`
@@ -109,6 +110,7 @@ func (h *PositionHandler) Create(c *gin.Context) {
 		DisplayOrder:   input.DisplayOrder,
 		Status:         status,
 		MaxCandidates:  input.MaxCandidates,
+		AdminSelected:  input.AdminSelected,
 		AllowedDomain:  normalizeDomain(input.AllowedDomain),
 		AllowedYears:   strings.TrimSpace(input.AllowedYears),
 		AllowedCourses: strings.TrimSpace(input.AllowedCourses),
@@ -171,6 +173,7 @@ func (h *PositionHandler) Update(c *gin.Context) {
 		DisplayOrder   *int    `json:"display_order"`
 		Status         *string `json:"status"`
 		MaxCandidates  *int    `json:"max_candidates"`
+		AdminSelected  *bool   `json:"admin_selected"`
 		AllowedDomain  *string `json:"allowed_domain"`
 		AllowedYears   *string `json:"allowed_years"`
 		AllowedCourses *string `json:"allowed_courses"`
@@ -224,6 +227,9 @@ func (h *PositionHandler) Update(c *gin.Context) {
 		}
 		updates["max_candidates"] = *input.MaxCandidates
 	}
+	if input.AdminSelected != nil {
+		updates["admin_selected"] = *input.AdminSelected
+	}
 	if input.AllowedDomain != nil {
 		updates["allowed_domain"] = normalizeDomain(*input.AllowedDomain)
 	}
@@ -235,7 +241,19 @@ func (h *PositionHandler) Update(c *gin.Context) {
 	}
 
 	if len(updates) > 0 {
-		if err := h.DB.Model(&position).Updates(updates).Error; err != nil {
+		// Build an explicit column list so GORM doesn't skip booleans that are
+		// being set to false (its default zero-value filtering would drop them).
+		cols := make([]string, 0, len(updates))
+		for col := range updates {
+			cols = append(cols, col)
+		}
+		if err := h.DB.Model(&position).Select(cols).Updates(updates).Error; err != nil {
+			respond.Internal(c, err)
+			return
+		}
+
+		// Reload to return current values, including booleans just set to false.
+		if err := h.DB.Where("id = ? AND election_id = ?", positionID, electionID).First(&position).Error; err != nil {
 			respond.Internal(c, err)
 			return
 		}

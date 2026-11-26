@@ -266,6 +266,13 @@ func electionVisibleTo(
 	if roleCount > 0 {
 		return true
 	}
+	// A listed email is the second, independent path in: it grants visibility
+	// even when the criteria do not match.
+	if caller != nil {
+		if listed, err := eligibility.IsListed(db, election.ID, caller.Email); err == nil && listed {
+			return true
+		}
+	}
 	// Sex and residence are part of the audience rule, so a caller whose
 	// profile does not match is not shown the election either.
 	profileAllows := func() bool {
@@ -554,8 +561,8 @@ func (h *ElectionLifecycleHandler) updateFrozen(c *gin.Context, authority *polic
 		switch field {
 		case "title", "description":
 		case "ends_at":
-			if !updated.EndsAt.After(current.EndsAt) {
-				respond.Conflict(c, "An open election can only be extended; close it to stop voting")
+			if !updated.EndsAt.After(now) {
+				respond.Conflict(c, "The new end time must be in the future")
 				return
 			}
 			extension = true
@@ -570,14 +577,14 @@ func (h *ElectionLifecycleHandler) updateFrozen(c *gin.Context, authority *polic
 			return
 		}
 		if !authority.Can(policy.PermElectionPublish) {
-			policy.LogDenial(h.DB, c, "requires "+policy.PermElectionPublish+" for a post-opening extension", current.ID)
-			respond.Forbidden(c, "Only an authorised publisher may extend an open election")
+			policy.LogDenial(h.DB, c, "requires "+policy.PermElectionPublish+" to change the end time of an open election", current.ID)
+			respond.Forbidden(c, "Only an authorised publisher may change the end time of an open election")
 			return
 		}
 		if !updated.EndsAt.After(now) || !updated.StartsAt.Before(updated.EndsAt) ||
 			updated.EndsAt.Sub(updated.StartsAt) < lifecycle.MinimumDuration {
 			respond.Validation(c, "The new end time is not a valid schedule", map[string]string{
-				"ends_at": "must be after the start time, at least one hour later, and in the future",
+				"ends_at": "must be in the future and at least one hour after the start time",
 			})
 			return
 		}

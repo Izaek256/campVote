@@ -10,6 +10,8 @@ import (
 
 // Candidate approval lifecycle statuses (ISSUE-06)
 const (
+	CandidateStatusSelected  = "SELECTED"  // Administrator selected this email; invitation pending
+	CandidateStatusAccepted  = "ACCEPTED"  // Invitation accepted; details not submitted yet
 	CandidateStatusNominated = "NOMINATED" // Initial nomination by candidate or officer
 	CandidateStatusPending   = "PENDING"   // Under review
 	CandidateStatusApproved  = "APPROVED"  // Approved and will appear on ballot
@@ -37,9 +39,14 @@ type Candidate struct {
 	ReviewNotes    string `gorm:"type:text" json:"review_notes,omitempty"`
 
 	// Nomination tracking (ISSUE-06)
-	NominatedBy      string     `gorm:"size:36;index" json:"nominated_by,omitempty"` // User ID who nominated
-	ReviewedBy       string     `gorm:"size:36;index" json:"reviewed_by,omitempty"`  // User ID who reviewed
-	UserID           string     `gorm:"size:36;index" json:"user_id,omitempty"`      // User ID of the candidate
+	NominatedBy string `gorm:"size:36;index" json:"nominated_by,omitempty"` // User ID who nominated
+	ReviewedBy  string `gorm:"size:36;index" json:"reviewed_by,omitempty"`  // User ID who reviewed
+	UserID      string `gorm:"size:36;index" json:"user_id,omitempty"`      // User ID of the candidate
+	// InvitedEmail is set when an administrator selects this person for a
+	// position. Only the signed-in account with this verified address may
+	// accept the invitation.
+	InvitedEmail     string     `gorm:"size:255;index" json:"invited_email,omitempty"`
+	AcceptedAt       *time.Time `json:"accepted_at,omitempty"`
 	ReviewedAt       *time.Time `json:"reviewed_at,omitempty"`
 	WithdrawnAt      *time.Time `json:"withdrawn_at,omitempty"`
 	WithdrawalReason string     `gorm:"type:text" json:"withdrawal_reason,omitempty"`

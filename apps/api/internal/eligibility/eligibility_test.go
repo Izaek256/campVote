@@ -677,6 +677,82 @@ func TestCountForRuleUsesTheGivenRuleAndRoster(t *testing.T) {
 	}
 }
 
+// Eligibility has two independent paths: the election's criteria and an
+// individually listed email. Either admits; both count once.
+func TestCriteriaAndListedEmailsCombine(t *testing.T) {
+	db := testDB(t)
+	now := time.Now().UTC()
+	election := openElection(t, db, "e-union", now.Add(-time.Hour), now.Add(time.Hour))
+	if err := db.Model(election).Update("allowed_courses", "bse").Error; err != nil {
+		t.Fatal(err)
+	}
+	election.AllowedCourses = "bse"
+
+	criteriaOnly := account(studentEmail("2022", "bse", "001"))
+	listedOnlyEmail := studentEmail("2022", "bba", "002")
+	bothEmail := studentEmail("2022", "bse", "003")
+	neitherEmail := studentEmail("2022", "bba", "004")
+
+	cases := []struct {
+		name string
+		user *models.User
+		want bool
+	}{
+		{"criteria only", account(criteriaOnly.Email), true},
+		{"listed only", account(listedOnlyEmail), true},
+		{"both", account(bothEmail), true},
+		{"neither", account(neitherEmail), false},
+	}
+	rosterEntry(t, db, election.ID, "22/U/0002", listedOnlyEmail)
+	rosterEntry(t, db, election.ID, "22/U/0003", bothEmail)
+
+	for _, tc := range cases {
+		decision, err := eligibility.Check(db, election.ID, tc.user, now)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if decision.Eligible != tc.want {
+			t.Errorf("%s: eligible = %v, want %v (reason %q)",
+				tc.name, decision.Eligible, tc.want, decision.Reason)
+		}
+	}
+
+	// The counter is the same union, with no double count for the account that
+	// qualifies both ways.
+	for _, email := range []string{criteriaOnly.Email, listedOnlyEmail, bothEmail, neitherEmail} {
+		if err := db.Create(&models.User{Email: email, EmailVerifiedAt: &now}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	total, eligibleCount, err := eligibility.CountForRule(db, election.ID,
+		eligibility.Rule{AllowedDomain: "std.mast.ac.ug", AllowedCourses: "bse"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3 || eligibleCount != 3 {
+		t.Fatalf("union counts = %d/%d, want 3/3", total, eligibleCount)
+	}
+
+	// A revocation excludes an account the criteria would admit.
+	var both models.ElectionRoster
+	if err := db.Where("election_id = ? AND LOWER(email) = ?", election.ID,
+		strings.ToLower(bothEmail)).First(&both).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := eligibility.SetStatus(db, election.ID, both.ID, "officer",
+		models.RosterStatusSuspended, "synthetic revocation"); err != nil {
+		t.Fatal(err)
+	}
+	total, eligibleCount, err = eligibility.CountForRule(db, election.ID,
+		eligibility.Rule{AllowedDomain: "std.mast.ac.ug", AllowedCourses: "bse"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3 || eligibleCount != 2 {
+		t.Fatalf("counts after revocation = %d/%d, want 3/2", total, eligibleCount)
+	}
+}
+
 // A clean preview serializes errors as [], not null: clients read .length.
 func TestPreviewViewAlwaysHasAnErrorsArray(t *testing.T) {
 	raw, err := json.Marshal((&eligibility.Plan{}).View())

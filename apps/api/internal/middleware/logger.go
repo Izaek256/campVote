@@ -61,7 +61,12 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
 		// Spectre-class defence: isolate this origin from cross-origin reads
 		// and require explicit opt-in for cross-origin embedders.
-		c.Header("Cross-Origin-Opener-Policy", "same-origin")
+		// same-origin-allow-popups (not same-origin) is required so that a
+		// popup this page opens — specifically the Google Identity Services
+		// sign-in popup — can send postMessage back to the opener. With
+		// same-origin the popup is placed in a separate browsing context group
+		// and the credential callback is silently dropped.
+		c.Header("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
 		c.Header("Cross-Origin-Resource-Policy", "same-origin")
 		// Content-Security-Policy — strict default, blocks inline script
 		// (XSS A05 hardening). Skip on /docs and /studio which serve
