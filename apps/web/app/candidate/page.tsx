@@ -308,7 +308,11 @@ function SelectedCandidacy({ item, onSaved }: { item: MyCandidate; onSaved: () =
       </div>
       <div className="row">
         <button className="btn primary" type="submit" disabled={busy}>
-          {busy ? "Saving…" : candidate.approval_status === "APPROVED" ? "Save changes" : "Publish candidacy"}
+          {busy
+            ? "Saving…"
+            : candidate.approval_status === "APPROVED"
+              ? "Save changes"
+              : "Publish candidacy"}
         </button>
       </div>
     </form>
@@ -530,9 +534,7 @@ function MyCandidacy() {
             const invited = Boolean(candidate.invited_email);
             const awaitingAcceptance = candidate.approval_status === "SELECTED";
             const selectedEditable =
-              invited &&
-              !votingOpen &&
-              (candidate.approval_status === "ACCEPTED" || approved);
+              invited && !votingOpen && (candidate.approval_status === "ACCEPTED" || approved);
             // An invited candidate edits through the selection form, which keeps
             // the manifesto mandatory; the general manifesto editor would allow
             // removing it.
@@ -591,13 +593,13 @@ function MyCandidacy() {
                         Accept invitation
                       </button>
                     ) : null}
-                {candidate.manifesto_url ? (
-                    <ManifestoButton
-                      url={candidate.manifesto_url}
-                      title={`${candidate.full_name} — ${position_title || "Candidacy"}`}
-                      className="btn sm"
-                    />
-                  ) : null}
+                    {candidate.manifesto_url ? (
+                      <ManifestoButton
+                        url={candidate.manifesto_url}
+                        title={`${candidate.full_name} — ${position_title || "Candidacy"}`}
+                        className="btn sm"
+                      />
+                    ) : null}
                     {item.result ? (
                       <button
                         type="button"

@@ -370,9 +370,7 @@ function Manage({ id }: { id: string }) {
                 <input
                   type="checkbox"
                   checked={form.admin_selected}
-                  onChange={(event) =>
-                    setForm({ ...form, admin_selected: event.target.checked })
-                  }
+                  onChange={(event) => setForm({ ...form, admin_selected: event.target.checked })}
                 />
                 <span>Administrator selects the candidates</span>
               </label>
@@ -574,7 +572,11 @@ function Manage({ id }: { id: string }) {
                   {selections.candidates.map((candidate) => (
                     <tr key={candidate.id}>
                       <td>{candidate.invited_email}</td>
-                      <td>{candidate.full_name === candidate.invited_email ? "—" : candidate.full_name}</td>
+                      <td>
+                        {candidate.full_name === candidate.invited_email
+                          ? "—"
+                          : candidate.full_name}
+                      </td>
                       <td>{candidate.approval_status.replaceAll("_", " ").toLowerCase()}</td>
                     </tr>
                   ))}

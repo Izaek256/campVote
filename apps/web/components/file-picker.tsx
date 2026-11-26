@@ -142,11 +142,7 @@ export function FilePicker({
       : accepts === "pdf"
         ? "application/pdf"
         : "application/pdf,audio/mpeg,audio/mp4,video/mp4";
-  const formats = isImage
-    ? "JPEG, PNG, GIF, WebP"
-    : accepts === "pdf"
-      ? "PDF"
-      : "PDF, MP3 or MP4";
+  const formats = isImage ? "JPEG, PNG, GIF, WebP" : accepts === "pdf" ? "PDF" : "PDF, MP3 or MP4";
   const hasError = error || uploadError;
 
   return (

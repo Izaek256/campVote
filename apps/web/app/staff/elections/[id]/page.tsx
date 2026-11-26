@@ -853,9 +853,7 @@ function Manage({ id }: { id: string }) {
       <section className="panel stack" id="roster" style={{ marginBottom: 20 }}>
         <div className="section-h" style={{ marginTop: 0 }}>
           <h2>Voter list</h2>
-          <span className="mono">
-            {rosterList ? `${rosterList.length} listed` : "loading"}
-          </span>
+          <span className="mono">{rosterList ? `${rosterList.length} listed` : "loading"}</span>
         </div>
         {eligibility.require_roster !== election.require_roster ? (
           <p className="hint" style={{ marginTop: 0 }}>
@@ -989,11 +987,7 @@ function Manage({ id }: { id: string }) {
               </div>
               {rosterFileError ? <span className="error-text">{rosterFileError}</span> : null}
               <div>
-                <button
-                  className="btn primary"
-                  type="submit"
-                  disabled={rosterBusy || !rosterFile}
-                >
+                <button className="btn primary" type="submit" disabled={rosterBusy || !rosterFile}>
                   {rosterBusy ? "Working…" : "Import CSV"}
                 </button>
               </div>

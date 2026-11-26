@@ -58,6 +58,7 @@ export function ManifestoViewer({ url, title }: { url: string; title: string }) 
     return (
       <audio key={src} controls style={{ width: "100%" }} preload="metadata">
         <source src={src} type={mimeFor("audio", url)} />
+        <track kind="captions" />
         Your browser cannot play this audio manifesto.{" "}
         <a href={src} download rel="noreferrer">
           Download instead
@@ -75,6 +76,7 @@ export function ManifestoViewer({ url, title }: { url: string; title: string }) 
         preload="metadata"
       >
         <source src={src} type={mimeFor("video", url)} />
+        <track kind="captions" />
         Your browser cannot play this video manifesto.{" "}
         <a href={src} download rel="noreferrer">
           Download instead
