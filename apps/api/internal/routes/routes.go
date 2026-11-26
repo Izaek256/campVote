@@ -1427,6 +1427,8 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		protected.GET("/elections/:id/candidate-application", candidateHandler.Application)
 		protected.POST("/elections/:id/candidates/apply", candidateHandler.Apply)
 		protected.POST("/candidates/my/:candidate_id/withdraw", candidateHandler.WithdrawMine)
+		protected.POST("/candidates/my/:candidate_id/accept", candidateHandler.AcceptSelection)
+		protected.POST("/candidates/my/:candidate_id/submit", candidateHandler.SubmitSelection)
 		protected.POST("/candidates/my/:candidate_id/ballot-photo", candidateHandler.SetBallotPhoto)
 		protected.POST("/candidates/my/:candidate_id/manifesto", candidateHandler.SetManifesto)
 
@@ -1651,6 +1653,8 @@ func Setup(db *gorm.DB, cfg *config.Config, svc *Services) *gin.Engine {
 		// Candidate management
 		staff.GET("/elections/:id/candidates", candidateHandler.List)
 		staff.POST("/elections/:id/candidates", candidateHandler.Create)
+		staff.GET("/elections/:id/positions/:position_id/selections", candidateHandler.ListSelections)
+		staff.POST("/elections/:id/positions/:position_id/selections", candidateHandler.InviteSelected)
 		staff.PUT("/elections/:id/candidates/:candidate_id", candidateHandler.Update)
 		staff.POST("/elections/:id/candidates/:candidate_id/approve", candidateHandler.Approve)
 		staff.POST("/elections/:id/candidates/:candidate_id/reject", candidateHandler.Reject)

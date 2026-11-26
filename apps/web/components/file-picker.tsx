@@ -5,8 +5,11 @@ import { Icon } from "./icon";
 import { fileUrl } from "@/lib/api";
 
 interface FilePickerProps {
-  /** File type to accept (e.g., "image" for photos, "pdf" for documents) */
-  accepts: "image" | "pdf";
+  /**
+   * File type to accept: "image" for photos, "pdf" for documents, or
+   * "manifesto" for a PDF, MP3 or MP4 the in-app viewer can render.
+   */
+  accepts: "image" | "pdf" | "manifesto";
   /** Maximum file size in bytes */
   maxSize: number;
   /** Current file URL (if already uploaded) */
@@ -45,13 +48,19 @@ export function FilePicker({
   };
 
   const validateFile = (file: File): string | null => {
-    const isPdf = accepts === "pdf";
-    const expectedType = isPdf ? "application/pdf" : "image/";
+    const accepted =
+      accepts === "image"
+        ? file.type.startsWith("image/")
+        : accepts === "pdf"
+          ? file.type === "application/pdf"
+          : ["application/pdf", "audio/mpeg", "audio/mp4", "video/mp4"].includes(file.type);
 
-    if (!file.type.startsWith(expectedType)) {
-      return isPdf
-        ? "Please upload a PDF file"
-        : "Please upload an image file (JPEG, PNG, GIF, WebP)";
+    if (!accepted) {
+      return accepts === "image"
+        ? "Please upload an image file (JPEG, PNG, GIF, WebP)"
+        : accepts === "pdf"
+          ? "Please upload a PDF file"
+          : "Please upload a PDF, MP3 or MP4 file";
     }
 
     if (file.size > maxSize) {
@@ -127,6 +136,13 @@ export function FilePicker({
   };
 
   const isImage = accepts === "image";
+  const acceptAttr =
+    accepts === "image"
+      ? "image/jpeg,image/png,image/gif,image/webp"
+      : accepts === "pdf"
+        ? "application/pdf"
+        : "application/pdf,audio/mpeg,audio/mp4,video/mp4";
+  const formats = isImage ? "JPEG, PNG, GIF, WebP" : accepts === "pdf" ? "PDF" : "PDF, MP3 or MP4";
   const hasError = error || uploadError;
 
   return (
@@ -146,7 +162,7 @@ export function FilePicker({
           type="file"
           id={`file-picker-${label.replace(/\s+/g, "-")}`}
           className="file-picker-input"
-          accept={isImage ? "image/jpeg,image/png,image/gif,image/webp" : "application/pdf"}
+          accept={acceptAttr}
           onChange={handleInputChange}
           disabled={disabled || uploading}
           aria-hidden="true"
@@ -172,7 +188,7 @@ export function FilePicker({
                     : `Select ${label.toLowerCase()}`}
               </span>
               <span className="hint">
-                {isImage ? "JPEG, PNG, GIF, WebP" : "PDF"} · max {formatSize(maxSize)}
+                {formats} · max {formatSize(maxSize)}
               </span>
             </div>
             <button

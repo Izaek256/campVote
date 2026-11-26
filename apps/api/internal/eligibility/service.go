@@ -100,20 +100,38 @@ func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Dec
 		return Decision{Reason: "Your email address does not match the expected student registration format (e.g. 2024BSE088@std.mast.ac.ug)"}, nil
 	}
 
-	// Check the election rule.
-	if !RuleAllows(election, id) {
-		reason := "This election is restricted"
-		if election.AllowedYears != "" && election.AllowedCourses != "" {
-			reason = fmt.Sprintf("This election is for %s / %s students",
-				election.AllowedYears, strings.ToUpper(election.AllowedCourses))
-		} else if election.AllowedYears != "" {
-			reason = fmt.Sprintf("This election is for enrolment year %s students", election.AllowedYears)
-		} else if election.AllowedCourses != "" {
-			reason = fmt.Sprintf("This election is for %s students", strings.ToUpper(election.AllowedCourses))
-		} else if election.AllowedDomain != "" {
-			reason = fmt.Sprintf("This election is for %s email accounts", election.AllowedDomain)
+	// A listed email is an individual inclusion. It admits the account even
+	// when the election's criteria (year, course, sex or residence) do not
+	// match. A non-ELIGIBLE row remains an explicit exclusion and denies even
+	// when the rule would otherwise admit the account.
+	var entry models.ElectionRoster
+	err := db.Where("election_id = ? AND LOWER(email) = ?", election.ID,
+		strings.ToLower(strings.TrimSpace(user.Email))).
+		First(&entry).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return Decision{}, err
+	}
+	if err == nil {
+		if !models.IsEligibleStatus(entry.Status) {
+			return Decision{Reason: "Your eligibility for this election is " + strings.ToLower(entry.Status)}, nil
 		}
-		return Decision{Reason: reason}, nil
+		// A restricted election's list is its electorate, so an officer may add
+		// a name while polls are open. The rule-based freeze still applies.
+		if election.EligibilityFrozenAt != nil && !election.RequireRoster && entry.CreatedAt.After(*election.EligibilityFrozenAt) {
+			return Decision{Reason: "Your eligibility evidence was added after voting opened"}, nil
+		}
+		return Decision{Eligible: true, RosterID: entry.ID}, nil
+	}
+
+	// No roster row. A restricted election is defined by its list, so the
+	// criteria cannot admit somebody the list leaves out.
+	if election.RequireRoster {
+		return Decision{Reason: "This election is limited to the voters on its list"}, nil
+	}
+
+	// Otherwise the election's criteria are the second, independent path in.
+	if !RuleAllows(election, id) {
+		return Decision{Reason: ruleReason(election)}, nil
 	}
 
 	// Sex and residence are profile facts, not email facts, so they are
@@ -126,35 +144,34 @@ func CheckRoster(db *gorm.DB, election *models.Election, user *models.User) (Dec
 		return Decision{Reason: RuleForElection(election).ProfileReason()}, nil
 	}
 
-	// Check for an explicit roster exclusion. A non-ELIGIBLE status (e.g.
-	// SUSPENDED, GRADUATED, INELIGIBLE) denies even when the rule matches.
-	// A restricted election is the opposite: the roster is the whole
-	// electorate, so no row means no access.
-	var entry models.ElectionRoster
-	err = db.Where("election_id = ? AND LOWER(email) = ?", election.ID,
-		strings.ToLower(strings.TrimSpace(user.Email))).
-		First(&entry).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return Decision{}, err
-	}
-	if err != nil && election.RequireRoster {
-		return Decision{Reason: "This election is limited to the voters on its list"}, nil
-	}
-	if err == nil {
-		// Row found — check its status.
-		if !models.IsEligibleStatus(entry.Status) {
-			return Decision{Reason: "Your eligibility for this election is " + strings.ToLower(entry.Status)}, nil
-		}
-		// A restricted election's list is its electorate, so an officer may add
-		// a name while polls are open. The rule-based freeze still applies.
-		if election.EligibilityFrozenAt != nil && !election.RequireRoster && entry.CreatedAt.After(*election.EligibilityFrozenAt) {
-			return Decision{Reason: "Your eligibility evidence was added after voting opened"}, nil
-		}
-		return Decision{Eligible: true, RosterID: entry.ID}, nil
-	}
-
-	// No roster row and rule allows → eligible.
 	return Decision{Eligible: true}, nil
+}
+
+// ruleReason is the voter-safe explanation for a criteria mismatch.
+func ruleReason(election *models.Election) string {
+	reason := "This election is restricted"
+	if election.AllowedYears != "" && election.AllowedCourses != "" {
+		reason = fmt.Sprintf("This election is for %s / %s students",
+			election.AllowedYears, strings.ToUpper(election.AllowedCourses))
+	} else if election.AllowedYears != "" {
+		reason = fmt.Sprintf("This election is for enrolment year %s students", election.AllowedYears)
+	} else if election.AllowedCourses != "" {
+		reason = fmt.Sprintf("This election is for %s students", strings.ToUpper(election.AllowedCourses))
+	} else if election.AllowedDomain != "" {
+		reason = fmt.Sprintf("This election is for %s email accounts", election.AllowedDomain)
+	}
+	return reason
+}
+
+// IsListed reports whether an email is an eligible individual inclusion for an
+// election. Revoked rows do not count.
+func IsListed(db *gorm.DB, electionID, email string) (bool, error) {
+	var count int64
+	err := db.Model(&models.ElectionRoster{}).
+		Where("election_id = ? AND LOWER(email) = ? AND status = ?", electionID,
+			strings.ToLower(strings.TrimSpace(email)), models.RosterStatusEligible).
+		Count(&count).Error
+	return count > 0, err
 }
 
 // ProfileAllows applies an election's sex and residence restrictions to a
@@ -317,13 +334,15 @@ func EligibleCounts(db *gorm.DB, election *models.Election) (total, eligible int
 // read in batches so a large roll never has to fit in memory at once.
 const countBatch = 500
 
-// CountForRule counts verified accounts matching the rule, in parallel. It is
-// the single counter behind the report, the freeze snapshot and the live
-// preview, so those three can never disagree.
+// CountForRule counts verified accounts admitted by either eligibility path,
+// in parallel. It is the single counter behind the report, the freeze snapshot
+// and the live preview, so those three can never disagree.
 //
-// A restricted election's roster is its electorate: only an ELIGIBLE row counts.
-// Under rule-based eligibility the roster is an exclusion list, so every match
-// counts unless its row is non-ELIGIBLE.
+// A restricted election's roster is its electorate: only an ELIGIBLE row counts,
+// regardless of the criteria. Under rule-based eligibility the two paths are a
+// union: an account counts when the rule admits it or its email is listed, and
+// an ELIGIBLE row is never counted twice. A non-ELIGIBLE row still excludes an
+// account the rule would admit.
 func CountForRule(db *gorm.DB, electionID string, rule Rule, requireRoster bool) (total, eligible int64, err error) {
 	residences, err := residenceNames(db)
 	if err != nil {
@@ -361,19 +380,22 @@ func CountForRule(db *gorm.DB, electionID string, rule Rule, requireRoster bool)
 				var found, kept int64
 				for _, u := range chunk {
 					id, ok := ParseEmail(u.Email)
-					if !ok || !rule.Allows(id) {
-						continue
-					}
-					if !rule.AllowsProfile(u.Sex, residences[userResidence(u)]) {
+					if !ok {
 						continue
 					}
 					key := strings.ToLower(strings.TrimSpace(u.Email))
+					listed := allowed[key]
 					if requireRoster {
-						if !allowed[key] {
+						if !listed {
 							continue
 						}
 						found++
 						kept++
+						continue
+					}
+					ruleMatch := rule.Allows(id) &&
+						rule.AllowsProfile(u.Sex, residences[userResidence(u)])
+					if !ruleMatch && !listed {
 						continue
 					}
 					found++

@@ -240,6 +240,9 @@ func (h *PositionHandler) Eligible(c *gin.Context) {
 		if ref := position.ElectionRef(); ref != "" && startedElections[ref] {
 			continue
 		}
+		if position.AdminSelected {
+			continue
+		}
 		if !eligibility.RuleForPosition(&position).Allows(identity) {
 			continue
 		}
@@ -292,6 +295,7 @@ func (h *PositionHandler) CreateStandalone(c *gin.Context) {
 		DisplayOrder   int    `json:"display_order"`
 		Status         string `json:"status"`
 		MaxCandidates  int    `json:"max_candidates"`
+		AdminSelected  bool   `json:"admin_selected"`
 		AllowedDomain  string `json:"allowed_domain"`
 		AllowedYears   string `json:"allowed_years"`
 		AllowedCourses string `json:"allowed_courses"`
@@ -337,6 +341,7 @@ func (h *PositionHandler) CreateStandalone(c *gin.Context) {
 		DisplayOrder:   input.DisplayOrder,
 		Status:         status,
 		MaxCandidates:  input.MaxCandidates,
+		AdminSelected:  input.AdminSelected,
 		AllowedDomain:  normalizeDomain(input.AllowedDomain),
 		AllowedYears:   strings.TrimSpace(input.AllowedYears),
 		AllowedCourses: strings.TrimSpace(input.AllowedCourses),
@@ -376,6 +381,7 @@ func (h *PositionHandler) UpdateStandalone(c *gin.Context) {
 		DisplayOrder   *int    `json:"display_order"`
 		Status         *string `json:"status"`
 		MaxCandidates  *int    `json:"max_candidates"`
+		AdminSelected  *bool   `json:"admin_selected"`
 		AllowedDomain  *string `json:"allowed_domain"`
 		AllowedYears   *string `json:"allowed_years"`
 		AllowedCourses *string `json:"allowed_courses"`
@@ -432,6 +438,9 @@ func (h *PositionHandler) UpdateStandalone(c *gin.Context) {
 		}
 		updates["max_candidates"] = *input.MaxCandidates
 	}
+	if input.AdminSelected != nil {
+		updates["admin_selected"] = *input.AdminSelected
+	}
 	if input.AllowedDomain != nil {
 		updates["allowed_domain"] = normalizeDomain(*input.AllowedDomain)
 	}
@@ -443,7 +452,15 @@ func (h *PositionHandler) UpdateStandalone(c *gin.Context) {
 	}
 
 	if len(updates) > 0 {
-		if err := h.DB.Model(&position).Updates(updates).Error; err != nil {
+		cols := make([]string, 0, len(updates))
+		for col := range updates {
+			cols = append(cols, col)
+		}
+		if err := h.DB.Model(&position).Select(cols).Updates(updates).Error; err != nil {
+			respond.Internal(c, err)
+			return
+		}
+		if err := h.DB.Where("id = ?", c.Param("position_id")).First(&position).Error; err != nil {
 			respond.Internal(c, err)
 			return
 		}
@@ -525,6 +542,10 @@ func (h *PositionHandler) Apply(c *gin.Context) {
 			return
 		}
 		respond.Internal(c, err)
+		return
+	}
+	if position.AdminSelected {
+		respond.Forbidden(c, "This position is filled by administrator selection")
 		return
 	}
 	if !position.AcceptingApplications() {

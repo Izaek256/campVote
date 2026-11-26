@@ -17,7 +17,10 @@ whole electorate:
   `RequireRoster` is set. A row with a non-`ELIGIBLE` status is still refused.
   The profile gate in `CheckElection` is unchanged.
 - **Other elections.** Being on one restricted list does not affect any other
-  election; those still use their own rule or list.
+  election; those still use their own rule or list. In a non-restricted
+  election an `ELIGIBLE` row is an individual inclusion: it admits that email
+  even when the criteria do not match, and the criteria admit everyone else. The
+  two paths are a union, so an account that qualifies both ways counts once.
 
 ## Managing the list
 

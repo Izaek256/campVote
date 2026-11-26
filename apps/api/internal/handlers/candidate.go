@@ -78,7 +78,7 @@ func (h *CandidateHandler) Application(c *gin.Context) {
 	open, reason := applicationWindow(&election, h.now())
 
 	var positions []models.Position
-	if err := h.DB.Where("election_id = ?", electionID).
+	if err := h.DB.Where("election_id = ? AND admin_selected = ?", electionID, false).
 		Order("display_order ASC, title ASC").Find(&positions).Error; err != nil {
 		respond.Internal(c, err)
 		return
@@ -250,6 +250,10 @@ func (h *CandidateHandler) Apply(c *gin.Context) {
 			return
 		}
 		respond.Internal(c, err)
+		return
+	}
+	if position.AdminSelected {
+		respond.Forbidden(c, "This position is filled by administrator selection")
 		return
 	}
 
@@ -458,6 +462,21 @@ func (h *CandidateHandler) SetManifesto(c *gin.Context) {
 		respond.Conflict(c, "Only an approved candidate may publish a manifesto")
 		return
 	}
+	// A selected candidate was promised automatic publication, so their
+	// manifesto file stays mandatory until voting opens.
+	if candidate.InvitedEmail != "" {
+		if input.Clear {
+			respond.Conflict(c, "A selected candidate must keep a manifesto file")
+			return
+		}
+		if manifestoURL == "" {
+			manifestoURL = candidate.ManifestoURL
+		}
+		if _, message := h.manifestoUpload(userID, manifestoURL); message != "" {
+			respond.Validation(c, message, map[string]string{"manifesto_url": message})
+			return
+		}
+	}
 
 	var election models.Election
 	if err := h.DB.Where("id = ?", candidate.ElectionID).First(&election).Error; err != nil {
@@ -513,11 +532,14 @@ func (h *CandidateHandler) CandidatesForVoters(c *gin.Context) {
 		return
 	}
 
-	allowed := false
-	if identity, parsed := eligibility.ParseEmail(user.Email); parsed {
-		allowed = eligibility.RuleAllows(&election, identity)
-		if allowed {
-			allowed, _ = eligibility.ProfileAllows(h.DB, &election, user)
+	// A listed email admits the voter even when the election's criteria do not.
+	allowed, _ := eligibility.IsListed(h.DB, election.ID, user.Email)
+	if !allowed {
+		if identity, parsed := eligibility.ParseEmail(user.Email); parsed {
+			allowed = eligibility.RuleAllows(&election, identity)
+			if allowed {
+				allowed, _ = eligibility.ProfileAllows(h.DB, &election, user)
+			}
 		}
 	}
 	if !allowed {
@@ -661,6 +683,10 @@ func (h *CandidateHandler) Create(c *gin.Context) {
 			return
 		}
 		respond.Internal(c, err)
+		return
+	}
+	if position.AdminSelected {
+		respond.Forbidden(c, "This position is filled by administrator selection")
 		return
 	}
 
@@ -1079,10 +1105,20 @@ func withdrawalSummary(reason, documentURL string) string {
 // GetMyCandidacies returns the current user's nominations.
 func (h *CandidateHandler) GetMyCandidacies(c *gin.Context) {
 	userID := c.GetString("user_id")
+	user := requestUser(c)
+	email := ""
+	if user != nil {
+		email = strings.ToLower(strings.TrimSpace(user.Email))
+	}
 
 	var candidates []models.Candidate
-	if err := h.DB.Where("nominated_by = ?", userID).
-		Order("created_at DESC").
+	query := h.DB.Where("nominated_by = ?", userID)
+	if email != "" {
+		// An invitation is listed before it is accepted, while nominated_by is
+		// still empty.
+		query = h.DB.Where("nominated_by = ? OR LOWER(invited_email) = ?", userID, email)
+	}
+	if err := query.Order("created_at DESC").
 		Find(&candidates).Error; err != nil {
 		respond.Internal(c, err)
 		return

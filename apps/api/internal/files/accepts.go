@@ -40,6 +40,15 @@ func AcceptsToMIMEs(accepts []string) (mimes []string, exts []string, acceptAll 
 		case "pdf":
 			mimeSet["application/pdf"] = true
 			extSet[".pdf"] = true
+		case "manifesto":
+			// A candidate manifesto is readable on the page, so it is one of
+			// the three formats the in-app viewer renders.
+			for _, m := range []string{"application/pdf", "audio/mpeg", "audio/mp4", "video/mp4"} {
+				mimeSet[m] = true
+			}
+			for _, e := range []string{".pdf", ".mp3", ".mp4", ".m4a"} {
+				extSet[e] = true
+			}
 		case "doc":
 			for _, m := range []string{"application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"} {
 				mimeSet[m] = true

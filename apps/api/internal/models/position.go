@@ -48,6 +48,11 @@ type Position struct {
 	// position. 0 means no cap.
 	MaxCandidates int `gorm:"not null;default:0" json:"max_candidates"`
 
+	// AdminSelected turns this position into the second candidacy path: an
+	// administrator invites specific emails and nobody else may apply. The
+	// ordinary application window is closed for this position.
+	AdminSelected bool `gorm:"not null;default:false" json:"admin_selected"`
+
 	// Eligibility rules for who may stand for this position. The same shape as
 	// an election's voter eligibility: a required email domain, plus optional
 	// year and course allow-lists. Empty year/course lists mean "any".

@@ -14,6 +14,7 @@ import { StatusChip } from "@/components/status-chip";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/components/toast";
 import { ApiError, candidates, fileUrl, upload } from "@/lib/api";
+import { ManifestoButton } from "@/components/manifesto-viewer";
 import {
   candidateStatusClass,
   candidateStatusLabel,
@@ -98,6 +99,226 @@ function VotesDialog({ entry, onClose }: { entry: MyCandidate | null; onClose: (
   );
 }
 
+/**
+ * A candidate an administrator selected. They accept first, then submit the
+ * same profile details plus a mandatory PDF, MP3 or MP4 manifesto. The same
+ * form edits those details until voting opens.
+ */
+function SelectedCandidacy({ item, onSaved }: { item: MyCandidate; onSaved: () => void }) {
+  const toast = useToast();
+  const candidate = item.candidate;
+  const alreadyPublished = candidate.approval_status === "APPROVED";
+  const [busy, setBusy] = useState(false);
+  // After a successful first publish the form collapses and shows a confirmation.
+  // For subsequent edits (already APPROVED) the form stays open immediately.
+  const [published, setPublished] = useState(false);
+  const [editing, setEditing] = useState(alreadyPublished);
+  const [fullName, setFullName] = useState(
+    candidate.full_name === candidate.invited_email ? "" : candidate.full_name
+  );
+  const [dateOfBirth, setDateOfBirth] = useState(candidate.date_of_birth?.slice(0, 10) ?? "");
+  const [sex, setSex] = useState(candidate.sex ?? "");
+  const [slogan, setSlogan] = useState(candidate.slogan ?? "");
+  const [bio, setBio] = useState(candidate.bio ?? "");
+  const [manifesto, setManifesto] = useState(candidate.manifesto ?? "");
+  const [manifestoUrl, setManifestoUrl] = useState(candidate.manifesto_url ?? "");
+  const [passportPhotoUrl, setPassportPhotoUrl] = useState(candidate.passport_photo_url ?? "");
+  const [contactEmail, setContactEmail] = useState(candidate.contact_email ?? "");
+  const [contactPhone, setContactPhone] = useState(candidate.contact_phone ?? "");
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!dateOfBirth || (sex !== "MALE" && sex !== "FEMALE")) {
+      toast.error("Enter your date of birth and sex.");
+      return;
+    }
+    if (!passportPhotoUrl) {
+      toast.error("Upload your passport photo.");
+      return;
+    }
+    if (!manifestoUrl) {
+      toast.error("Upload your manifesto (PDF, MP3 or MP4).");
+      return;
+    }
+    setBusy(true);
+    try {
+      await candidates.submit(candidate.id, {
+        full_name: fullName.trim(),
+        date_of_birth: dateOfBirth,
+        sex,
+        slogan: slogan.trim(),
+        bio: bio.trim(),
+        manifesto: manifesto.trim(),
+        manifesto_url: manifestoUrl,
+        passport_photo_url: passportPhotoUrl,
+        contact_email: contactEmail.trim(),
+        contact_phone: contactPhone.trim(),
+      });
+      if (alreadyPublished) {
+        toast.success("Changes saved.");
+      } else {
+        toast.success("Your candidacy is published.");
+        setPublished(true);
+        setEditing(false);
+      }
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Your candidacy could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // After a first-time publish, show a compact confirmation instead of the form.
+  if (published && !editing) {
+    return (
+      <div className="banner" style={{ marginTop: 14 }}>
+        <Icon name="check" size="s" />
+        <div>
+          <b>Candidacy published</b>
+          Your details and manifesto are saved. Voters will see them when voting opens.{" "}
+          <button
+            type="button"
+            className="btn sm ghost"
+            style={{ marginTop: 6 }}
+            onClick={() => setEditing(true)}
+          >
+            Edit details
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form className="panel stack" style={{ marginTop: 14 }} onSubmit={submit}>
+      <span className="lbl">Your details</span>
+      <p className="hint" style={{ margin: 0 }}>
+        You were selected for this position. Fill in your details and publish a manifesto; no
+        transcript or approval is needed. You can edit this until voting opens.
+      </p>
+      <div className="form-grid">
+        <div className="field">
+          <label htmlFor={`sel-name-${candidate.id}`}>Name on the ballot *</label>
+          <input
+            id={`sel-name-${candidate.id}`}
+            className="in"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            maxLength={255}
+            required
+          />
+        </div>
+        <div className="field">
+          <label htmlFor={`sel-dob-${candidate.id}`}>Date of birth *</label>
+          <input
+            id={`sel-dob-${candidate.id}`}
+            className="in"
+            type="date"
+            value={dateOfBirth}
+            onChange={(event) => setDateOfBirth(event.target.value)}
+            required
+          />
+        </div>
+        <div className="field">
+          <label htmlFor={`sel-sex-${candidate.id}`}>Sex *</label>
+          <select
+            id={`sel-sex-${candidate.id}`}
+            className="sel"
+            value={sex}
+            onChange={(event) => setSex(event.target.value)}
+            required
+          >
+            <option value="">Select…</option>
+            <option value="MALE">Male</option>
+            <option value="FEMALE">Female</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor={`sel-slogan-${candidate.id}`}>Slogan (optional)</label>
+          <input
+            id={`sel-slogan-${candidate.id}`}
+            className="in"
+            value={slogan}
+            onChange={(event) => setSlogan(event.target.value)}
+            maxLength={200}
+          />
+        </div>
+      </div>
+      <div className="field">
+        <label htmlFor={`sel-bio-${candidate.id}`}>Biography</label>
+        <textarea
+          id={`sel-bio-${candidate.id}`}
+          className="ta"
+          rows={4}
+          value={bio}
+          onChange={(event) => setBio(event.target.value)}
+          maxLength={5000}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor={`sel-manifesto-${candidate.id}`}>Manifesto summary</label>
+        <textarea
+          id={`sel-manifesto-${candidate.id}`}
+          className="ta"
+          rows={4}
+          value={manifesto}
+          onChange={(event) => setManifesto(event.target.value)}
+          maxLength={20000}
+        />
+      </div>
+      <div className="form-grid">
+        <FilePicker
+          accepts="image"
+          maxSize={2 * 1024 * 1024}
+          value={passportPhotoUrl}
+          onChange={setPassportPhotoUrl}
+          label="Passport photo *"
+          hint="JPEG, PNG, GIF, WebP · max 2 MB"
+        />
+        <FilePicker
+          accepts="manifesto"
+          maxSize={100 * 1024 * 1024}
+          value={manifestoUrl}
+          onChange={setManifestoUrl}
+          label="Manifesto file *"
+          hint="PDF, MP3 or MP4 · max 100 MB"
+        />
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label htmlFor={`sel-email-${candidate.id}`}>Contact email</label>
+          <input
+            id={`sel-email-${candidate.id}`}
+            className="in"
+            type="email"
+            value={contactEmail}
+            onChange={(event) => setContactEmail(event.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor={`sel-phone-${candidate.id}`}>Phone (optional)</label>
+          <input
+            id={`sel-phone-${candidate.id}`}
+            className="in"
+            value={contactPhone}
+            onChange={(event) => setContactPhone(event.target.value)}
+          />
+        </div>
+      </div>
+      <div className="row">
+        <button className="btn primary" type="submit" disabled={busy}>
+          {busy
+            ? "Saving…"
+            : candidate.approval_status === "APPROVED"
+              ? "Save changes"
+              : "Publish candidacy"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function MyCandidacy() {
   const { user } = useAuth();
   const router = useRouter();
@@ -142,6 +363,19 @@ function MyCandidacy() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function acceptInvitation(candidateId: string) {
+    setBusy(true);
+    try {
+      await candidates.accept(candidateId);
+      toast.success("Invitation accepted. Add your details and manifesto.");
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The invitation could not be accepted.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function withdraw() {
     if (!withdrawing) return;
@@ -297,11 +531,18 @@ function MyCandidacy() {
               candidate.approval_status !== "WITHDRAWN" &&
               candidate.approval_status !== "REJECTED";
             const approved = candidate.approval_status === "APPROVED";
-            const canEdit = approved && !votingOpen;
+            const invited = Boolean(candidate.invited_email);
+            const awaitingAcceptance = candidate.approval_status === "SELECTED";
+            const selectedEditable =
+              invited && !votingOpen && (candidate.approval_status === "ACCEPTED" || approved);
+            // An invited candidate edits through the selection form, which keeps
+            // the manifesto mandatory; the general manifesto editor would allow
+            // removing it.
+            const canEdit = approved && !votingOpen && !invited;
             return (
               <article
                 className="panel"
-                key={candidate.id}
+                key={`${candidate.id}-${candidate.approval_status}`}
                 style={closed ? { opacity: 0.72 } : undefined}
               >
                 <div className="row-between" style={{ alignItems: "flex-start", gap: 16 }}>
@@ -341,16 +582,23 @@ function MyCandidacy() {
                     </div>
                   </div>
                   <div className="row">
-                    {candidate.manifesto_url ? (
-                      <a
-                        className="btn sm"
-                        href={fileUrl(candidate.manifesto_url)}
-                        target="_blank"
-                        rel="noreferrer"
+                    {awaitingAcceptance ? (
+                      <button
+                        type="button"
+                        className="btn sm primary"
+                        disabled={busy}
+                        onClick={() => acceptInvitation(candidate.id)}
                       >
-                        <Icon name="file" size="s" />
-                        Manifesto
-                      </a>
+                        <Icon name="check" size="s" />
+                        Accept invitation
+                      </button>
+                    ) : null}
+                    {candidate.manifesto_url ? (
+                      <ManifestoButton
+                        url={candidate.manifesto_url}
+                        title={`${candidate.full_name} — ${position_title || "Candidacy"}`}
+                        className="btn sm"
+                      />
                     ) : null}
                     {item.result ? (
                       <button
@@ -389,6 +637,17 @@ function MyCandidacy() {
                     </div>
                   </div>
                 ) : null}
+                {awaitingAcceptance ? (
+                  <div className="banner" style={{ marginTop: 14 }}>
+                    <Icon name="info" size="s" />
+                    <div>
+                      <b>You have been selected</b>
+                      An administrator selected you for this position. Accept the invitation, then
+                      add your details and a manifesto. No transcript or approval step is needed.
+                    </div>
+                  </div>
+                ) : null}
+                {selectedEditable ? <SelectedCandidacy item={item} onSaved={load} /> : null}
                 {approved && votingOpen && !closed ? (
                   <div className="banner" style={{ marginTop: 14 }}>
                     <Icon name="lock" size="s" />
@@ -463,10 +722,10 @@ function MyCandidacy() {
                       />
                     </div>
                     <FilePicker
-                      accepts="pdf"
-                      maxSize={5 * 1024 * 1024}
+                      accepts="manifesto"
+                      maxSize={100 * 1024 * 1024}
                       label="Manifesto document (optional)"
-                      hint="A PDF voters can download in addition to the text above."
+                      hint="A PDF, MP3 or MP4 voters can read or play in addition to the text above."
                       value={draftFor(candidate).url}
                       onChange={(url) => updateDraft(candidate.id, { url })}
                       disabled={manifestoBusy === candidate.id}
