@@ -106,7 +106,12 @@ function VotesDialog({ entry, onClose }: { entry: MyCandidate | null; onClose: (
 function SelectedCandidacy({ item, onSaved }: { item: MyCandidate; onSaved: () => void }) {
   const toast = useToast();
   const candidate = item.candidate;
+  const alreadyPublished = candidate.approval_status === "APPROVED";
   const [busy, setBusy] = useState(false);
+  // After a successful first publish the form collapses and shows a confirmation.
+  // For subsequent edits (already APPROVED) the form stays open immediately.
+  const [published, setPublished] = useState(false);
+  const [editing, setEditing] = useState(alreadyPublished);
   const [fullName, setFullName] = useState(
     candidate.full_name === candidate.invited_email ? "" : candidate.full_name
   );
@@ -148,13 +153,40 @@ function SelectedCandidacy({ item, onSaved }: { item: MyCandidate; onSaved: () =
         contact_email: contactEmail.trim(),
         contact_phone: contactPhone.trim(),
       });
-      toast.success("Your candidacy is published.");
+      if (alreadyPublished) {
+        toast.success("Changes saved.");
+      } else {
+        toast.success("Your candidacy is published.");
+        setPublished(true);
+        setEditing(false);
+      }
       onSaved();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Your candidacy could not be saved.");
     } finally {
       setBusy(false);
     }
+  }
+
+  // After a first-time publish, show a compact confirmation instead of the form.
+  if (published && !editing) {
+    return (
+      <div className="banner" style={{ marginTop: 14 }}>
+        <Icon name="check" size="s" />
+        <div>
+          <b>Candidacy published</b>
+          Your details and manifesto are saved. Voters will see them when voting opens.{" "}
+          <button
+            type="button"
+            className="btn sm ghost"
+            style={{ marginTop: 6 }}
+            onClick={() => setEditing(true)}
+          >
+            Edit details
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -507,7 +539,7 @@ function MyCandidacy() {
             return (
               <article
                 className="panel"
-                key={candidate.id}
+                key={`${candidate.id}-${candidate.approval_status}`}
                 style={closed ? { opacity: 0.72 } : undefined}
               >
                 <div className="row-between" style={{ alignItems: "flex-start", gap: 16 }}>
